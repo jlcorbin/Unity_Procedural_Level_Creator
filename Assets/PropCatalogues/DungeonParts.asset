@@ -1,0 +1,415 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74cd88390431cad49a5ac235e06aa5ad, type: 3}
+  m_Name: DungeonParts
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.PieceCatalogue
+  theme: 0
+  pieces:
+  - prefab: {fileID: 3490658063278675625, guid: 18fe9937d38b8dd41a22a31a5177160d, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 5440553927610176833, guid: 1070b30519f10cf41a81ec016674ffdb, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 7665227563901503593, guid: 85f94c3205988154c83348eb747c20ab, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 4921124826500421050, guid: d4060e1ee3dc021419e4ad077f16e648, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 7199316512901528129, guid: c9cba80fad61f7445b65b69c4cdbe6a4, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 1307513137502705132, guid: d812fc230ee0c8049a4d2974cff66b28, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 7261047408339769545, guid: f5d250267e256a04d900d00dc310b185, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 8882111877598784927, guid: 5620cd05894cd89419d4cc0b2abd5f98, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 2984939013022216751, guid: 89b25646e1bada4438e51246ccc3a841, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 6761477703782229431, guid: 8c58236c41a8add40ac4051dcf4e7ae5, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 1809896131378947548, guid: 029b4d9b3946e9f48b84c6b92cbe115a, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 2518237512384619625, guid: 9eb1430f39d66cd40b32de15515acafe, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 309122886490717579, guid: 8102d85eee2a5b14e8c73cd0bbf25e88, type: 3}
+    pieceType: 3
+    subFolder: Column
+  - prefab: {fileID: 3142644099696345778, guid: 6d31ad97b79b0f04585b609d86665bb8, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+  - prefab: {fileID: 5376314400767217205, guid: 7cde9f4d14dbec342ae2ce64b5e46c2d, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+  - prefab: {fileID: 4928850328604319053, guid: 79ef8078fe356e049b9d736927111655, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+  - prefab: {fileID: 2046107211329033597, guid: 8822425be6e58a147978c6712350d5cb, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+  - prefab: {fileID: 2322794252922203016, guid: 16e1dab3117bb294e85cbd46bcba9e5e, type: 3}
+    pieceType: 4
+    subFolder: Gateway
+  - prefab: {fileID: 8098534917804542522, guid: 32f1bd561bc6dbe469e7796b762f3bec, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 4026156821849028624, guid: 52ce8ca285ce54e4b93abdb56df00e1e, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 9143962021358203662, guid: a6535abf34cd8114fabb83f46c381541, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 2000953760662691751, guid: 16ecb9a662f8be4408551185f2be45ce, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 5118183519299070634, guid: cead9f88e8ebfa84898a958d48306aad, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 861819094548917044, guid: a14db16bf2f98194ab2f0ec39fc0aea8, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 5204052304137892485, guid: f16c94269a120b64083d64d344e756af, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 2609213148017626911, guid: 04f051a8c04b21e42be7f4c706b03073, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 3596449170897622528, guid: 8917c45767dba10498cc2ccbf66f8013, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 7860078684783786999, guid: 950a289133f28224cbda770f86d66751, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 1841083001798426161, guid: 07204139b28401c4e9d889411f8fcee2, type: 3}
+    pieceType: 5
+    subFolder: Stairs/BotCap
+  - prefab: {fileID: 3858485711901979677, guid: f6384c7e17531b94282a027e2a007418, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 5971120676318056944, guid: f46fa7d515c865944b3ddd25520871ea, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 8558470042058717115, guid: dccf6809ae8aefb40a97a7ae16e1c130, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 4063471893317132112, guid: 2900ec2aa253ff2428c7f666b173da02, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 3202621421423682107, guid: 2390c76362df82c4bac64ce8ba9119a5, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 8393239489935902061, guid: 17409e7a1900e5646bab958eea6bd920, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 4190672411315227821, guid: 85afdee80b7a753449f8996f1d3eff49, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 6751384577741252428, guid: a04f6bc0ad8e3a246900c5ed9db23191, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 8944962820221001588, guid: e3876e7faca412c4096b82fa580a665b, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 6001849656690382059, guid: 9a8c8fe9b6ced344184a228527522f5b, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 5912520479169360552, guid: 9942056ab19a2364faa07b9a043e2c05, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 6403662264542436128, guid: a919ae4cf3e79fe4d9931dca4c5d54c0, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 2412070877280090755, guid: db2f0501a8cd3d04e80336d69266cae7, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 5333251993575124549, guid: fcd888b36048bc64a997535bd7f5f057, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 4496194203547181582, guid: f71ec5eb236d68b4dba2263c36e46a3d, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 6686721275925908532, guid: 4ab8304f75ff9a14aabd4b7eeddce86e, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 1509113474669333260, guid: b637803abcbb601458a0dfe0736d623e, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 8135444769938912475, guid: e6b5305ba2d44374585d001d6e5a9295, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 3873471360368593419, guid: dfc95ffe07ec0ae4db55d6081d5dd30a, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 4623884981815853678, guid: aebb7b611c1b20c4e87fe322130ad60d, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 7730446780025176108, guid: 58a06715da75fc44e8a16c3e1672d5ac, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 7256665169912615367, guid: 68bbd68232d0e4d4983307ca2b7413fa, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 2038996368584372694, guid: b82e76efac6faaf4798e6f39d135251e, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 4964737019255553038, guid: 018fcb8c2a7595045a33b46b1cd192c5, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 367693606926889767, guid: d81c443c19a18194aa6869ee37c84c66, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 3590765746413024867, guid: a85ed8332d0d0d546bfa466db83cb5ce, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 6750589678309373719, guid: f58ecd7453803774fb817358c3784813, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 3741217107505572934, guid: 85fbe600f31f555459791ea620f9e89b, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 8533895034687612893, guid: 0741c0cc3c1569b419f314d972677f46, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 8719847515655891127, guid: dd430e4e9038dee46bef136746d96910, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Stairs
+  - prefab: {fileID: 4359386254123986893, guid: 188af7fa2ebaa7c48913d9218b896e40, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 941960956950365363, guid: b7c2be0aefe66bc48858ad9d8669fcf9, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 8678014212267229418, guid: 6d8845606dd0f2b4db650667f51984c0, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 2482392718712251008, guid: 247b7fdefd8592b4593307ebf4954861, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 2381621128892047475, guid: 7926bde7636b17a428f51bdbd6731469, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 8335719645654457341, guid: 46b1e953fca1c1245af0c6b4e7393f60, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 5262030197410408096, guid: d611f3cfca100064698e3fc795b5c4ff, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 8354796743617729624, guid: a83f829af0169c0438ca24d864d3bc89, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 453531318801625964, guid: c9bbd9a5e5b413346a2388542d31519e, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 2730062275250982497, guid: 55b897217867e3040b6b148180af99ac, type: 3}
+    pieceType: 5
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 1892232388932259167, guid: 97aa36c2515e2b144919768fe117c1d0, type: 3}
+    pieceType: 4
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 5738126558774831425, guid: 94f85b5752e9f6948b298cf07ddd43f0, type: 3}
+    pieceType: 4
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 6624589113472998969, guid: cce135bf5eb5b0846b0685ea20eaedc2, type: 3}
+    pieceType: 4
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 8276504331708990524, guid: 62094eac10b13a74eae0a245807e3bff, type: 3}
+    pieceType: 4
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 6714495659124783676, guid: db4b2335427f5aa46b641d0b52ccbd56, type: 3}
+    pieceType: 4
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 6064141590621234466, guid: c0a6d37bb487d4b46a71a992e5a3a98a, type: 3}
+    pieceType: 4
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 6571660566890440863, guid: 4d11990466e40e548918f31eda73b24e, type: 3}
+    pieceType: 4
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 6668002682464739527, guid: b88644b9ad21f7f45aec8ccb387c4b67, type: 3}
+    pieceType: 4
+    subFolder: Stairs/Wall
+  - prefab: {fileID: 4513193012279566554, guid: 5c178e828f115c44f9c15dbea8e0cc0a, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 2575496585755383544, guid: 810086813d9c24443aaecf62d22f35ca, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 1161713959396838932, guid: d16f13b2f65cf294cbb77dc857925b81, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 3122646269355442922, guid: 03d1c89aa04713744ad7326bac55f907, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 6016969119924071213, guid: d620adf0cf9cb2e4ca03c245c6a3e440, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 2540742868398269892, guid: 3da7c9bfd64e5ed48be919a8913e99d5, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 4784314948246993408, guid: 6921ba7abc3d96544b03505216b3a7f9, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 8718569308580914528, guid: f8e99e7a654f6934ab6ac697d88da344, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 6471809277723766991, guid: 5095ff4fec8cf1841ae8bfe7b3942318, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 1441022197153990427, guid: fd9e29e498a36a44b817f1405808ea35, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 2563525757211158134, guid: 852b65fa6e8ebdc40812c8c93114d5a5, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 1168843711137350431, guid: b6edb5c3cb97bf74090e1f2b9b4ab095, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 122561679450098180, guid: 4fe43a00fe316f54f8625673459c4db0, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 4761637718275241349, guid: aee062ba408e7d84895d0d7439809827, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 5256557301502948985, guid: b2ab7f79d5e9b4e40a6fa17e17b9ca36, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 8623531346986456870, guid: 66b99a2ff83b61b48ae330cb089667b2, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotEdge
+  - prefab: {fileID: 5546925316210644549, guid: 0a42b085402946241b5527cbd7c9e5e4, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 4630522129656040769, guid: a39c89d4dc9929148bd340199d9d7b52, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 1618246717572600756, guid: bc6a34f46435625459f1150a03a74199, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 6738802786983092513, guid: 3b787a9301271f443ab66fc161e1f723, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 4150406676686597103, guid: 3d723e2640a1edc46aae5fd056c61956, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 2106281019005215237, guid: eb00a4248359ccd4983dc4077f72a8ea, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 834044653485515635, guid: 8cf0650ef830bb642a446ef6204f5b24, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 5100895898942393902, guid: 0c73f5baf43715e4ba3366e78a170012, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 7659583915572109388, guid: b471d11650953834bb95beddbb82acd3, type: 3}
+    pieceType: 4
+    subFolder: Trim/WallCover/PivotMiddle
+  - prefab: {fileID: 4780978734842755487, guid: 134d280018a4bbe4c976d7e7c8992321, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 4548863290062766756, guid: 770cad2e982c61445b4ce3e681e65f45, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 8357322272134006168, guid: fb4ae508f036ab04fbd2180344f3afa8, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 4068979260790029034, guid: 61ae8d4e16e90544faf3156ecff08d2c, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 169622269864593143, guid: f2c81dee4da85f84eb944bbbffaa7360, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 2041502159440233232, guid: c1f5fa3d595fcea4285faa435923e9be, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 6935857168443101104, guid: 70c9efa572e6c424c8f3577f42cfab51, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 260642991796447695, guid: b8f44d7690c801241ab1547c28e36c7e, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 3445142659287056054, guid: 107b56f8b3399124fbf51cdd9a6df0e7, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 4698864122413789439, guid: 2fb9eedb7c1601d4695f61ec9905138c, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 3982550574375253410, guid: 744b5bc9a1b4d53419c974efb96890e1, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 3830126191117657655, guid: 87cff50ecc5371e429575087578e2d32, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 6642342507959634963, guid: 4bf2d8ac88062814eb344b0b8791fbf7, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 7611596326146217677, guid: f2c402d14f77f53418f75f4b3d97919b, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 1794144432269004682, guid: b1b7b5164b2d026429a79c7c51713b6b, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 2383631769640997853, guid: 1ae4353e3e9483446861e93727c159e4, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 2992830323820021327, guid: 79a880a4eddf6f94cadf57406668a718, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 9210073518811132912, guid: 8b4e4c90bdc17314593973eb025e6d72, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 6640863251314667780, guid: aa1511b4930bfe94681c75bbf6ae0df1, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 9063048961869359470, guid: ed0177463919a6e4ca1a41fd325d80a3, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 348114274325652653, guid: 1c68056be82b8cd42992a32d5741f926, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 5144303794194399102, guid: d9e6a489d7748954c93a7091cb5644a6, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 1583231515279581672, guid: 103e52cfb7829894c97d60f9f3a7d263, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 3501399652066277701, guid: 9b66af372bcc5174a8c8beac7d5371d6, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 2567812349683465607, guid: d8c5de2c86b71c04ba3f55aa5cf7b9ab, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 9099222374600208446, guid: 6bb3bad708d2bf449b6c8a66eb87a835, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 6446913662052881125, guid: 9ffec1ed7d91b0b4daeb6861b4d16894, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 8745136615725298083, guid: 68fbf322664ffa042af87a3fcd16866e, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 7333748633610098329, guid: 95a8ac97443aab94587dd68a58a58254, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 7553054282159739055, guid: c94509a47e95b0d4c8b197d561e8be8a, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+  - prefab: {fileID: 6395651347768208395, guid: 41654be1f40a7ed49972bf97137e607a, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
