@@ -20,6 +20,83 @@ Key rules:
   identical level
 - Levels saved as SeedData in LevelSequence ScriptableObject
 
+## Whitebox pack
+
+A pack-agnostic mirror of the Fantastic Dungeon Pack, generated procedurally,
+living at Assets/Whitebox/. Art-free version of every FDP part, comp, and LVL
+module so the project can be tested without the FDP dependency, and so any
+third-party modular pack following the same folder conventions can be swapped in.
+
+### Folder layout
+Assets/Whitebox/
+├── 3d/modular/          — mesh .asset files (Step 1 output)
+├── Materials/           — per-category tinted URP/Lit materials (Step 2 output)
+├── prefabs/
+│   ├── modular/         — part prefabs, mirror of FDP 01_PARTS (Step 2)
+│   ├── COMPS/           — composition prefabs, mirror of FDP 02_COMPS (Step 3)
+│   └── LEVEL_MODULES/   — level module prefabs, mirror of FDP 03_LEVEL_MODULES (Step 4)
+
+### Generator
+Assets/Scripts/Editor/WhiteboxPackFactory.cs — four-step procedural factory,
+run via LevelGen ▶ Whitebox ▶ … menu. Each step is idempotent and has a
+dry-run variant.
+
+- Step 1 — mirror meshes. Walks FDP 3d/modular/ recursively, extracts every
+  Mesh sub-asset from each FBX, saves as standalone .asset files. Deep-copies
+  geometry (vertices, normals, tangents, UVs, triangles) — does not approximate.
+
+- Step 2 — wrap in prefabs. For each mesh, produces a single-GameObject prefab
+  with MeshFilter + MeshRenderer. Applies a shared URP/Lit material tinted per
+  top-level subfolder (Wall = off-white, Floor = grey, Gateway = pale blue,
+  Column = pale green, Stairs = yellow, Railing = tan, Base = mid-grey).
+  Cutout variants for alpha-clipped pieces. No colliders, no components.
+
+- Step 3 — mirror comps. For each FDP comp, loads via LoadPrefabContents,
+  finds every nested prefab-instance child (IsOutermostPrefabInstanceRoot),
+  destroys-and-reinstantiates each as the whitebox equivalent. Preserves
+  local transforms, rotations, scales, names.
+
+- Step 4 — mirror LVL modules. Two-pass. Pass 1 generates every whitebox LVL,
+  tagging cross-LVL references with the editor-only WhiteboxPendingLvlRef
+  component on primitive cube placeholders. Pass 2 re-opens each LVL, resolves
+  every pending reference against the now-complete whitebox LVL tree, swaps
+  placeholders for real LVL instances, strips the marker component.
+
+### Mapper
+TryMapFdpReferenceToWhitebox — unified reference-lookup helper. Three tiers
+based on which segment the FDP path contains:
+- 01_PARTS/          → Assets/Whitebox/prefabs/modular/
+- 02_COMPS/          → Assets/Whitebox/prefabs/COMPS/
+- 03_LEVEL_MODULES/  → Assets/Whitebox/prefabs/LEVEL_MODULES/
+
+Each tier does exact-path match first, then fuzzy filename match.
+Fuzzy normalization: lowercase, strip leading p_/mod_/comp_/lvl_ prefixes,
+strip trailing (N) Unity duplicate suffix, trim. Exactly one match wins;
+zero → miss; two or more → ambiguous (surfaced, never silently resolved).
+
+Fuzzy is the only tier currently firing, because Step 2 named whitebox
+prefabs from FBX sub-mesh names (MOD_*) while FDP references use prefab
+filenames (P_MOD_*). Intentional. When a future pack is swapped in with
+consistent naming, exact-match tier will fire instead.
+
+### Diagnostic
+LevelGen ▶ Whitebox ▶ Diagnose Step 3 — introspects a test comp's hierarchy
+and logs prefab-resolution details per child without writing. Kept in the
+file for future debugging.
+
+### Current state
+Mirror is complete. Steps 1–4 produce a structurally faithful, untextured
+version of FDP. No RoomPiece, ExitPoint, or other generator components have
+been added to any whitebox prefab. PieceCatalogue integration not yet wired.
+
+### Next steps
+1. Create a whitebox PieceCatalogue asset, auto-populate from
+   Assets/Whitebox/prefabs/modular/, validate in Room Workshop.
+2. Run LVL_Configurator across Assets/Whitebox/prefabs/LEVEL_MODULES/
+   to stamp RoomPiece + ExitPoint components from filename suffixes.
+3. End-to-end test: drop configured whitebox LVLs into LevelGenerator.unity
+   and verify connections work.
+
 ## Folder structure
 Assets/
 ├── Scripts/

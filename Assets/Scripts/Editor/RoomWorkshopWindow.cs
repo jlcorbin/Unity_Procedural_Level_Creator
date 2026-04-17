@@ -434,7 +434,7 @@ namespace LevelGen
             EditorGUILayout.Space(4);
 
             // ── Corners ───────────────────────────────────────────────────────
-            const float cLbl = 30f, cDrp = 70f, chk = 60f;
+            const float cLbl = 30f;
             // ── Corner Prefab picker (shared mode only) ──────────────────────
             if (!_directionalCorners)
             {
