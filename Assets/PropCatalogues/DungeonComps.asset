@@ -14,235 +14,543 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.PieceCatalogue
   theme: 0
   pieces:
-  - prefab: {fileID: 3924468155775857604, guid: 2ef8986a7bb510349b05e25a6c45f867, type: 3}
+  - prefab: {fileID: 2780835254398656747, guid: a4e93311b60afa34687b9082736b3b7f, type: 3}
     pieceType: 4
     subFolder: Column
     isExit: 0
-  - prefab: {fileID: 8690171104545380828, guid: 240bd6ab897f87e47a8f454ca576b436, type: 3}
+  - prefab: {fileID: 7027427153397045512, guid: 9570d5e3146b7bd47ab869efd299ec49, type: 3}
     pieceType: 4
     subFolder: Column
     isExit: 0
-  - prefab: {fileID: 4534753057452128003, guid: 41b07bbe94198474288c1b423c6c0d27, type: 3}
+  - prefab: {fileID: 1883831551013383719, guid: a2b7b48853410d84c8cf7d8bb6967c50, type: 3}
     pieceType: 4
     subFolder: Column
     isExit: 0
-  - prefab: {fileID: 2339064603081033801, guid: 0321a9e1f417b5a4baad9f3b5d3353b7, type: 3}
+  - prefab: {fileID: 9193601531041722973, guid: 909cc53a65bb87945aeada769d8ac803, type: 3}
     pieceType: 4
     subFolder: Column
     isExit: 0
-  - prefab: {fileID: 3347840682174930097, guid: a893a2d2b6374384ba9fc55452dfc8d5, type: 3}
+  - prefab: {fileID: 6531621889268787384, guid: f77c4556e6f59de419464202d051d4e8, type: 3}
     pieceType: 4
     subFolder: Column
     isExit: 0
-  - prefab: {fileID: 4996033826487575969, guid: 3519917cc842fbb4d97f64d063fab94a, type: 3}
+  - prefab: {fileID: 753727445505261591, guid: fc3907ff26693b44eaee8df60c8ec2ca, type: 3}
     pieceType: 4
     subFolder: Column
     isExit: 0
-  - prefab: {fileID: 1475565011333655082, guid: 4b934c3dffbea2b47bf4bd515311c01f, type: 3}
+  - prefab: {fileID: 2938038308197523804, guid: 3339cc69b8125444cb4d5211b933f4e6, type: 3}
     pieceType: 4
     subFolder: Column
     isExit: 0
-  - prefab: {fileID: 5149183475063193089, guid: 4a435be19e12274469e47243d7604016, type: 3}
+  - prefab: {fileID: 9155724270304515150, guid: 8e96d91d0561aa44c9e21df9649cbf6d, type: 3}
     pieceType: 0
     subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 2453563457807336992, guid: 7ec07942feee8104980f9f3a5d937474, type: 3}
+  - prefab: {fileID: 2779667753915529192, guid: 9b8230630804fac408546b2882180708, type: 3}
     pieceType: 0
     subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 3160700588539630653, guid: 4c2ee441b6460b04b9d1007c8320f337, type: 3}
+  - prefab: {fileID: 5203764537662752023, guid: d19a2b99e6f4b194b9bbf9a276102e42, type: 3}
     pieceType: 0
     subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 1549551583420493447, guid: f4da1abdecc629c48a363fc5e161d529, type: 3}
+  - prefab: {fileID: 8269856323145761877, guid: fa98f76d3d1ac054fbc6f8a4edf093d5, type: 3}
     pieceType: 0
     subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 6468846998259000992, guid: dee4119a5cb909346ad391e42338f8f6, type: 3}
+  - prefab: {fileID: 8762968433363181219, guid: 51bbaef1ac57fc541b7d1e2792d91579, type: 3}
     pieceType: 0
     subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 4769967792980660085, guid: 90491e50ab9255f4ebe34f528fdbed9a, type: 3}
+  - prefab: {fileID: 7377991415853263667, guid: 026a061a5f53b0e4293def8784b343f7, type: 3}
     pieceType: 0
     subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 8117132810412722426, guid: 2aa54ccc4610b974793d0d5f80474bed, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 4932287202302229065, guid: e82561604a6c86143a2742f496ddf7c9, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 5689977619619397198, guid: 8422dcb5fdd775f46ac3207916344639, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 7905937900218359081, guid: 56fb14a01b43596479203b292fe2b8c4, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 2215047873784601123, guid: 8c0102862e051d242a15ddb85d93587e, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 4932287202302229065, guid: eda8f14b451d69e47ba7df37dc49b910, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 5689977619619397198, guid: c6bd59aef8efe814a91e9ea27685e3b2, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 7905937900218359081, guid: 8fefb25b4d28b4e40aab928ee0a5f757, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 2215047873784601123, guid: 69f71a53a1786234a9f1965ebc49ab48, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 5065675531808750948, guid: 2826669b7c325e14e95bfd397d58950c, type: 3}
-    pieceType: 2
-    subFolder: Gateway
-    isExit: 0
-  - prefab: {fileID: 158724229872332427, guid: 744ccd54551eaac478350a31febc0c95, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 8709373184429964727, guid: 3a73317dc4de031479ca4438ed42b2dd, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 4801063820384757548, guid: 55e65378dce22b14d9097282a924d954, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 8196971897837479718, guid: 5fa36338d0f947b43a4e630456819c97, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 2920113659324312018, guid: 51fff3d12f0cd2146af369bbd561658d, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 6718433713612844203, guid: ee5fe577b2cced747a0f6a675f6b7b53, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 317286414238104004, guid: 5ab6a672976d8dd449498c847f95fca8, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 6453125175336086839, guid: ec924f92407c0084dad65ec969cdee2d, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 1686176493318158599, guid: 779e0535f804df5459869acaa0e48d04, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 1873031651612303857, guid: 9d6475101bf26ae49a1cc25d7433d042, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 4459515141273114344, guid: bc964ce8d75702f4da0e005f280d6ab8, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 7705681427530110268, guid: 392cc23b6454e3f40999260cbd8bbae2, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 4678653123607807452, guid: da56031206240f94a801596dde5c3a25, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 1048110264787470613, guid: 4c9ae342bae06274ba652ad3a19114e2, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 5139391431485943916, guid: e7251381a3c2fc642960abdfebe90980, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 4978317513163831211, guid: 5487d5abb8c64584e929d83e5febd2a7, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 6232721595681841912, guid: 81247fa091ea45640a031bc4b9e4b264, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 3725308148149935634, guid: a6d8c926ae08ba74bb7ae9fc13140301, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 7441269156236960846, guid: a7b6e5410074de947bf4d155720e6559, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 7168423884371490059, guid: 9809dfa28160fcf468af689cb211170a, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 6154013480559796293, guid: cde474c99679a784e868b37511f944b9, type: 3}
-    pieceType: 3
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 27345962894834612, guid: 71382addb5f08ba41ae9c04deadd488c, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 8891574683710577515, guid: cda966bb1b741b7449ede4f6c194ad34, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 3776220099357607127, guid: d5d4e5f7fc22b9a43a8cd99be547b7cc, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 281867451939096683, guid: 68ebfad805050de43ac891b80f733ceb, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 3084972255308161853, guid: 6e021b89a168fc54494ec8290fef3514, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 4349878658626824464, guid: 7c49c934f08fb6d46b16645fd5679aaf, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 368231678063982052, guid: fd617b73ddde2794c8e2b3cc36f33981, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 6839113498095337285, guid: 98f829331fb662d4e8040a3d54290a52, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 8062177489646428543, guid: 6a3b3d6331b858a43afe86c4df76c9ed, type: 3}
-    pieceType: 1
-    subFolder: Wall/PivotMiddle
-    isExit: 0
-  - prefab: {fileID: 1262937158259123645, guid: 2a9b8a25bc63da941a79e7e3bec1e558, type: 3}
+  - prefab: {fileID: 11391490200999067, guid: aa1509fd5784d1041ac1ade167813f5d, type: 3}
     pieceType: 0
-    subFolder: Floor/OneSided
+    subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 7260992952002605990, guid: e7f259e40f562674396b2e03f7d558ad, type: 3}
+  - prefab: {fileID: 8417802507713465855, guid: 599907b3869c1644ca0e9b910273573d, type: 3}
     pieceType: 0
-    subFolder: Floor/OneSided
+    subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 6140955160784781113, guid: e63947a86c94f2943ad66980ec472c8f, type: 3}
+  - prefab: {fileID: 3173593616709184327, guid: 03e3af3890b3f4444801ba783fa3193f, type: 3}
     pieceType: 0
-    subFolder: Floor/OneSided
+    subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 5636235318605931709, guid: 75f952c61473224428c436c5e67b746b, type: 3}
+  - prefab: {fileID: 6932277636413073467, guid: e2a488a65ce2d46499d900a54c5394cc, type: 3}
     pieceType: 0
-    subFolder: Floor/OneSided
+    subFolder: Floor
     isExit: 0
-  - prefab: {fileID: 382102715427561204, guid: ba2f5a3cf00c94143ac103c0f045073a, type: 3}
+  - prefab: {fileID: 8319052142906694343, guid: 38045370ebf79214eb8e4000296e1258, type: 3}
     pieceType: 0
-    subFolder: Floor/OneSided
+    subFolder: Floor
+    isExit: 0
+  - prefab: {fileID: 2559795561494247673, guid: 6f67ad2de6db6304d83187f86dc7ae08, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 4366022977145770493, guid: f919ed2ed3b2bf343a908f038d0eaa60, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 3868721653123158011, guid: efdc3f31c6a89eb4bb7a5d319f92f6a1, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 6010655205288621640, guid: 422fee75b9466264aa185b440faffe9d, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 5988130474068835673, guid: 0584dcea740dec24bb3944120eee0765, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 6864264105557442480, guid: 0d22919a5b14a9045b70f3cf505fd3d7, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 383237763335977236, guid: 471f9177f1435664cb32465a29347d46, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 6537790146864641740, guid: 8b7d371432285d546b565abe3ea00729, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 7200312841795022094, guid: 2c4a04b22c44fc94dae57f59464a9e76, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 253649582924716904, guid: 50dfc9deb20bd2341a7f8bbc6bb0a305, type: 3}
+    pieceType: 2
+    subFolder: Gateway
+    isExit: 0
+  - prefab: {fileID: 1394915505225827499, guid: 3e399f69f1c7b4a48a069b5adca3b5e0, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 8963959924640112460, guid: 7f5e22da74415a64b97d5cd8f252a945, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 6839617877632335906, guid: 1a5637b67a0699a45abaeb1a66c54c5b, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 8493783191534310494, guid: f6a8079681103854c8f323c1974fb0d3, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 183849881811826739, guid: 6e38b549f24197949a50eb99838b2827, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 1331723123360322553, guid: 2d07cd89718700c4194ffe2077632183, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 6836496509701578700, guid: 90da0170151026448862513921a9f0c2, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 159184585050355386, guid: f556218a280eb8c48b2f2c9bee5fd137, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 4068353493972955690, guid: e575e4303ecd0e244b1939129542d353, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 2231697038685652870, guid: 6380df04fb011f04caf40d7fe30a6573, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 1798793182940053315, guid: f289e375e6e01604d8539abfa94f7a5c, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 8596366061876836429, guid: ef5c65b53f590404c92a1ce6c4cce953, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 5073592951018865667, guid: 4b130cc9090872441ba46554dd8f6f5b, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 2427303381893975372, guid: 359e971cf2cdab049a86c29d06414188, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 6537687525484687717, guid: f95e8f895c1e96c4997f836183b99aaf, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 5786945724556914256, guid: 97e15802f248d944f903b53cdb263151, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 7316417353803841775, guid: a3b8b09f32c233448a91844717a9a792, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 3295048885050335152, guid: 4c2cefcb53c0c224b9fa1a4de3f9e23d, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 5551983102494907012, guid: 8a4094d482d921649a33be77a7db3ca7, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 8674076846693263389, guid: d471624db638cc54ea85b08a5e29bb31, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 5828872909778925939, guid: e8eaeea365eec9141944c3707da2626f, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 3810150640982210318, guid: 605736237e0e8424b86652f5490d2fd2, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 124953334812302613, guid: e3b64fac5e6596a4a907d36ca4f86b9c, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 7698906574378800310, guid: b0c7f2feaa5edf4489f80d70a78b1859, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 5735651273011733563, guid: 292a68e0ee0cfae41aec26eee990b16f, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 4514157233841761264, guid: bf96d882fe35cd144bf7cc1147cffd54, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 511992834712601656, guid: 1a96fdcb95c389143973969745a34149, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 8095938024160641966, guid: dccaf3dec0fb2384bb9a337f03fb9e8b, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 6656597388132573239, guid: fd25ac54e6878fd46a20b51d2ff24f94, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 8497474054483568400, guid: abee9ffa0786d824585ca225043cdaaf, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 8834664179528657616, guid: 5ccdf32a449c0d34cad8eedd5c563355, type: 3}
+    pieceType: 99
+    subFolder: Wall/OneSided
+    isExit: 0
+  - prefab: {fileID: 412157631396411191, guid: e01437fb5194c8849bbc63de87484bdf, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 6411681086779430956, guid: 6957bb24c595b314b99d0808a7013b04, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 599113736142385924, guid: e82480ba42de707488cb771654deaff0, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 8290803040885712426, guid: 81a5b80f05a1f634aa9645b3ac93c518, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 2675740581703255741, guid: 24555ee33f79e6d4f967b69a137e29eb, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 7147999673735110659, guid: ad6246bef8e3f7245a9a9343ade9152a, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 6947048585848683548, guid: c27f53b318b66a846a96eda90caaf35c, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 7294969553682199796, guid: 632b84223261b934fa76020881983026, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 2332795919347632303, guid: a53f9bc7b116e2a41a0472b4d13f222e, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 2671688155961661930, guid: d68e4d1382f90d14aa93badbb89411ec, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 2698109695347073570, guid: 3909eb1c94bbb6d4783900c9c0195e0c, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 7744031970118693787, guid: f4f8445481f69e1448f889e94fdb0fc5, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 6386870744116562934, guid: 3959e74d5d0ba0142a6c212ec87298e4, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 7157520011005397905, guid: c34449b03f265954290df5960027b805, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 1466901811714654743, guid: 38864d559bb40c640856d272f4ea4106, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 4456300464341837704, guid: 78097d25fbbece242b3288d5ac5870bc, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 5263767232257165335, guid: b4f8623ab5800d849884f3a00c230ccc, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 1271684340207313363, guid: 7bf2fdb92dddf8248bf4c462af8f1db6, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 3879957181119344118, guid: 019481eef79cf604bbe57b982696da64, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 2332216033974306634, guid: 47f6cc16e260fd74f8a63f9ead1ecc8c, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 5415542849491589221, guid: 4aad8bf00544488488a60e5131e986ac, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 5623546028615528104, guid: b360753693522b84cab246d730853c83, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 6498345419041165003, guid: b184c362081a8174793e335fb7362c90, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 1891916716161798795, guid: 26eb3108543c78a48ad305ba6f324ca8, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 7573579835341521082, guid: 4c12450e81f69994e8976b07e0e56ecf, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 1558474019142264451, guid: fcfbd62cefbe9de4d9bae86d1e7e209c, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 3954729365451723590, guid: c8aa18aab17b53c419847eacbd9718dc, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 7348401095213144374, guid: 4d312e005bdbc3e48af0a378041287c5, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 7164768851592763111, guid: 01cd33f4997e0ab43b755f1835731870, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 489561390014136035, guid: e6b83cfb1573a684cb81a877d83cd033, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 6912320446263796663, guid: d18e937af689e814c84967d4ba3c9662, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 3594938264840992236, guid: cfff3ef73a1ca154f9f245e038ccecee, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 412334020989842961, guid: 5d51a81668383b647a2930190b00da1a, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 3147814535454299549, guid: 6173f853d2ad1d6418b1df30ad307aa8, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 1274689020495920042, guid: ef17607c6919ca2479f842ca4792d9da, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 8443816411711821225, guid: c18d659ff0a4bcb44a6811ab5441eab2, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 5316506651397151717, guid: 45dfbdbbf07350748a1e190e3d68c1a9, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 4964012166450922480, guid: 6b7524b1a30a28242be99163fbe48384, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 4141954222554445451, guid: 6fb62da077b31ad45a24055df6759c8b, type: 3}
+    pieceType: 99
+    subFolder: Wall/PivotEdge
+    isExit: 0
+  - prefab: {fileID: 6516521679570609882, guid: b7c4247c4e859744fb514ee3841411a0, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 3729636571878214528, guid: 00bad0b4a92b6eb41bc9246fd7ad67c2, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 5592893526481258652, guid: eab437280b7a0004aaa99d725488d91c, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 2690194354769009011, guid: 9dd02c97a8c212745938a11db93b2166, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 1306362107963443407, guid: 50f78980916864e46b7addc574f2411c, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 8110468873131721619, guid: c899d1a35138f6a4a9ee843f8282418f, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 6372099399108832661, guid: 966d47816be62b74da2480109ab20114, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 6789434876085393790, guid: 2d3627263a566da488d8e80741641a82, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 5140869711003076419, guid: 489090905e251d44ebd97443437beb36, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 5258777736160583754, guid: 7970d151744363148bd8c92fbd2902a7, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 3532106715066339223, guid: 6831458dbddbc3f40a6574dc3238cc96, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 594988891372400808, guid: 93e1d3f23c68fa64b8523af2298f977e, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 8031515005854077612, guid: 14c0d6b786c1277418124ceb5900902a, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 2609351959473931393, guid: 279e0cf879f185a40ae1735515abf63c, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 4247703311932561522, guid: 2934f2fd86a207e4d9633c10f955d28e, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 6269017210670202883, guid: 3db3ec9490393da43b000e08d27a444a, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 2199184876127154880, guid: d6594c60cd12dd44ba0cab66c12795af, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 7757821048203099596, guid: 6cef12d708c73db43bb8c9e6d9db9a73, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 4360425842820269662, guid: a85a308be615b0444b6c0d48ebcef332, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 6507544020849751333, guid: 1bc8b861ec62cd24cb8da09cbe8fd135, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 1439487691148774469, guid: 4e57ce49da774194dab09134c21eac1a, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 1010640020510975024, guid: 01ab48ac054fceb44949fb6d67f1c937, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 6144925541466428427, guid: 56f3c4b344d69f34d9e4f382f4dff1d5, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 5834684647593683176, guid: ae34c1f6bc91a2e4c9ffc22e8c20bd07, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 6457259375748515658, guid: e1864b4f98794794f9b785abd220e970, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 2838807954376444183, guid: 47d89ae0389b63740a669b177d0d242b, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 6935021291033707324, guid: 3fb9a25c69e8c8d42a62a04974427884, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 3940998657440842052, guid: adce35e2a062ac94bbc1f261c7a26dd3, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 8973853227126605232, guid: bf0eeeedee5793341b19aad7d7811644, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 3654479894032746884, guid: d7af012efa433234aa31fbc9ed8ce502, type: 3}
+    pieceType: 1
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 5258777736160583754, guid: 622d8aeca03943440b54cd8883d7ad01, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 3532106715066339223, guid: 0c207d107451c324f8d7199fbd57a86c, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 594988891372400808, guid: bf87ebbaf6d9b3d4fb91f51a7e2f365d, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 8031515005854077612, guid: 88561e28322392a4f92a8f31e70a2141, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 2609351959473931393, guid: b78a2bdac625dfb439b6628e3806c16a, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 4247703311932561522, guid: 96f8f826189617e4d89a954ebf113f85, type: 3}
+    pieceType: 3
+    subFolder: Wall/PivotMiddle
+    isExit: 0
+  - prefab: {fileID: 6344457906940572897, guid: 357bc164984439a4c90a17032b82dfdc, type: 3}
+    pieceType: 0
+    subFolder: Floor
     isExit: 0
