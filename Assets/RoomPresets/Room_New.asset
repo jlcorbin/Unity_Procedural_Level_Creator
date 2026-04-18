@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a5460710b3ad7db43a15461f728be52b, type: 3}
+  m_Name: Room_New
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.RoomPreset
+  roomName: Room_New
+  theme: 0
+  roomPrefab: {fileID: 9163917755268036759, guid: 50a093b841334c940b69162664a9fddf, type: 3}
+  definition:
+    sizePreset: 1
+    customWidth: 4
+    customDepth: 4
+    exitNorth: 0
+    exitSouth: 0
+    exitEast: 0
+    exitWest: 0
+    exitUp: 0
+    exitDown: 0
+    doorwayNorth: 0
+    doorwaySouth: 0
+    doorwayEast: 0
+    doorwayWest: 0
+    includeCeiling: 0
+  pieceCatalogue: {fileID: 11400000, guid: 01218fc047fe9184bab26f6f90ce9fec, type: 2}
+  propCatalogue: {fileID: 0}
+  placedProps: []
+  pieceType: 1
+  spawnWeight: 1
+  themeTags: []
