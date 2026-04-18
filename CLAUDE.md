@@ -266,7 +266,11 @@ TYPE 2 — Custom rooms (COMP_ pieces):
   NOT built from individual Parts
 
 ## PieceCatalogue system
-PieceType enum: Floor, Wall, Doorway, Corner, Column, Ceiling, Stair
+PieceType enum: Floor, Wall, Doorway, Corner, Column, Ceiling, Stair, None=99
+  None = 99 — staging slot for pieces pending categorization.
+  Explicit integer value 99 future-proofs against reordering of real types.
+  Never used by the generator (GetRandom / CountOfType ignore it naturally).
+
 PieceEntry inner class: GameObject prefab, PieceType,
   string subFolder, bool isExit (default false)
   isExit (bool, default false) — Doorway entries only.
@@ -279,38 +283,56 @@ PieceEntry inner class: GameObject prefab, PieceType,
 Unified List<PieceEntry> pieces (not separate lists per type)
 Method: GetPiecesByType(PieceType) → List<PieceEntry>
 
-PieceCatalogueEditor filter UI (inspector only):
-  Piece Type dropdown: All / each PieceType enum value
-  Prefab dropdown: All / sorted prefab names scoped to current type filter
-    — rebuilds automatically when type filter changes or piece count changes
-    — resets to "All" when type filter changes
-  AND filter: both must match for an entry to show
-  When any filter active:
-    — shows filtered count "Showing X / Y pieces"
-    — shows helpbox, hides +/- (no ReorderableList)
-    — displays matching entries with real list indices as labels
-  When no filter: normal ReorderableList with add/remove/reorder
-  Per-entry ✕ delete button always visible (filter state irrelevant):
-    — in filtered view: on header row via BeginHorizontal, deletes by real index,
-      resets _filterNameIndex=0 and clears _nameOptions, then returns
-    — in unfiltered view: in ReorderableList header row, deferred via
-      _pendingDeleteIndex processed after DoLayoutList(); same reset logic
+PieceCatalogueEditor — per-section ReorderableList architecture:
+  One foldout per PieceType (Floor → Stair) each with its own ReorderableList
+  backed by a List<int> realIndices (view-index → real index in pieces).
+  Foldout state persisted via EditorPrefs keyed by asset GUID + type name.
+  All real-type sections default to expanded; Skipped defaults to collapsed.
+  Expand All / Collapse All buttons above the section list.
 
-Auto-populate scans a root folder, maps subfolders to
-PieceType by name, loads all prefabs, adds to catalogue.
-Decorative types (Trim, Railing, Props) excluded.
+  Skipped section (PieceType.None):
+    Rendered after the seven real-type sections with a yellow-tinted helpBox
+    and "staging — not used by generator" mini-label.
+    Per-row Destination popup (dropdown of real types).
+    "Will move to: X" label + Move button appear when a destination is chosen.
+    Move applies the type change via serializedObject and rebuilds all sections.
+    Pieces stay in Skipped until Move is clicked — no auto-migration on type change.
+
+  Filter UI:
+    Piece Type dropdown: All / Floor..Stair / Skipped
+      "Skipped" maps to PieceType.None; hides all other sections when selected.
+    Prefab name dropdown: All / sorted names scoped to visible section(s).
+    When prefab name filter is active:
+      — entries not matching are hidden but section remains editable
+      — + button replaced with helpbox "clear filter to add new entries"
+      — ✕ delete still works on visible rows
+    Type filter auto-expands the matching section.
+
+  Per-section + button: new entry pre-set to that section's PieceType, isExit=false.
+  ✕ per-row delete: deferred (pendingDeleteRealIndex) to fire after DoLayoutList.
+  Drag-reorder within a section: swaps real entries at sorted slot positions,
+    preserving relative order of all other types.
+  Reorder across sections: not supported (change type via Destination + Move).
+
+Auto-populate scans a root folder, maps subfolders to PieceType by name.
+Unmapped prefabs (Trim, Railing, OneSided, etc.) are added as PieceType.None
+instead of being discarded — they appear in the Skipped section for review.
+Re-populate preserves existing pieceType (user promotions survive re-run).
+Dialog shows: Added (real types) / Staged (None) / Skipped (duplicates + nulls).
 
 Subfolder → PieceType mapping:
+  contains "WallCover"       → PieceType.Ceiling  (checked before Trim)
   contains "Floor"           → PieceType.Floor
   contains "Wall" + "Middle" + "corner"/"angle"/"concave" in filename → PieceType.Corner
   contains "Wall" + "Middle" (straight) → PieceType.Wall
   contains "Gateway"         → PieceType.Doorway
   contains "Column"          → PieceType.Column  (freestanding decorative, NOT room corners)
-  contains "WallCover"       → PieceType.Ceiling
   contains "Stair"           → PieceType.Stair
-  contains "Trim"            → skip
-  contains "Railing"         → skip
-  contains "OneSided"        → skip
+  contains "Trim"            → PieceType.None  (staged)
+  contains "Railing"         → PieceType.None  (staged)
+  contains "OneSided"        → PieceType.None  (staged)
+  contains "PivotEdge"       → PieceType.None  (staged)
+  (no match)                 → PieceType.None  (staged)
 
 ## Room Workshop System
 Workshop is an EditorWindow (LevelGen → Room Workshop).
@@ -346,8 +368,11 @@ Seven-step workflow:
 ⑤ Components: Apply Components button
   Re-stamps RoomPiece + rebuilds all ExitPoints from doors/ group.
   Use after manually editing the doors/ hierarchy.
-⑥ Save: prefab + RoomPreset asset
-  → Assets/Prefabs/Rooms/Curated/
+⑥ Save: Type dropdown (Room / Hall) + name field + Save Prefab + Preset button
+  Room → Assets/Prefabs/Rooms/Curated/{name}.prefab
+  Hall  → Assets/Prefabs/Halls/{name}.prefab
+  RoomPreset always → Assets/RoomPresets/{name}.asset
+  Path preview label updates live as Type or Name changes.
 
 Size presets — multiples of 12 (LCM of FloorStep=4 and WallStep=6):
   Small  = 12×12   (1 tier, fixed height)
@@ -369,15 +394,17 @@ Wall tier stacking — VERIFIED WORKING:
 
 ## Corner floor tile placement — VERIFIED WORKING
 
-When a corner is angle or concave, the floor tile at that corner uses a
+When a corner is angle, concave, or convex, the floor tile at that corner uses a
 special prefab and requires both a rotation and a position offset to stay
 in place (the _O_ corner-pivot tile swings its geometry when rotated).
 
   corner piece name → floor tile selected:
     angle_[size]   (straight, no _2)  → P_MOD_Floor_01_O_angle_med   (base, must NOT be _3)
-    angle_[size]_2 (name ends "_2")   → P_MOD_Floor_01_O_angle_med_3 (pivot-corrected _3 variant)
+    angle_[size]_2 (name ends "_2")   → COMP_Floor_01_O_angle_med_3 (pivot-corrected _3 variant)
     concave_[size] (straight, no _2)  → P_MOD_Floor_01_O_convex_med  (base, must NOT be _3)
-    concave_[size]_2 (name ends "_2") → P_MOD_Floor_01_O_convex_med_3 (pivot-corrected _3 variant)
+    concave_[size]_2 (name ends "_2") → COMP_Floor_01_O_convex_med_3 (pivot-corrected _3 variant)
+    convex_[size]  (straight, no _2)  → P_MOD_Floor_01_O_concave_med (base, must NOT be _3)
+    convex_[size]_2 (name ends "_2")  → concaveTiles with _3 suffix (pivot-corrected variant)
 
   Selection logic (CornerTile in RoomWorkshopWindow):
     Straight variants → explicitly find first catalogue entry NOT ending in "_3"
@@ -393,7 +420,7 @@ in place (the _O_ corner-pivot tile swings its geometry when rotated).
 
   Pivot convention — ALL _O_ floor tiles must have their pivot at the standard
   corner position so the tileOff values above apply correctly. The _3 suffix
-  variants (P_MOD_Floor_01_O_convex_med_3, P_MOD_Floor_01_O_angle_med_3) had
+  variants (COMP_Floor_01_O_convex_med_3, COMP_Floor_01_O_angle_med_3) had
   non-standard pivots and were fixed in the prefabs — do not revert those changes.
 
   Grid positions (36×36 room example):
@@ -414,6 +441,16 @@ Floor grid (_O_ corner-pivot tile, extends -X and +Z):
   step   = FloorStep
   countX = Mathf.RoundToInt(FullWidth / FloorStep)
   countZ = Mathf.RoundToInt(FullDepth / FloorStep)
+
+  Tile pools (BuildFloors):
+    baseTiles    — Floor entries with "straight" in name  → fills the grid
+    bonepiles    — Floor entries with "bonepile" in name  → 15 % random swap
+    angleTiles   — Floor entries with "angle"             → corner positions only
+    concaveTiles — Floor entries with "concave"           → corner positions only
+    convexTiles  — Floor entries with "convex"            → corner positions only
+  nonCornerTiles = all Floor entries without angle/convex/concave in name.
+  Fallback baseTile (no "straight" found): uses nonCornerTiles[0], never a corner tile.
+  angle / concave / convex tiles NEVER placed in the main floor fill grid.
 
 Wall runs (edge-pivot pieces — extend one FloorStep in rotation direction):
   count per side = Mathf.RoundToInt(FullWidth / FloorStep) - 1
@@ -449,17 +486,23 @@ Wall prefab filter helpers:
   GetCornerPrefabs(WallSize)       → Wall entries with "corner" + size string
   WallSizeString(WallSize)         → "large" / "med" / "small" / ""
 
-Half-wall logic for angle/concave corners — VERIFIED WORKING:
-  When a corner type is angle or concave, the two adjacent wall pieces
-  (one on each side of that corner) use a half-length variant:
+Half-wall logic for angle/concave/convex corners — VERIFIED WORKING:
+  When a corner type is angle, concave, or convex (but NOT a _2 variant),
+  the two adjacent wall pieces use a half-length variant:
     COMP_Wall_01_M_straight_large_half_R
   The _R suffix means geometry is always on local +X (right) side of piece.
 
+  _2 suffix corners (e.g. angle_large_2) are solid-corner pieces that close
+  their own gap — they always use full-length adjacent walls. CornerNeedsHalfWall
+  returns false immediately for any corner whose name ends in "_2".
+
   Half flags (computed in BuildWalls before PlaceWallRun calls):
-    nwHalf = cornerNW != None && (cornerNW_angle || cornerNW_concave)
-    neHalf = cornerNE != None && (cornerNE_angle || cornerNE_concave)
-    swHalf = cornerSW != None && (cornerSW_angle || cornerSW_concave)
-    seHalf = cornerSE != None && (cornerSE_angle || cornerSE_concave)
+    nwHalf = cornerNW != None && CornerNeedsHalfWall(NW)
+    neHalf = cornerNE != None && CornerNeedsHalfWall(NE)
+    swHalf = cornerSW != None && CornerNeedsHalfWall(SW)
+    seHalf = cornerSE != None && CornerNeedsHalfWall(SE)
+  CornerNeedsHalfWall: name ends "_2" → false; else name contains
+    "angle" OR "concave" OR "convex" → true.
 
   PlaceWallRun has 4 optional override parameters:
     startOverride / endOverride     — alternate prefab list for first/last slot
@@ -521,8 +564,8 @@ Dispatch based on candidates.Count and CornerNeedsHalfWall:
     span ≤ 60 units: removes 2 adjacent centre slots, ExitPoint at midpoint
     span > 60 units: two double openings at 1/3 and 2/3 of candidates
 
-CornerNeedsHalfWall: returns true if the corner on either end of the wall
-  has a piece name containing "angle", "concave", or "convex".
+CornerNeedsHalfWall: returns false if name ends "_2"; otherwise true if
+  name contains "angle", "concave", or "convex".
 
 Half-wall _R suffix rule:
   Geometry always on local +X of piece.
@@ -606,30 +649,39 @@ RoomWorkshopWindow is verified and working through step ⑤. ALL features below 
   - Floor grid, wall runs (per-wall WallSize), corners (per-corner WallSize) ✓
   - Door replacement: random wall slot, random doorway prefab, isExit toggle ✓
   - ExitPoint stamping (isExit=true) and decorative door (isExit=false) ✓
-  - Half-wall logic for angle/concave corners ✓
-  - Corner floor tiles (angle/concave) with correct rotation and position offset ✓
+  - Half-wall logic for angle/concave/convex corners (not _2 variants) ✓
+  - _2 suffix corners always use full-length adjacent walls ✓
+  - Corner floor tiles (angle/concave/convex) with correct rotation and position offset ✓
+  - Convex corners use concaveTiles pool; _2 variant uses _3-suffix concaveTile ✓
+  - angle/concave/convex tiles excluded from main floor fill; fallback never picks corner tile ✓
   - Small (12×12) room door fallback (ignores first/last exclusion) ✓
   - Column is its own PieceType (freestanding decorative, never used as corners) ✓
   - Double Door — all four logic paths (Medium Standard, Medium Special, Large, Large>60) ✓
   - Custom Height / Wall Tiers — 1–3 tiers (multiples of 6), geometry stacks vertically ✓
   - Per-tier Opening Tier dropdown — shown only when tiers > 1 ✓
   - Seed Generator (⓪ step) — deterministic room generation from int seed ✓
-  - Step ⑥ Save (DoSave) exists but has not been tested end-to-end.
+  - Step ⑥ Save: Type dropdown (Room/Hall) routes prefab to correct folder ✓
+    Not yet tested end-to-end in Unity.
   - Dress step (PropCatalogue / SpawnPoints) not yet implemented.
-  - PieceCatalogue assets need re-Auto-Populate so Column pieces are
-    reclassified from Corner → Column (requires user action in Unity editor).
 
-PieceCatalogueEditor is verified working:
-  - ReorderableList with per-entry header row (Element N label + ✕ delete button) ✓
+PieceCatalogueEditor is verified working (per-section ReorderableList architecture):
+  - One foldout + ReorderableList per PieceType (Floor → Stair) ✓
+  - Skipped section (PieceType.None) with yellow tint and Move button ✓
   - isExit field hidden for all non-Doorway entries ✓
-  - Filter: PieceType dropdown + prefab name dropdown (context-sensitive) ✓
-  - Filtered view: real indices, per-entry ✕ delete, no +/- ✓
-  - Auto-populate: preserves isExit on re-populate, defaults false on new entries ✓
+  - Filter: PieceType dropdown (includes Skipped) + prefab name dropdown ✓
+  - Name filter hides non-matching rows but keeps +/- enabled per section ✓
+  - Per-entry ✕ delete works in all display modes ✓
+  - Drag-reorder within a section preserves cross-type ordering ✓
+  - Auto-populate: stages unmapped pieces as None, preserves type on re-populate ✓
+  - Breakdown: Skipped row + Total (live) + Total (all) with divider ✓
+
+PieceCatalogue.cs:
+  - PieceType.None = 99 added (staging slot, never used by generator) ✓
 
 Do not touch LVL_Configurator (it is complete).
 
 Pending work (priority order):
-  1. Test DoSave end-to-end (step ⑥)
+  1. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
   2. Implement Dress step (PropCatalogue / SpawnPoints)
   3. Create RoomWorkshop.unity scene
   4. Create LevelGenerator.unity scene
@@ -697,7 +749,8 @@ Step 3: Add Door — "Add Door" button on chosen WallSide:
 Step 4: Apply Components (optional refresh)
   Rebuilds RoomPiece + all ExitPoints from doors/ group
 
-Step 5: Save MOD as prefab → Assets/Prefabs/Rooms/Curated/
+Step 5: Save MOD as prefab
+  Select Type (Room / Hall) → saves to Rooms/Curated/ or Halls/ accordingly
 
 ## LVL_ modules — revised understanding
 OneSided folder = wall/railing/stair sections
