@@ -44,7 +44,10 @@ namespace LevelGen
         private const string GroupCeiling = "ceiling";
         private const string GroupDoors = "doors";
         private const string CuratedFolder = "Assets/Prefabs/Rooms/Curated";
+        private const string HallsFolder   = "Assets/Prefabs/Halls";
         private const string PresetsFolder = "Assets/RoomPresets";
+
+        private enum SaveDestination { Room, Hall }
 
         private static readonly System.Random _rng = new();
 
@@ -83,7 +86,8 @@ namespace LevelGen
         [SerializeField] private int _cornerSEDirIdx = 0;
         [SerializeField] private PieceCatalogue _pieceCat;
         [SerializeField] private GameObject _modRoot;
-        [SerializeField] private string _saveName = "Room_New";
+        [SerializeField] private string          _saveName        = "Room_New";
+        [SerializeField] private SaveDestination _saveDestination = SaveDestination.Room;
         [SerializeField] private WallSide _addDoorWall = WallSide.North;
         [SerializeField] private bool _doubleDoor = false;
         [SerializeField] private int  _openingTier = 0;
@@ -665,9 +669,11 @@ namespace LevelGen
                 return;
             }
 
-            _saveName = EditorGUILayout.TextField("Save Name", _saveName);
+            _saveDestination = (SaveDestination)EditorGUILayout.EnumPopup("Type", _saveDestination);
+            _saveName        = EditorGUILayout.TextField("Save Name", _saveName);
+            string saveFolder = _saveDestination == SaveDestination.Hall ? HallsFolder : CuratedFolder;
             EditorGUILayout.LabelField(
-                $"Prefab → {CuratedFolder}/{_saveName}.prefab", EditorStyles.miniLabel);
+                $"Prefab → {saveFolder}/{_saveName}.prefab", EditorStyles.miniLabel);
             EditorGUILayout.LabelField(
                 $"Preset → {PresetsFolder}/{_saveName}.asset", EditorStyles.miniLabel);
 
@@ -809,6 +815,13 @@ namespace LevelGen
             var convexTiles  = all.FindAll(e => e.prefab != null &&
                                                 e.prefab.name.Contains("convex",    System.StringComparison.OrdinalIgnoreCase));
 
+            // Corner tiles (angle / convex / concave) are reserved for the four corner positions.
+            // They must never be used as fill for the main floor grid.
+            var nonCornerTiles = all.FindAll(e => e.prefab != null &&
+                !e.prefab.name.Contains("angle",   System.StringComparison.OrdinalIgnoreCase) &&
+                !e.prefab.name.Contains("convex",  System.StringComparison.OrdinalIgnoreCase) &&
+                !e.prefab.name.Contains("concave", System.StringComparison.OrdinalIgnoreCase));
+
             PieceCatalogue.PieceEntry baseTile;
             if (baseTiles.Count > 0)
             {
@@ -819,8 +832,8 @@ namespace LevelGen
                 Debug.LogWarning(
                     "[RoomWorkshop] WARNING: No straight floor tile in catalogue. " +
                     "Add P_MOD_Floor_01_O_straight_med from 01_PARTS. " +
-                    "Falling back to first Floor entry.");
-                baseTile = all[0];
+                    "Falling back to first non-corner Floor entry.");
+                baseTile = nonCornerTiles.Count > 0 ? nonCornerTiles[0] : all[0];
             }
 
             // ── Summary logs ──────────────────────────────────────────────────
@@ -835,7 +848,7 @@ namespace LevelGen
             // ── Corner tile lookup ────────────────────────────────────────────
             // angle          corner → angle   floor tile (P_MOD_Floor_01_O_angle_med)
             // concave        corner → convex  floor tile (geometry inverts: concave wall needs convex floor)
-            // concave_small  corner → convex  floor tile, prefers "_3" suffix (P_MOD_Floor_01_O_convex_med_3)
+            // concave_small  corner → convex  floor tile, prefers "_3" suffix (COMP_Floor_01_O_convex_med_3)
             // convex         corner → concave floor tile (geometry inverts: convex wall needs concave floor)
             PieceCatalogue.PieceEntry CornerTile(int dirIdx)
             {
@@ -848,7 +861,7 @@ namespace LevelGen
 
                 if (isAngle && angleTiles.Count > 0)
                 {
-                    // angle_[size]_2 (name ends "_2") → pivot-corrected _3 floor tile
+                    // angle_[size]_2 (name ends "_2") → pivot-corrected _3 floor tile (COMP_Floor_01_O_angle_med_3)
                     // angle_[size]   (straight)        → base floor tile (must not be _3)
                     if (n.EndsWith("_2"))
                     {
@@ -862,7 +875,7 @@ namespace LevelGen
                 }
                 if (isConcave && convexTiles.Count > 0)
                 {
-                    // concave_[size]_2 (name ends "_2") → pivot-corrected _3 floor tile
+                    // concave_[size]_2 (name ends "_2") → pivot-corrected _3 floor tile (COMP_Floor_01_O_convex_med_3)
                     // concave_[size]   (straight)        → base floor tile (must not be _3)
                     if (n.EndsWith("_2"))
                     {
@@ -874,7 +887,20 @@ namespace LevelGen
                         !e.prefab.name.EndsWith("_3", System.StringComparison.OrdinalIgnoreCase));
                     return tBase ?? convexTiles[0];
                 }
-                if (isConvex && concaveTiles.Count > 0) return concaveTiles[0];
+                if (isConvex && concaveTiles.Count > 0)
+                {
+                    // convex_[size]_2 (name ends "_2") → pivot-corrected _3 floor tile
+                    // convex_[size]   (straight)        → base floor tile (must not be _3)
+                    if (n.EndsWith("_2"))
+                    {
+                        var t3 = concaveTiles.Find(e => e.prefab != null &&
+                            e.prefab.name.EndsWith("_3", System.StringComparison.OrdinalIgnoreCase));
+                        if (t3 != null) return t3;
+                    }
+                    var tBase = concaveTiles.Find(e => e.prefab != null &&
+                        !e.prefab.name.EndsWith("_3", System.StringComparison.OrdinalIgnoreCase));
+                    return tBase ?? concaveTiles[0];
+                }
                 return null; // standard corner — use base tile
             }
 
@@ -1286,12 +1312,17 @@ namespace LevelGen
             return e.Count > 0 && e[0].prefab != null && e[0].prefab.name.ToLower().Contains("convex");
         }
 
-        /// <summary>True when the corner needs adjacent half-wall pieces (angle, concave, or convex variant).</summary>
+        /// <summary>
+        /// True when the corner needs adjacent half-wall pieces.
+        /// angle/concave/convex corners need half walls — EXCEPT the _2 variants,
+        /// which are solid-corner pieces that close their own gap and use full walls.
+        /// </summary>
         private bool CornerNeedsHalfWall(int dirIdx)
         {
             var e = GetCornerEntriesForSlot(dirIdx);
             if (e.Count == 0 || e[0].prefab == null) return false;
             string n = e[0].prefab.name.ToLower();
+            if (n.EndsWith("_2")) return false;
             return n.Contains("angle") || n.Contains("concave") || n.Contains("convex");
         }
 
@@ -1776,10 +1807,11 @@ namespace LevelGen
         {
             if (!ModExists()) return;
 
-            EnsureDirectory(CuratedFolder);
+            string prefabFolder = _saveDestination == SaveDestination.Hall ? HallsFolder : CuratedFolder;
+            EnsureDirectory(prefabFolder);
             EnsureDirectory(PresetsFolder);
 
-            string prefabPath = $"{CuratedFolder}/{_saveName}.prefab";
+            string prefabPath = $"{prefabFolder}/{_saveName}.prefab";
             string presetPath = $"{PresetsFolder}/{_saveName}.asset";
 
             if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null)

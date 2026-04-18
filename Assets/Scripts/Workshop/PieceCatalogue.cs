@@ -39,6 +39,13 @@ namespace LevelGen
             Ceiling,
             /// <summary>Stair piece for vertical connections between floors.</summary>
             Stair,
+
+            /// <summary>
+            /// Staging slot for pieces pending categorization. Never used by the generator.
+            /// Pieces auto-populated from skipped subfolders (Trim, Railing, OneSided, etc.)
+            /// land here so the user can review and promote them to a real type via the editor.
+            /// </summary>
+            None = 99, // Explicit value future-proofs against accidental reordering of real types.
         }
 
         // ── Entry ─────────────────────────────────────────────────────────────
@@ -70,7 +77,8 @@ namespace LevelGen
         public Theme theme = Theme.Dungeon;
 
         [Tooltip("All modular pieces available for room construction. " +
-                 "Add Floor, Wall, Doorway, Corner and Ceiling prefabs here.")]
+                 "Add Floor, Wall, Doorway, Corner, Ceiling, Column and Stair prefabs here. " +
+                 "Pieces with PieceType.None are in the Skipped staging slot — not used by the generator.")]
         public List<PieceEntry> pieces = new List<PieceEntry>();
 
         // ── Public API ────────────────────────────────────────────────────────
