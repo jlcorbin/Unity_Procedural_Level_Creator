@@ -620,9 +620,24 @@ namespace LevelGen
                 return;
             }
 
+            EditorGUILayout.HelpBox(
+                "Apply Bounds stamps RoomPiece bounds only.\n" +
+                "ExitPoints are created automatically when Add Opening runs.\n" +
+                "Use Rebuild Exits from Doors after manually editing the doors/ hierarchy.",
+                MessageType.None);
+
+            EditorGUILayout.Space(2);
+
             GUI.backgroundColor = new Color(0.5f, 0.85f, 0.5f);
-            if (GUILayout.Button("Apply Components", GUILayout.Height(28)))
+            if (GUILayout.Button("Apply Bounds", GUILayout.Height(28)))
                 DoApplyComponents();
+            GUI.backgroundColor = Color.white;
+
+            EditorGUILayout.Space(2);
+
+            GUI.backgroundColor = new Color(0.8f, 0.75f, 0.4f);
+            if (GUILayout.Button("Rebuild Exits from Doors", GUILayout.Height(24)))
+                DoRebuildExitsFromDoors();
             GUI.backgroundColor = Color.white;
 
             EditorGUILayout.Space(2);
@@ -649,7 +664,7 @@ namespace LevelGen
             else
             {
                 EditorGUILayout.HelpBox(
-                    "No RoomPiece yet. Click Apply Components.", MessageType.None);
+                    "No RoomPiece yet. Click Apply Bounds.", MessageType.None);
             }
 
             EditorGUI.indentLevel--;
@@ -1457,13 +1472,20 @@ namespace LevelGen
             EditorUtility.SetDirty(_modRoot);
         }
 
-        /// <summary>Creates an ExitPoint child on MOD root at the given local XZ position.</summary>
+        /// <summary>
+        /// Creates an ExitPoint child on MOD root at <paramref name="localPos"/>.
+        /// Named "Exit_{dir}_{n}" where n is the count of same-direction ExitPoints
+        /// already on the MOD root — guarantees unique names for multi-door sides.
+        /// </summary>
         private void StampExitPoint(ExitPoint.Direction dir, Vector3 localPos)
         {
-            var go = new GameObject($"Exit_{dir}");
+            int n = 0;
+            foreach (var ep in _modRoot.GetComponentsInChildren<ExitPoint>())
+                if (ep.exitDirection == dir) n++;
+            var go = new GameObject($"Exit_{dir}_{n}");
             Undo.RegisterCreatedObjectUndo(go, $"Create ExitPoint {dir}");
             go.transform.SetParent(_modRoot.transform, false);
-            go.transform.localPosition = localPos;   // Y carries the tier offset
+            go.transform.localPosition = localPos;
             go.AddComponent<ExitPoint>().exitDirection = dir;
         }
 
@@ -1735,65 +1757,90 @@ namespace LevelGen
             Transform dg = GetDoorsGroup();
             int count = dg != null ? dg.childCount : 0;
             Debug.Log($"[RoomWorkshop] Detect Doors — doors/ group has {count} object(s).  " +
-                      "Click 'Apply Components' to stamp ExitPoints.");
+                      "Click 'Rebuild Exits from Doors' to re-stamp ExitPoints.");
             Repaint();
         }
 
         // ── Logic: Apply Components ───────────────────────────────────────────
 
         /// <summary>
-        /// Stamps <see cref="RoomPiece"/> on the MOD root and creates one
-        /// <see cref="ExitPoint"/> per object in the doors/ group.
-        /// Direction is inferred by comparing each door's local XZ position
-        /// to the four wall faces (nearest face wins).
-        /// ExitPoint Y is always 0 so horizontal connections match LVL_ modules.
+        /// Stamps <see cref="RoomPiece"/> bounds on the MOD root.
+        /// ExitPoints are NOT touched — they are created by Add Opening at door-add time.
+        /// Use Rebuild Exits from Doors to re-stamp after manually editing the doors/ hierarchy.
         /// </summary>
         private void DoApplyComponents()
         {
             if (!ModExists()) return;
-            Undo.RegisterFullObjectHierarchyUndo(_modRoot, "Apply Components");
+            Undo.RegisterFullObjectHierarchyUndo(_modRoot, "Apply Bounds");
 
-            // ── RoomPiece ─────────────────────────────────────────────────────
             RoomPiece rp = _modRoot.GetComponent<RoomPiece>()
                         ?? _modRoot.AddComponent<RoomPiece>();
 
-            rp.pieceType = RoomPiece.PieceType.Room;
-            rp.boundsSize = new Vector3(HalfWidth, HalfHeight, HalfDepth);
+            rp.pieceType    = RoomPiece.PieceType.Room;
+            rp.boundsSize   = new Vector3(HalfWidth, HalfHeight, HalfDepth);
             rp.boundsOffset = new Vector3(0f, HalfHeight, 0f);
 
-            // ── Remove old ExitPoints ─────────────────────────────────────────
+            EditorUtility.SetDirty(_modRoot);
+            Debug.Log($"[RoomWorkshop] Bounds applied — boundsSize=({HalfWidth},{HalfHeight},{HalfDepth})");
+            Repaint();
+        }
+
+        /// <summary>
+        /// Clears all ExitPoints on the MOD root and re-stamps one per child in the
+        /// doors/ group using direction inference (XZ-nearest-wall + Up/Down detection).
+        /// Use this after manually editing the doors/ hierarchy.
+        /// ExitPoint Y is snapped to the nearest wall tier.
+        /// </summary>
+        private void DoRebuildExitsFromDoors()
+        {
+            if (!ModExists()) return;
+            Undo.RegisterFullObjectHierarchyUndo(_modRoot, "Rebuild Exits from Doors");
+
             foreach (ExitPoint ep in _modRoot.GetComponentsInChildren<ExitPoint>())
                 Undo.DestroyObjectImmediate(ep.gameObject);
 
-            // ── Create ExitPoints from doors/ group ───────────────────────────
             Transform doorsGrp = GetDoorsGroup();
+            if (doorsGrp == null)
+            {
+                Debug.LogWarning("[RoomWorkshop] No doors/ group found — nothing to rebuild from.");
+                return;
+            }
+
+            var dirCount = new Dictionary<ExitPoint.Direction, int>();
             int created = 0;
 
-            if (doorsGrp != null)
+            for (int i = 0; i < doorsGrp.childCount; i++)
             {
-                for (int i = 0; i < doorsGrp.childCount; i++)
+                Transform door = doorsGrp.GetChild(i);
+                Vector3 localPos = _modRoot.transform.InverseTransformPoint(door.transform.position);
+
+                ExitPoint.Direction dir = DetectExitDirection(localPos);
+
+                Vector3 finalLocal;
+                if (dir == ExitPoint.Direction.Down)
+                    finalLocal = new Vector3(localPos.x, 0f, localPos.z);
+                else if (dir == ExitPoint.Direction.Up)
+                    finalLocal = new Vector3(localPos.x, FullHeight, localPos.z);
+                else
                 {
-                    Transform door = doorsGrp.GetChild(i);
-                    Vector3 localPos = _modRoot.transform.InverseTransformPoint(
-                                           door.transform.position);
-
-                    ExitPoint.Direction dir = DetectExitDirection(localPos);
-
-                    var go = new GameObject($"Exit_{dir}_{created}");
-                    Undo.RegisterCreatedObjectUndo(go, "Create ExitPoint");
-                    go.transform.SetParent(_modRoot.transform, false);
-                    go.transform.localPosition = new Vector3(localPos.x, 0f, localPos.z);
-
-                    var ep = go.AddComponent<ExitPoint>();
-                    ep.exitDirection = dir;
-                    created++;
+                    int tiers = Mathf.Max(1, Mathf.RoundToInt(FullHeight / WallTier));
+                    int tier  = Mathf.Clamp(Mathf.RoundToInt(localPos.y / WallTier), 0, tiers - 1);
+                    finalLocal = new Vector3(localPos.x, tier * WallTier, localPos.z);
                 }
+
+                if (!dirCount.ContainsKey(dir)) dirCount[dir] = 0;
+                int n = dirCount[dir]++;
+
+                var go = new GameObject($"Exit_{dir}_{n}");
+                Undo.RegisterCreatedObjectUndo(go, "Create ExitPoint");
+                go.transform.SetParent(_modRoot.transform, false);
+                go.transform.localPosition = finalLocal;
+                go.AddComponent<ExitPoint>().exitDirection = dir;
+                created++;
             }
 
             EditorUtility.SetDirty(_modRoot);
-            Debug.Log($"[RoomWorkshop] RoomPiece applied — " +
-                      $"boundsSize=({HalfWidth},{HalfHeight},{HalfDepth})  " +
-                      $"ExitPoints={created}");
+            Debug.Log($"[RoomWorkshop] Rebuilt {created} ExitPoint(s) from doors/ group.");
             Repaint();
         }
 
@@ -1903,20 +1950,43 @@ namespace LevelGen
         }
 
         /// <summary>
-        /// Returns the exit direction whose wall face is closest to
-        /// <paramref name="localPos"/> in XZ space.
+        /// Infers an <see cref="ExitPoint.Direction"/> from a door's local position.
+        ///
+        /// Pass 1 — vertical:
+        ///   If Y is clearly at ceiling (≥ FullHeight − WallTier/2) AND the XZ
+        ///   position is interior (away from every wall face), return Up.
+        ///   If Y is clearly at floor (≤ WallTier/2) AND interior, return Down.
+        ///   "Interior" = farther from every wall face than half a floor step.
+        ///
+        /// Pass 2 — horizontal:
+        ///   Otherwise return the nearest of N / S / E / W based on the XZ
+        ///   distance to each wall face.
         /// </summary>
         private ExitPoint.Direction DetectExitDirection(Vector3 localPos)
         {
-            float dN = Mathf.Abs(localPos.z - HalfDepth);
+            // Distances to each wall face (XZ plane)
+            float dN = Mathf.Abs(localPos.z -  HalfDepth);
             float dS = Mathf.Abs(localPos.z - -HalfDepth);
-            float dE = Mathf.Abs(localPos.x - HalfWidth);
+            float dE = Mathf.Abs(localPos.x -  HalfWidth);
             float dW = Mathf.Abs(localPos.x - -HalfWidth);
-            float min = Mathf.Min(dN, Mathf.Min(dS, Mathf.Min(dE, dW)));
+            float minWallDist = Mathf.Min(dN, Mathf.Min(dS, Mathf.Min(dE, dW)));
 
-            if (Mathf.Approximately(min, dN)) return ExitPoint.Direction.North;
-            if (Mathf.Approximately(min, dS)) return ExitPoint.Direction.South;
-            if (Mathf.Approximately(min, dE)) return ExitPoint.Direction.East;
+            // ── Pass 1: vertical exits ────────────────────────────────────────
+            // A ceiling/floor door sits well away from every wall face — otherwise
+            // we'd confuse it with a wall door that happens to be on tier 0 or top.
+            const float interiorThreshold = FloorStep * 0.5f;  // = 2 units
+
+            bool isInterior  = minWallDist > interiorThreshold;
+            bool nearCeiling = localPos.y >= FullHeight - WallTier * 0.5f;
+            bool nearFloor   = localPos.y <= WallTier * 0.5f;
+
+            if (isInterior && nearCeiling) return ExitPoint.Direction.Up;
+            if (isInterior && nearFloor)   return ExitPoint.Direction.Down;
+
+            // ── Pass 2: horizontal exits ──────────────────────────────────────
+            if (Mathf.Approximately(minWallDist, dN)) return ExitPoint.Direction.North;
+            if (Mathf.Approximately(minWallDist, dS)) return ExitPoint.Direction.South;
+            if (Mathf.Approximately(minWallDist, dE)) return ExitPoint.Direction.East;
             return ExitPoint.Direction.West;
         }
 

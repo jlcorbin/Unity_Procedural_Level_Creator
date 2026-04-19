@@ -7,18 +7,29 @@ Renderer: URP (Universal Render Pipeline).
 Target platforms: Android (IL2CPP, ARM64) and iOS.
 
 ## Level generator overview
-The generator places 3D room and hall prefabs connected
-via exit sockets.
+The generator places 3D room and hall prefabs connected via exit sockets.
 
 Key rules:
-- Each prefab has a RoomPiece component and child
-  ExitPoint components
+- Each prefab has a RoomPiece component and child ExitPoint components
 - ExitPoints have a direction (North/South/East/West/Up/Down)
 - Two exits connect only if their directions are opposite
-- Before placing a piece, BoundsChecker verifies no overlap
-- Generation uses seeded System.Random — same seed =
-  identical level
-- Levels saved as SeedData in LevelSequence ScriptableObject
+- Before placing a piece, BoundsChecker verifies no overlap (AABB, no physics)
+- Generation uses seeded System.Random — same seed = identical level
+
+Generation behaviour (LevelGenerator.cs):
+- No separate start room field. The generator picks a random prefab from
+  roomPrefabs, places it at origin, and counts it as room #1.
+- roomCount (int, Min=1, default=5) — total rooms to place including room #1.
+- maxHalls = roomCount — halls can never exceed roomCount.
+- At each open exit: if both types available, 70 % chance room / 30 % hall.
+  If one type is exhausted, the other is used exclusively.
+- If no placement succeeds after maxRetriesPerExit attempts, the exit is sealed
+  and generation continues from the next queued exit.
+- When roomCount is reached the loop stops. Remaining open exits stay open —
+  no dead-end caps are placed.
+- Log on completion: [LevelGenerator] Done. seed=X rooms=Y/Z halls=W/Z
+- LevelSequence ScriptableObject still exists for storing SeedData records
+  but is not auto-loaded by LevelGenerator at runtime.
 
 ## Whitebox pack
 
@@ -365,9 +376,19 @@ Seven-step workflow:
     Tier 0 pieces: named Wall_N_0 (no suffix)
     Tier 1 pieces: named Wall_N_0_t1
     Tier 2 pieces: named Wall_N_0_t2
-⑤ Components: Apply Components button
-  Re-stamps RoomPiece + rebuilds all ExitPoints from doors/ group.
+⑤ Components: Apply Bounds button (was Apply Components).
+  Stamps RoomPiece + bounds only (pieceType, boundsSize, boundsOffset).
+  ExitPoints are NOT touched — they are created automatically by Add Opening
+  at door-add time, at each door's exact local position.
+  Rebuild Exits from Doors: separate button that clears all ExitPoints and
+  re-stamps one per child in doors/ group using direction inference.
   Use after manually editing the doors/ hierarchy.
+  Direction inference per door:
+    XZ-nearest-wall for wall doors (N/S/E/W).
+    Y-based for ceiling/floor doors (Up/Down) — detected when door is
+    interior in XZ (>2 units from every wall face) AND near ceiling or floor.
+  ExitPoint Y snapped to nearest WallTier boundary.
+  Up exits forced to Y = FullHeight; Down exits forced to Y = 0.
 ⑥ Save: Type dropdown (Room / Hall) + name field + Save Prefab + Preset button
   Room → Assets/Prefabs/Rooms/Curated/{name}.prefab
   Hall  → Assets/Prefabs/Halls/{name}.prefab
@@ -526,12 +547,20 @@ Half-wall logic for angle/concave/convex corners — VERIFIED WORKING:
     W_last(NW corner): +X faces INTO corner → flip + shiftEndToward
 
 Door placement:
-  Add Door picks a random Wall_{side}_N child from walls/ group,
-  destroys it, places Doorway piece at same localPos/localRot
-  in doors/ group, then stamps ExitPoint on MOD root.
-  ExitPoint direction maps directly from WallSide enum.
-  Duplicate ExitPoints for same direction are removed first.
+  Add Opening picks a random Wall_{side}_N child from walls/ group,
+  destroys it, and stamps an ExitPoint child on MOD root at the wall
+  slot's local position (Y = tier * WallTier — already tier-snapped).
+  ExitPoint direction maps directly from the WallSide enum.
+  Named "Exit_{dir}_{n}" where n = count of same-direction ExitPoints
+  already on MOD root. Multiple doors on same side produce Exit_N_0,
+  Exit_N_1, etc.
   RoomPiece is auto-added to MOD root if not already present.
+
+  Apply Bounds only updates boundsSize / boundsOffset on RoomPiece.
+  Rebuild Exits from Doors re-stamps exits from the doors/ hierarchy
+  using DetectExitDirection (XZ-nearest-wall + Up/Down interior check).
+  ExitPoint Y snapped to nearest WallTier boundary.
+  Vertical exits forced to Y=FullHeight (Up) or Y=0 (Down).
 
 Bounds:
   boundsSize   = (HalfWidth, HalfHeight, HalfDepth)
@@ -618,7 +647,7 @@ Generation/:
   ExitPoint.cs ✓
   RoomPiece.cs ✓
   BoundsChecker.cs ✓
-  LevelGenerator.cs ✓ (dressRoomsOnGenerate + PropCatalogue)
+  LevelGenerator.cs ✓ (simplified: roomCount, 70/30 room/hall, no start room, no dead-end caps)
 
 Data/:
   SeedData.cs ✓

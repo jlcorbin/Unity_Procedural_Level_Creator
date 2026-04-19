@@ -5,37 +5,19 @@ namespace LevelGen
 {
     /// <summary>
     /// Custom Inspector for LevelGenerator.
-    /// Adds Generate, Clear, Save Seed, and Randomize buttons
+    /// Adds Generate, Clear, and Random Seed + Generate buttons
     /// so you can preview levels directly in the Editor without entering Play mode.
     /// </summary>
     [CustomEditor(typeof(LevelGenerator))]
     public class LevelGeneratorEditor : Editor
     {
-        // Foldout state
-        private bool _showStats     = true;
-        private bool _showSequence  = true;
-
-        // Level name field for saving
-        private string _saveLevelName = "";
+        private bool _showStats = true;
 
         public override void OnInspectorGUI()
         {
             LevelGenerator gen = (LevelGenerator)target;
 
-            // Draw all the default serialized fields first
             DrawDefaultInspector();
-
-            // ── Dressing validation ───────────────────────────────────────
-            // DrawDefaultInspector already shows the Dressing header and its three
-            // fields (dressRoomsOnGenerate, defaultPropCatalogue, dressingTheme).
-            // Add a contextual warning here so it appears right below those fields.
-            if (gen.dressRoomsOnGenerate && gen.defaultPropCatalogue == null)
-            {
-                EditorGUILayout.HelpBox(
-                    "Dress Rooms On Generate is enabled but no Prop Catalogue is assigned.\n" +
-                    "Assign a PropCatalogue in the Dressing section above.",
-                    MessageType.Warning);
-            }
 
             EditorGUILayout.Space(10);
             DrawDivider();
@@ -92,55 +74,17 @@ namespace LevelGen
                     gen.LastUsedSeed.ToString(),
                     EditorStyles.helpBox);
 
-                EditorGUILayout.LabelField("Pieces Placed",
+                EditorGUILayout.LabelField("Rooms Placed",
+                    $"{gen.LastRoomsPlaced} / {gen.roomCount}");
+
+                EditorGUILayout.LabelField("Halls Placed",
+                    $"{gen.LastHallsPlaced} / {gen.roomCount}");
+
+                EditorGUILayout.LabelField("Total Pieces",
                     gen.PlacedPieces.Count.ToString());
 
                 EditorGUILayout.LabelField("Is Generating",
                     gen.IsGenerating ? "Yes" : "No");
-
-                EditorGUI.indentLevel--;
-            }
-
-            // ── Save seed ─────────────────────────────────────────────
-            EditorGUILayout.Space(6);
-            DrawDivider();
-
-            _showSequence = EditorGUILayout.Foldout(_showSequence, "Save to Sequence", true);
-            if (_showSequence)
-            {
-                EditorGUI.indentLevel++;
-
-                _saveLevelName = EditorGUILayout.TextField("Level Name", _saveLevelName);
-
-                EditorGUILayout.Space(4);
-
-                GUI.backgroundColor = new Color(1.0f, 0.85f, 0.4f);
-                if (GUILayout.Button("Save Current Seed to Sequence"))
-                {
-                    if (gen.levelSequence == null)
-                    {
-                        EditorUtility.DisplayDialog(
-                            "No Sequence Assigned",
-                            "Assign a LevelSequence asset in the inspector first.\n\n" +
-                            "Create one via: Assets → Create → LevelGen → Level Sequence",
-                            "OK");
-                    }
-                    else
-                    {
-                        gen.SaveCurrentSeedToSequence(_saveLevelName);
-                        EditorUtility.SetDirty(gen.levelSequence);
-                        AssetDatabase.SaveAssets();
-                        Debug.Log($"[Editor] Saved seed {gen.LastUsedSeed} to sequence.");
-                    }
-                }
-                GUI.backgroundColor = Color.white;
-
-                // Quick copy seed to clipboard
-                if (GUILayout.Button("Copy Seed to Clipboard"))
-                {
-                    EditorGUIUtility.systemCopyBuffer = gen.LastUsedSeed.ToString();
-                    Debug.Log($"[Editor] Copied seed {gen.LastUsedSeed} to clipboard.");
-                }
 
                 EditorGUI.indentLevel--;
             }
