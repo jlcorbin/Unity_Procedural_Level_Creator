@@ -12,7 +12,7 @@ namespace LevelEditor
         Straight,   // standard full-length wall at edge midpoint
         HalfL,      // 2-unit half-wall; mesh extends LEFT of pivot (local -X side)
         HalfR,      // 2-unit half-wall; mesh extends RIGHT of pivot (local +X side)
-        Angle,      // deferred
+        Angle,      // diagonal hypotenuse wall placed at the cell center of a Triangle tile
         Concave,    // deferred
         Convex,     // deferred
     }
@@ -73,20 +73,23 @@ namespace LevelEditor
     public struct WallPlacement
     {
         /// <summary>
-        /// World-space centre of the wall piece — the midpoint of the cell edge,
-        /// flush with the cell boundary.
+        /// World-space centre of the wall piece — the midpoint of the cell edge for cardinal
+        /// walls, or the cell center for Angle (hypotenuse) walls.
         /// </summary>
         public Vector3    worldPosition;
         /// <summary>
-        /// Rotation such that the wall's local +Z points INTO the room interior
-        /// (i.e. back toward the cell centre from the edge).
+        /// Rotation such that the wall's local +Z points INTO the room interior.
+        /// For Angle walls, local +Z faces INTO the triangle's filled body.
         /// </summary>
         public Quaternion rotation;
-        /// <summary>Wall shape kind (Straight, HalfL, HalfR, or deferred types).</summary>
+        /// <summary>Wall shape kind (Straight, HalfL, HalfR, Angle, or deferred types).</summary>
         public WallKind   kind;
         /// <summary>Vertical tier index.</summary>
         public int        tier;
-        /// <summary>Which edge of the source cell this wall sits on.</summary>
+        /// <summary>
+        /// Which cardinal edge of the source cell this wall sits on.
+        /// For Angle walls this is CellEdge.North as a sentinel (angle walls have no cardinal edge).
+        /// </summary>
         public CellEdge   edge;
         /// <summary>Grid coordinate (x, z) of the source cell.</summary>
         public Vector2Int gridCoord;
@@ -156,14 +159,15 @@ namespace LevelEditor
     /// <para>The solver is pure data — in: CellMap, out: SolveResult.
     /// It does not pick prefabs, read any catalogue, or touch the scene.</para>
     ///
-    /// <para><b>Current scope (Phase 2 / Pass 1):</b>
+    /// <para><b>Current scope (Phase 2):</b>
     /// <list type="bullet">
-    /// <item><see cref="TileType.Square"/> cells only — non-Square tiles are warned and skipped.</item>
+    /// <item><see cref="TileType.Square"/> cells — floor, cardinal walls, outward corners.</item>
+    /// <item>Triangle cells (NE/NW/SE/SW) — floor, two cardinal leg walls, one Angle hypotenuse wall.</item>
     /// <item>Tier 0 only — higher tiers are skipped in wall and corner passes.</item>
     /// <item>Straight walls on cardinal cell edges, with optional corner-arm absorption.</item>
-    /// <item>Outward 90-degree corners at convex junctions only.</item>
+    /// <item>Outward 90-degree corners at convex cardinal-wall junctions.</item>
     /// </list>
-    /// Triangles, quarter-circles, tier stacking, and inward (concave) corners are deferred.
+    /// Quarter-circles, tier stacking, and inward (concave) corners are deferred.
     /// </para>
     /// </summary>
     public static class EdgeSolver
@@ -235,12 +239,11 @@ namespace LevelEditor
                 return result;
             }
 
-            // Track which non-Square tile types have already produced a warning so we
-            // warn only once per type per Solve call.
+            // Track which unsupported tile types have already produced a warning.
             var warnedTypes = new HashSet<TileType>();
 
             // Pass 1 — Floors
-            // Emit one FloorPlacement per filled cell. Skip non-Square tiles with a warning.
+            // Emit one FloorPlacement per filled Square cell.
             foreach (var (x, z, cell) in map.EnumerateFilled())
             {
                 if (cell.type != TileType.Square)
@@ -264,15 +267,13 @@ namespace LevelEditor
             }
 
             // Pass 2 — Corners (runs BEFORE the wall pass so claim sets are populated first).
-            //
-            // Corner deduplication: each grid vertex (vx, vz) is a shared point between
-            // up to four cells. A HashSet ensures each vertex is emitted at most once.
+            // Only Square cells participate in corner checks — Triangle tile vertices are the
+            // "points" of the diamond and do not produce outward 90-degree corner junctions.
             //
             // Claim sets:
-            //   fullyClaimedEdges — edges whose entire length is covered (Full mode).
-            //   halfCornerEdges   — edges where one endpoint has a Half corner, storing
-            //                       which endpoint so the wall pass can pick HalfL vs HalfR.
-            var emittedVertices  = new HashSet<long>();
+            //   fullyClaimedEdges — edges fully suppressed (Full mode).
+            //   halfCornerEdges   — edges where one endpoint has a Half corner arm.
+            var emittedVertices   = new HashSet<long>();
             var fullyClaimedEdges = new HashSet<long>();
             var halfCornerEdges   = new Dictionary<long, EdgeEndpoint>();
 
@@ -383,7 +384,7 @@ namespace LevelEditor
                 }
             }
 
-            // Pass 3 — Walls (after corners, so claim sets are complete).
+            // Pass 3 — Cardinal walls (after corners, so claim sets are complete).
             foreach (var (x, z, cell) in map.EnumerateFilled())
             {
                 if (cell.type != TileType.Square || cell.tier != 0) continue;
@@ -399,7 +400,7 @@ namespace LevelEditor
             return result;
         }
 
-        // Checks claim sets and emits the appropriate wall kind for the given edge.
+        // Checks claim sets and emits the appropriate wall kind for the given cardinal edge.
         private static void EmitWall(
             CellMap map, SolveResult result,
             HashSet<long> fullyClaimedEdges, Dictionary<long, EdgeEndpoint> halfCornerEdges,
@@ -447,7 +448,7 @@ namespace LevelEditor
             return cornerAtLocalPlusX ? WallKind.HalfL : WallKind.HalfR;
         }
 
-        // Emits a WallPlacement at the edge midpoint with the given kind.
+        // Emits a WallPlacement at the cardinal edge midpoint with the given kind.
         // Used for Straight, HalfL, and HalfR — all use the same world position.
         private static void EmitWallAtMidpoint(
             SolveResult result, int x, int z, Vector3 center, CellEdge edge, WallKind kind)

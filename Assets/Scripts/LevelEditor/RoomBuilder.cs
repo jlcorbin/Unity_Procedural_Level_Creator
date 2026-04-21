@@ -41,19 +41,20 @@ namespace LevelEditor
     /// Turns a <see cref="SolveResult"/> from <see cref="EdgeSolver"/> into actual
     /// scene geometry under a single root GameObject.
     ///
-    /// <para><b>Current scope (Phase 3 / Pass 1):</b>
+    /// <para><b>Current scope (Phase 3):</b>
     /// <list type="bullet">
     /// <item>Rectangle shape only.</item>
+    /// <item>Square tile type only; all others are skipped.</item>
     /// <item>Tier 0 cells only.</item>
-    /// <item>One inspector-assigned prefab per category (floor, wall, corner) — no
-    ///       catalogue-based variant selection.</item>
+    /// <item>One inspector-assigned prefab per category (floor, wall, corner,
+    ///       halfWallL, halfWallR) — no catalogue-based selection.</item>
     /// </list>
     /// </para>
     ///
     /// <para><b>Deferred work:</b>
     /// <list type="bullet">
-    /// <item>Catalogue-based prefab selection (per-tile-type prefab pools), replacing halfWall slots.</item>
-    /// <item>Per-tile-type variant selection (triangle floors, angle/concave/convex walls).</item>
+    /// <item>Custom shapes (Diamond, Circle) and triangle/angle-wall tile support.</item>
+    /// <item>Catalogue-based prefab selection (per-tile-type prefab pools).</item>
     /// <item>Tier stacking (tiers 1 and 2).</item>
     /// <item>RoomPiece bounds stamping.</item>
     /// <item>ExitPoint placement (door workflow).</item>
@@ -75,7 +76,7 @@ namespace LevelEditor
         // ── Prefabs ───────────────────────────────────────────────────────────
 
         [Header("Prefabs")]
-        [SerializeField, Tooltip("Prefab used for every floor cell.")]
+        [SerializeField, Tooltip("Prefab used for every Square floor cell.")]
         private GameObject floorPrefab;
 
         [SerializeField, Tooltip("Prefab used for every straight wall segment.")]
@@ -126,33 +127,19 @@ namespace LevelEditor
         /// </summary>
         public void Build()
         {
-            // Guard: floor, wall, and corner prefabs must all be assigned.
-            bool floorMissing  = floorPrefab  == null;
-            bool wallMissing   = wallPrefab   == null;
-            bool cornerMissing = cornerPrefab == null;
-
-            if (floorMissing || wallMissing || cornerMissing)
+            // Guard: all three core prefabs required.
+            if (floorPrefab == null || wallPrefab == null || cornerPrefab == null)
             {
-                string missing = string.Join(", ",
-                    floorMissing  ? "floorPrefab"  : null,
-                    wallMissing   ? "wallPrefab"   : null,
-                    cornerMissing ? "cornerPrefab" : null);
-                Debug.LogError($"[RoomBuilder] Build aborted — missing prefabs: {missing}");
+                Debug.LogError("[RoomBuilder] Build aborted — floorPrefab, wallPrefab, and cornerPrefab are all required.");
                 return;
             }
 
-            // Warn once if Half mode is selected but one or both half-wall slots are empty.
-            if (cornerArmLength == CornerArmLength.Half)
+            // Guard: Half mode requires both half-wall prefabs.
+            if (cornerArmLength == CornerArmLength.Half &&
+                (halfWallLPrefab == null || halfWallRPrefab == null))
             {
-                bool lMissing = halfWallLPrefab == null;
-                bool rMissing = halfWallRPrefab == null;
-                if (lMissing || rMissing)
-                {
-                    string missing = string.Join(", ",
-                        lMissing ? "halfWallLPrefab" : null,
-                        rMissing ? "halfWallRPrefab" : null);
-                    Debug.LogWarning($"[RoomBuilder] Half mode: {missing} not assigned — those half-walls will be skipped.");
-                }
+                Debug.LogError("[RoomBuilder] Build aborted — halfWallLPrefab and halfWallRPrefab are required when cornerArmLength is Half.");
+                return;
             }
 
             DestroyRoot();
@@ -184,12 +171,13 @@ namespace LevelEditor
             Vector3 floorShift = FloorPivotShift(floorPivot);
 
             // ── Floors ────────────────────────────────────────────────────────
-            // Floor shift is applied in world space — Square floors are always at
-            // identity rotation at tier 0, so rotating the shift is unnecessary.
+            // Pivot shift applied in world space (Square floors at identity rotation, tier 0).
             for (int i = 0; i < result.floors.Count; i++)
             {
                 FloorPlacement floor = result.floors[i];
-                GameObject     go    = InstantiatePiece(floorPrefab, floorsGroup);
+                if (floor.tileType != TileType.Square) continue;
+
+                GameObject go = InstantiatePiece(floorPrefab, floorsGroup);
                 go.name                    = $"Floor_{floor.gridCoord.x}_{floor.gridCoord.y}";
                 go.transform.localPosition = floor.worldPosition + floorShift;
                 go.transform.localRotation = floor.rotation;
@@ -287,12 +275,10 @@ namespace LevelEditor
         {
             float half = CellMap.CellSize * 0.5f; // 2f
 
-            // HalfL prefabs have mirror pivot authoring vs. HalfR and straight walls:
-            // pivot sits at the +X end with mesh extending -X. They always need
-            // the EndX-equivalent -2 shift regardless of the user's wallPivot setting.
-            if (kind == WallKind.HalfL)
-                return new Vector3(-half, 0f, 0f);
+            // HalfL: mirror pivot authoring, always EndX-equivalent (-2 on local X).
+            if (kind == WallKind.HalfL) return new Vector3(-half, 0f, 0f);
 
+            // Straight/HalfR: use user's wallPivot setting.
             switch (pivot)
             {
                 case WallPivotPosition.StartX: return new Vector3( half, 0f, 0f);

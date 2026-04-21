@@ -803,7 +803,8 @@ Three files in Assets/Scripts/LevelEditor/ form the Phase 1 foundation:
                   old FloorStep). ToAscii() for debug dumps.
   ShapeStamp.cs — Static utility that stamps pre-populated CellMaps for common
                   geometric shapes. Floor cells only — no wall, corner, or
-                  prefab logic.
+                  prefab logic. Contains Rectangle(), Diamond(), and Circle()
+                  methods; Diamond/Circle are scaffolding for future work.
 
 ### ShapeStamp methods
 
@@ -861,11 +862,12 @@ No prefab references, no catalogue reads, no scene access.
 
 ### Types defined in EdgeSolver.cs (namespace LevelEditor)
 
-  WallKind enum: Straight / HalfL / HalfR (emitted), Angle/Concave/Convex (deferred)
+  WallKind enum: Straight / HalfL / HalfR / Angle (emitted), Concave/Convex (deferred)
     HalfL = half-wall whose mesh extends to the LEFT of its pivot (local -X side)
     HalfR = half-wall whose mesh extends to the RIGHT of its pivot (local +X side)
     Both HalfL and HalfR are placed at the normal edge-midpoint position (no offset).
     The _L/_R prefab itself handles the visual shift via its mesh authoring.
+    Angle = diagonal hypotenuse wall for Triangle tiles; placed at cell center.
   CornerKind enum: Outward (emitted), Inward/Diagonal (deferred)
   CornerArmLength enum: Full / Half / Column
     Full   — corner arms are 4 units; fully replaces the two adjacent walls
@@ -886,19 +888,23 @@ No prefab references, no catalogue reads, no scene access.
   EdgeSolver.Solve(CellMap map, CornerArmLength cornerArms = CornerArmLength.Full) → SolveResult
   Never null. Null or empty map returns empty lists + 1 warning. Does not throw.
 
+### Supported tile types
+  Square only. All other tile types warn once per Solve call and are skipped.
+
 ### Passes (corners run before walls)
   Pass 1 — Floors: one FloorPlacement per filled Square cell (tier 0..N).
-    Non-Square tile types → warn once per type per Solve call, skip cell.
+    tileType preserved in FloorPlacement. Non-Square cells warn and are skipped.
   Pass 2 — Corners (runs FIRST): one CornerPlacement per outward 90° vertex junction.
-    For each filled Square/tier-0 cell, all four corner vertices are checked
-    (NE, NW, SE, SW). A vertex is emitted when both adjacent edge walls are
+    Square tier-0 cells only. For each filled cell, all four corner vertices are
+    checked (NE, NW, SE, SW). A vertex is emitted when both adjacent edge walls are
     present AND the diagonal cell across the vertex is empty.
     Deduplication via HashSet<long> of packed vertex grid positions.
     Claim sets populated during corner pass:
       fullyClaimedEdges — edges fully suppressed (Full mode)
       halfCornerEdges   — Dictionary<long, EdgeEndpoint> recording which endpoint
                           of the edge has a Half corner arm (Start = −X/−Z, End = +X/+Z)
-  Pass 3 — Walls (runs AFTER corners, consults claim sets):
+  Pass 3 — Cardinal walls (runs AFTER corners, consults claim sets):
+    Square tier-0 cells only.
     For each edge where HasWallOnEdge is true:
       - If fullyClaimedEdges contains the edge → emit nothing
       - If halfCornerEdges contains the edge → emit HalfL or HalfR at edge midpoint
@@ -947,11 +953,13 @@ No prefab references, no catalogue reads, no scene access.
   First corner: (-10, 0, -6) at grid (0,0)   ← SW outer corner
 
 ### Current scope
-  Square cells and tier 0 only. The following are deferred (not emitted):
-  - Triangle* and Quarter* tiles (warn + skip)
+  Square cells only, tier 0. The following are deferred (not emitted):
+  - All non-Square tile types (warn + skip)
   - Tier > 0 cells in wall and corner passes
   - Inward (concave) corners for L-shapes and notches
-  - Diagonal wall segments
+  - Custom shapes (Diamond/Circle) and their Triangle/Angle/Quarter tile support
+    (removed 2026-04-21 to focus on rectangle rooms; ShapeStamp still contains
+    Diamond() and Circle() as scaffolding for future work)
 
 ### LevelEditor/Tests/Dump EdgeSolver Results menu item
   Source: Assets/Scripts/LevelEditor/Editor/EdgeSolver_Test.cs
@@ -966,7 +974,8 @@ No prefab references, no catalogue reads, no scene access.
   Handles.Label calls so the file compiles cleanly for mobile builds.
 
   Inspector fields:
-    rectangleWidth / rectangleDepth — live-regenerates the preview on change
+    rectangleWidth  — cells wide (default 5)
+    rectangleDepth  — cells deep (default 3)
     drawFloors  — blue semi-transparent cubes (alpha 0.35)
     drawWalls   — yellow wire boxes, green +Z arrow pointing INWARD
     drawCorners — red wire pillars, orange +Z bisector arrow pointing INWARD
@@ -1002,32 +1011,31 @@ Pure geometry pass — no catalogue, no RoomPiece, no ExitPoints.
     rectangleDepth  — room depth in cells (min 1, default 3)
 
   [Header("Prefabs")]
-    floorPrefab      — prefab used for every floor cell
-    wallPrefab       — prefab used for every straight wall segment
-    cornerPrefab     — prefab used for every outward corner
-    halfWallLPrefab  — half-wall with mesh extending LEFT of pivot (_L variant).
-                       Used when a Half corner sits at the wall's right (local +X) end.
-    halfWallRPrefab  — half-wall with mesh extending RIGHT of pivot (_R variant).
-                       Used when a Half corner sits at the wall's left (local -X) end.
-                       Both slots: leave empty for Full/Column. Missing slots are skipped
-                       with a single warning per Build.
-    wallPivot        — WallPivotPosition enum: where the wall prefab's pivot sits along
-                       its local X axis. Center = no shift. StartX = pivot at -X end,
-                       mesh extends +X (default). EndX = pivot at +X end.
-    floorPivot       — FloorPivotPosition enum: where the floor prefab's pivot sits
-                       relative to its tile footprint. Center = no shift.
-                       PivotNW/NE/SW/SE = corner pivots (default PivotNW).
-    cornerArmLength  — CornerArmLength enum (Full / Half / Column, default Full).
-                       Full: corner arms 4 units, suppresses the 2 adjacent walls.
-                       Half: corner arms 2 units, emits HalfStart/HalfEnd filler walls.
-                       Column: decorative corner, adjacent walls remain full.
+    floorPrefab     — prefab used for every Square floor cell
+    wallPrefab      — prefab used for every straight wall segment
+    cornerPrefab    — prefab used for every outward corner
+    halfWallLPrefab — half-wall with mesh extending LEFT of pivot (_L variant).
+                      Used when a Half corner sits at the wall's right (local +X) end.
+    halfWallRPrefab — half-wall with mesh extending RIGHT of pivot (_R variant).
+                      Used when a Half corner sits at the wall's left (local -X) end.
+                      Both slots required in Half mode; Build aborts if either is null.
+    wallPivot       — WallPivotPosition enum: where the wall prefab's pivot sits along
+                      its local X axis. Center = no shift. StartX = pivot at -X end,
+                      mesh extends +X (default). EndX = pivot at +X end.
+    floorPivot      — FloorPivotPosition enum: where the floor prefab's pivot sits
+                      relative to its tile footprint. Center = no shift.
+                      PivotNW/NE/SW/SE = corner pivots (default PivotNW).
+    cornerArmLength — CornerArmLength enum (Full / Half / Column, default Full).
+                      Full: corner arms 4 units, suppresses the 2 adjacent walls.
+                      Half: corner arms 2 units, replaces adjacent walls with HalfL/HalfR.
+                      Column: decorative corner, adjacent walls remain full.
 
   wallPivot shift is rotated by each wall's quaternion (follows wall's local X).
   HalfL pivot is ALWAYS EndX-equivalent (−2 on local X), hardcoded in WallPivotShift —
     _L prefabs have mirror authoring vs. _R: pivot at +X end, mesh extends -X.
     This override fires regardless of the wallPivot inspector setting.
   HalfR and Straight walls use the wallPivot field normally.
-  Floor shift is applied in world space (Square floors always at identity rotation).
+  Floor pivot shift applied in world space (identity rotation at tier 0).
   Corners have no pivot shift.
 
   [Header("Output")]
@@ -1047,10 +1055,11 @@ Pure geometry pass — no catalogue, no RoomPiece, no ExitPoints.
 ### Public methods
 
   Build()
-    Guards: floorPrefab, wallPrefab, cornerPrefab must all be assigned — logs error and aborts.
-    Warns once (naming empty slots) if cornerArmLength == Half and halfWallLPrefab or halfWallRPrefab is null.
+    Guards: floorPrefab + wallPrefab + cornerPrefab required (aborts with error if any null).
+    Half mode additionally requires halfWallLPrefab + halfWallRPrefab (aborts with error if either null).
     Destroys previous root by name (Undo-safe in editor).
-    Builds CellMap via ShapeStamp.Rectangle(rectangleWidth, rectangleDepth).
+    Builds CellMap via switch on shape: Rectangle → ShapeStamp.Rectangle(rectangleWidth, rectangleDepth);
+    Diamond → ShapeStamp.Diamond(shapeSize); Circle → ShapeStamp.Circle(shapeSize).
     Runs EdgeSolver.Solve(map, cornerArmLength). Logs all solver warnings.
     Creates root at world origin (not at component's transform).
     Three child grouping GameObjects: Floors / Walls / Corners.
@@ -1066,7 +1075,7 @@ Pure geometry pass — no catalogue, no RoomPiece, no ExitPoints.
 
 ### RoomBuilderEditor
   [CustomEditor(typeof(RoomBuilder))]
-  Shows default inspector, then two buttons (height 30):
+  Draws default inspector, then two action buttons (height 30):
     [ Build ]  — calls Build(), wrapped in Undo.RecordObject + SetDirty
     [ Clear ]  — calls Clear(), wrapped in Undo.RecordObject + SetDirty
 
@@ -1077,7 +1086,7 @@ Pure geometry pass — no catalogue, no RoomPiece, no ExitPoints.
     selects it. Prefabs must be assigned by hand via the inspector.
 
 ### Current scope
-  Rectangle shape only / tier 0 only / one prefab per category.
+  Rectangle shape / tier 0 / one prefab per category (floor, wall, corner, halfWallL, halfWallR).
 
 ### Deferred work
   - Catalogue-based prefab selection (per-tile-type prefab pools), replacing halfWallLPrefab/halfWallRPrefab slots
