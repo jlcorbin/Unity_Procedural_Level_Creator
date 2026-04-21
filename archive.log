@@ -1,0 +1,51 @@
+LevelGen v1 Archive — Mon, Apr 20, 2026 11:15:14 PM
+Working dir: /e/Unity/Unity_Procedural_Level_Creator
+
+Creating archive folders...
+  Assets/Scripts/_Archive/{Data,Editor,Generation,Workshop} ready
+
+  ->   Assets/Scripts/_Archive/Data/LevelSequence.cs.bak
+  +    Assets/Scripts/Data/LevelSequence.cs.meta -> Assets/Scripts/_Archive/Data/LevelSequence.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Data/SeedData.cs.bak
+  +    Assets/Scripts/Data/SeedData.cs.meta -> Assets/Scripts/_Archive/Data/SeedData.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Editor/LevelGeneratorEditor.cs.bak
+  +    Assets/Scripts/Editor/LevelGeneratorEditor.cs.meta -> Assets/Scripts/_Archive/Editor/LevelGeneratorEditor.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Editor/LevelGenSetup.cs.bak
+  +    Assets/Scripts/Editor/LevelGenSetup.cs.meta -> Assets/Scripts/_Archive/Editor/LevelGenSetup.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Editor/PlaceholderPrefabFactory.cs.bak
+  +    Assets/Scripts/Editor/PlaceholderPrefabFactory.cs.meta -> Assets/Scripts/_Archive/Editor/PlaceholderPrefabFactory.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Editor/RoomWorkshopWindow.cs.bak
+  +    Assets/Scripts/Editor/RoomWorkshopWindow.cs.meta -> Assets/Scripts/_Archive/Editor/RoomWorkshopWindow.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Generation/BoundsChecker.cs.bak
+  +    Assets/Scripts/Generation/BoundsChecker.cs.meta -> Assets/Scripts/_Archive/Generation/BoundsChecker.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Generation/LevelGenerator.cs.bak
+  +    Assets/Scripts/Generation/LevelGenerator.cs.meta -> Assets/Scripts/_Archive/Generation/LevelGenerator.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Workshop/PropCatalogue.cs.bak
+  +    Assets/Scripts/Workshop/PropCatalogue.cs.meta -> Assets/Scripts/_Archive/Workshop/PropCatalogue.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Workshop/PropEntry.cs.bak
+  +    Assets/Scripts/Workshop/PropEntry.cs.meta -> Assets/Scripts/_Archive/Workshop/PropEntry.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Workshop/RoomBuilder.cs.bak
+  +    Assets/Scripts/Workshop/RoomBuilder.cs.meta -> Assets/Scripts/_Archive/Workshop/RoomBuilder.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Workshop/RoomContentGenerator.cs.bak
+  +    Assets/Scripts/Workshop/RoomContentGenerator.cs.meta -> Assets/Scripts/_Archive/Workshop/RoomContentGenerator.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Workshop/RoomDefinition.cs.bak
+  +    Assets/Scripts/Workshop/RoomDefinition.cs.meta -> Assets/Scripts/_Archive/Workshop/RoomDefinition.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Workshop/RoomPreset.cs.bak
+  +    Assets/Scripts/Workshop/RoomPreset.cs.meta -> Assets/Scripts/_Archive/Workshop/RoomPreset.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Workshop/RoomPresetLibrary.cs.bak
+  +    Assets/Scripts/Workshop/RoomPresetLibrary.cs.meta -> Assets/Scripts/_Archive/Workshop/RoomPresetLibrary.cs.bak.meta
+  ->   Assets/Scripts/_Archive/Workshop/SpawnPoint.cs.bak
+  +    Assets/Scripts/Workshop/SpawnPoint.cs.meta -> Assets/Scripts/_Archive/Workshop/SpawnPoint.cs.bak.meta
+
+Archived: 16
+Skipped:  0
+
+KEPT in place (referenced by new code):
+  Assets/Scripts/Generation/ExitPoint.cs
+  Assets/Scripts/Generation/RoomPiece.cs
+  Assets/Scripts/Workshop/PieceCatalogue.cs
+  Assets/Scripts/Editor/PieceCatalogueEditor.cs
+  Assets/Scripts/Editor/LVL_Configurator.cs
+  Assets/Scripts/Editor/WhiteboxPackFactory.cs
+
+Restore script created: unarchive.sh

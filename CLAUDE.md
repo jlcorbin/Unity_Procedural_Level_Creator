@@ -792,4 +792,156 @@ PivotMiddle folder = same, center pivot variants
 Complete rooms are ASSEMBLED from parts/comps
 NOT selected as single pre-built pieces
 
+## Cell-map room model — Phase 1 foundation
+
+Three files in Assets/Scripts/LevelEditor/ form the Phase 1 foundation:
+
+  TileType.cs   — TileType enum (Empty, Square, Triangle*, Quarter*, …) +
+                  TileTypeInfo static lookup (edge occupancy, rotation helpers)
+  CellMap.cs    — 2D grid of Cell structs; fixed-size, serializable.
+                  Cell = (TileType, tier, rotSteps). CellSize = 4 units (matches
+                  old FloorStep). ToAscii() for debug dumps.
+  ShapeStamp.cs — Static utility that stamps pre-populated CellMaps for common
+                  geometric shapes. Floor cells only — no wall, corner, or
+                  prefab logic.
+
+### ShapeStamp methods
+
+All methods return a new CellMap with cells at tier 0, rotSteps 0 unless noted.
+Invalid inputs are clamped (not thrown) and logged via Debug.LogWarning.
+
+  Rectangle(int width, int depth)
+    Fills every cell with TileType.Square. Grid is exactly width × depth.
+    Clamps: width and depth to min 1.
+
+  Diamond(int size)
+    size × size grid. Cells with Manhattan distance ≤ (size-1)/2 from center
+    become Square. Diagonal-edge border cells (off the cardinal axes, at exactly
+    the radius boundary) use Triangle tiles — hypotenuse faces outward:
+      NE-facing cut → TriangleSW   NW-facing cut → TriangleSE
+      SE-facing cut → TriangleNW   SW-facing cut → TriangleNE
+    Even sizes: float center at X.5 — no cells land exactly on the boundary,
+    so no Triangle tiles are produced (pure Square diamond).
+    Clamps: size to min 3.
+
+  Circle(int radius)
+    (2*radius+1) × (2*radius+1) grid, center at (radius, radius).
+    Boundary ring = cells within 0.5 cell-units of the exact radius:
+      dist ≤ radius-0.5 → Square (inner)
+      radius-0.5 < dist ≤ radius+0.5 → Quarter tile (off-axis) or Square (on-axis)
+      dist > radius+0.5 → Empty
+    Quarter tile orientation (curve faces center):
+      NE quadrant → QuarterSW   NW quadrant → QuarterSE
+      SE quadrant → QuarterNW   SW quadrant → QuarterNE
+    On-axis cells (dx==0 or dz==0) are always Square regardless of ring.
+    Hot path uses squared-distance comparison — no sqrt.
+    Clamps: radius to min 1.
+
+### LevelEditor/Tests menu item
+
+  LevelEditor → Tests → Dump Shape Stamps to Console
+  Source: Assets/Scripts/LevelEditor/Editor/ShapeStamp_Test.cs
+  Generates Rectangle(5,3), Diamond(5), and Circle(3), calls ToAscii() on each,
+  and logs them. Smoke test only — confirms all three methods run without
+  exception and produce plausible ASCII output.
+
 LVL_ modules only used as-is for STAIRS
+
+## Cell-map room model — Phase 2: EdgeSolver
+
+Source: Assets/Scripts/LevelEditor/EdgeSolver.cs
+
+### Purpose
+EdgeSolver walks a CellMap and produces three ordered placement lists that
+form the complete instruction set for the room builder. It is pure data:
+  in  = CellMap
+  out = SolveResult (floors, walls, corners, warnings)
+
+No prefab references, no catalogue reads, no scene access.
+
+### Types defined in EdgeSolver.cs (namespace LevelEditor)
+
+  WallKind enum: Straight (emitted), Angle/Concave/Convex (deferred)
+  CornerKind enum: Outward (emitted), Inward/Diagonal (deferred)
+
+  FloorPlacement struct: worldPosition, rotation, tileType, tier, gridCoord
+  WallPlacement struct:  worldPosition, rotation, kind, tier, edge, gridCoord
+  CornerPlacement struct: worldPosition, rotation, kind, tier, gridCoord
+
+  SolveResult class: List<FloorPlacement> floors, List<WallPlacement> walls,
+    List<CornerPlacement> corners, List<string> warnings.
+    Constructor initialises all lists. ToString() returns count summary:
+    "Solve: N floors, N walls, N corners, N warnings"
+
+### Public API
+  EdgeSolver.Solve(CellMap map) → SolveResult
+  Never null. Null or empty map returns empty lists + 1 warning. Does not throw.
+
+### Passes
+  Pass 1 — Floors: one FloorPlacement per filled Square cell (tier 0..N).
+    Non-Square tile types → warn once per type per Solve call, skip cell.
+  Pass 2 — Walls: one WallPlacement per filled Square/tier-0 cell edge where
+    HasWallOnEdge is true (exterior edge or step-down to lower tier).
+  Pass 3 — Corners: one CornerPlacement per outward 90° vertex junction.
+    For each filled Square/tier-0 cell, all four corner vertices are checked
+    (NE, NW, SE, SW). A vertex is emitted when both adjacent edge walls are
+    present AND the diagonal cell across the vertex is empty.
+    Deduplication via HashSet<long> of packed vertex grid positions so each
+    world vertex is emitted at most once, even when shared by multiple cells.
+
+### Wall rotation convention
+  Local +Z points INTO the room (toward the cell interior) from each edge:
+    North edge → Euler(0,180,0)   East edge  → Euler(0,270,0)
+    South edge → Euler(0,  0,0)   West edge  → Euler(0, 90,0)
+
+### Corner rotation convention
+  Local +Z bisects the two wall faces and points into the room interior:
+    NE outward corner (wallN+wallE) → Euler(0,225,0)   bisector=SW
+    NW outward corner (wallN+wallW) → Euler(0,135,0)   bisector=SE
+    SE outward corner (wallS+wallE) → Euler(0,315,0)   bisector=NW
+    SW outward corner (wallS+wallW) → Euler(0, 45,0)   bisector=NE
+
+### Expected output for Rectangle(5,3)
+  floors=15, walls=16, corners=4, warnings=0
+  First floor:  (-8, 0, -4) at grid (0,0)
+  First wall:   (-8, 0, -6) at grid (0,0) edge South
+  First corner: (-10, 0, -6) at grid (0,0)   ← SW outer corner
+
+### Current scope
+  Square cells and tier 0 only. The following are deferred (not emitted):
+  - Triangle* and Quarter* tiles (warn + skip)
+  - Tier > 0 cells in wall and corner passes
+  - Inward (concave) corners for L-shapes and notches
+  - Diagonal wall segments
+
+### LevelEditor/Tests/Dump EdgeSolver Results menu item
+  Source: Assets/Scripts/LevelEditor/Editor/EdgeSolver_Test.cs
+  Builds Rectangle(5,3), runs EdgeSolver.Solve, logs the ToString() summary,
+  any warnings, and the first entry from each placement list with coordinates.
+
+### EdgeSolverGizmoPreview — scene-view visualiser
+
+  Source: Assets/Scripts/LevelEditor/EdgeSolverGizmoPreview.cs
+  MonoBehaviour (NOT editor-only). Add to any scene object, then select it to
+  see the EdgeSolver output as Gizmos. Uses #if UNITY_EDITOR guards on all
+  Handles.Label calls so the file compiles cleanly for mobile builds.
+
+  Inspector fields:
+    rectangleWidth / rectangleDepth — live-regenerates the preview on change
+    drawFloors  — blue semi-transparent cubes (alpha 0.35)
+    drawWalls   — yellow wire boxes, green +Z arrow pointing INWARD
+    drawCorners — red wire pillars, orange +Z bisector arrow pointing INWARD
+    drawLabels  — Handles.Label grid-coord text above each placement
+    arrowLength — length of the directional arrows (default 1.5)
+
+  Visual output for Rectangle(5,3):
+    15 blue floor squares in a 5×3 grid
+    16 yellow wall boxes around the perimeter; green arrows all point TOWARD
+      the room interior (verify: south-face wall arrow → north, etc.)
+    4 red corner pillars at the four outer vertices; orange arrows point
+      diagonally toward the room center (SW corner → NE arrow, etc.)
+    White wire sphere at transform.position marks the solver-space origin
+
+  Create via: LevelEditor → Tests → Create Gizmo Preview in Scene
+    Creates "EdgeSolver Gizmo Preview" at world origin with the component
+    attached, or re-selects the existing one if already in the scene.
