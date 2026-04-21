@@ -861,8 +861,17 @@ No prefab references, no catalogue reads, no scene access.
 
 ### Types defined in EdgeSolver.cs (namespace LevelEditor)
 
-  WallKind enum: Straight (emitted), Angle/Concave/Convex (deferred)
+  WallKind enum: Straight / HalfL / HalfR (emitted), Angle/Concave/Convex (deferred)
+    HalfL = half-wall whose mesh extends to the LEFT of its pivot (local -X side)
+    HalfR = half-wall whose mesh extends to the RIGHT of its pivot (local +X side)
+    Both HalfL and HalfR are placed at the normal edge-midpoint position (no offset).
+    The _L/_R prefab itself handles the visual shift via its mesh authoring.
   CornerKind enum: Outward (emitted), Inward/Diagonal (deferred)
+  CornerArmLength enum: Full / Half / Column
+    Full   — corner arms are 4 units; fully replaces the two adjacent walls
+    Half   — corner arms are 2 units; adjacent walls replaced with HalfL or HalfR
+             variants. Requires map at least 3×3; smaller maps return empty + warning.
+    Column — no arms (decorative); adjacent walls remain full
 
   FloorPlacement struct: worldPosition, rotation, tileType, tier, gridCoord
   WallPlacement struct:  worldPosition, rotation, kind, tier, edge, gridCoord
@@ -874,20 +883,43 @@ No prefab references, no catalogue reads, no scene access.
     "Solve: N floors, N walls, N corners, N warnings"
 
 ### Public API
-  EdgeSolver.Solve(CellMap map) → SolveResult
+  EdgeSolver.Solve(CellMap map, CornerArmLength cornerArms = CornerArmLength.Full) → SolveResult
   Never null. Null or empty map returns empty lists + 1 warning. Does not throw.
 
-### Passes
+### Passes (corners run before walls)
   Pass 1 — Floors: one FloorPlacement per filled Square cell (tier 0..N).
     Non-Square tile types → warn once per type per Solve call, skip cell.
-  Pass 2 — Walls: one WallPlacement per filled Square/tier-0 cell edge where
-    HasWallOnEdge is true (exterior edge or step-down to lower tier).
-  Pass 3 — Corners: one CornerPlacement per outward 90° vertex junction.
+  Pass 2 — Corners (runs FIRST): one CornerPlacement per outward 90° vertex junction.
     For each filled Square/tier-0 cell, all four corner vertices are checked
     (NE, NW, SE, SW). A vertex is emitted when both adjacent edge walls are
     present AND the diagonal cell across the vertex is empty.
-    Deduplication via HashSet<long> of packed vertex grid positions so each
-    world vertex is emitted at most once, even when shared by multiple cells.
+    Deduplication via HashSet<long> of packed vertex grid positions.
+    Claim sets populated during corner pass:
+      fullyClaimedEdges — edges fully suppressed (Full mode)
+      halfCornerEdges   — Dictionary<long, EdgeEndpoint> recording which endpoint
+                          of the edge has a Half corner arm (Start = −X/−Z, End = +X/+Z)
+  Pass 3 — Walls (runs AFTER corners, consults claim sets):
+    For each edge where HasWallOnEdge is true:
+      - If fullyClaimedEdges contains the edge → emit nothing
+      - If halfCornerEdges contains the edge → emit HalfL or HalfR at edge midpoint
+      - Otherwise → emit a full Straight wall at edge midpoint
+
+### Half-wall L/R decision rule
+  HalfKindForCornerEnd(edge, cornerEnd) maps the corner endpoint to HalfL or HalfR:
+    Corner at wall's local +X end → HalfL (mesh extends -X, filling toward the corner)
+    Corner at wall's local -X end → HalfR (mesh extends +X, filling toward the corner)
+  Local +X orientation per edge (wall rotation → local +X direction):
+    South (0°)  → +X = east  = End   → End   → HalfL
+    East  (270°)→ +X = north = End   → End   → HalfL
+    North (180°)→ +X = west  = Start → Start → HalfL
+    West  (90°) → +X = south = Start → Start → HalfL
+
+### Claim endpoint per vertex
+  NE vertex (x,z): N edge End,   E edge End
+  NW vertex (x,z): N edge Start, W edge End
+  SE vertex (x,z): S edge End,   E edge Start
+  SW vertex (x,z): S edge Start, W edge Start
+  (Start = −X or −Z end of the edge; End = +X or +Z end)
 
 ### Wall rotation convention
   Local +Z points INTO the room (toward the cell interior) from each edge:
@@ -895,14 +927,21 @@ No prefab references, no catalogue reads, no scene access.
     South edge → Euler(0,  0,0)   West edge  → Euler(0, 90,0)
 
 ### Corner rotation convention
-  Local +Z bisects the two wall faces and points into the room interior:
-    NE outward corner (wallN+wallE) → Euler(0,225,0)   bisector=SW
-    NW outward corner (wallN+wallW) → Euler(0,135,0)   bisector=SE
-    SE outward corner (wallS+wallE) → Euler(0,315,0)   bisector=NW
-    SW outward corner (wallS+wallW) → Euler(0, 45,0)   bisector=NE
+  FDP convention: pivot at inner elbow of the L-shape. At rotation 0, arms extend
+  toward -X (west) and +Z (north). Rotating CW by N*90° re-aligns the arms to each
+  room corner's two walls, pointing INTO the room. Confirmed empirically 2025-04-20.
+
+  | Room corner | Arms point into room      | Rotation       |
+  |-------------|---------------------------|----------------|
+  | SE          | west (-X) and north (+Z)  | Euler(0,  0,0) |
+  | SW          | north (+Z) and east (+X)  | Euler(0, 90,0) |
+  | NW          | east (+X) and south (-Z)  | Euler(0,180,0) |
+  | NE          | south (-Z) and west (-X)  | Euler(0,270,0) |
 
 ### Expected output for Rectangle(5,3)
-  floors=15, walls=16, corners=4, warnings=0
+  CornerArmLength.Full   : floors=15, walls=8,  corners=4, warnings=0
+  CornerArmLength.Half   : floors=15, walls=16, corners=4, warnings=0  (8 Straight + 8 Half)
+  CornerArmLength.Column : floors=15, walls=16, corners=4, warnings=0  (all Straight)
   First floor:  (-8, 0, -4) at grid (0,0)
   First wall:   (-8, 0, -6) at grid (0,0) edge South
   First corner: (-10, 0, -6) at grid (0,0)   ← SW outer corner
@@ -945,3 +984,105 @@ No prefab references, no catalogue reads, no scene access.
   Create via: LevelEditor → Tests → Create Gizmo Preview in Scene
     Creates "EdgeSolver Gizmo Preview" at world origin with the component
     attached, or re-selects the existing one if already in the scene.
+
+## Cell-map room model — Phase 3: RoomBuilder
+
+Source: Assets/Scripts/LevelEditor/RoomBuilder.cs
+Custom editor: Assets/Scripts/LevelEditor/Editor/RoomBuilderEditor.cs
+Menu item added to: Assets/Scripts/LevelEditor/Editor/EdgeSolver_Test.cs
+
+### Purpose
+MonoBehaviour that turns a SolveResult from EdgeSolver into real scene geometry.
+Pure geometry pass — no catalogue, no RoomPiece, no ExitPoints.
+
+### Inspector fields
+
+  [Header("Shape")]
+    rectangleWidth  — room width in cells (min 1, default 5)
+    rectangleDepth  — room depth in cells (min 1, default 3)
+
+  [Header("Prefabs")]
+    floorPrefab      — prefab used for every floor cell
+    wallPrefab       — prefab used for every straight wall segment
+    cornerPrefab     — prefab used for every outward corner
+    halfWallLPrefab  — half-wall with mesh extending LEFT of pivot (_L variant).
+                       Used when a Half corner sits at the wall's right (local +X) end.
+    halfWallRPrefab  — half-wall with mesh extending RIGHT of pivot (_R variant).
+                       Used when a Half corner sits at the wall's left (local -X) end.
+                       Both slots: leave empty for Full/Column. Missing slots are skipped
+                       with a single warning per Build.
+    wallPivot        — WallPivotPosition enum: where the wall prefab's pivot sits along
+                       its local X axis. Center = no shift. StartX = pivot at -X end,
+                       mesh extends +X (default). EndX = pivot at +X end.
+    floorPivot       — FloorPivotPosition enum: where the floor prefab's pivot sits
+                       relative to its tile footprint. Center = no shift.
+                       PivotNW/NE/SW/SE = corner pivots (default PivotNW).
+    cornerArmLength  — CornerArmLength enum (Full / Half / Column, default Full).
+                       Full: corner arms 4 units, suppresses the 2 adjacent walls.
+                       Half: corner arms 2 units, emits HalfStart/HalfEnd filler walls.
+                       Column: decorative corner, adjacent walls remain full.
+
+  wallPivot shift is rotated by each wall's quaternion (follows wall's local X).
+  HalfL pivot is ALWAYS EndX-equivalent (−2 on local X), hardcoded in WallPivotShift —
+    _L prefabs have mirror authoring vs. _R: pivot at +X end, mesh extends -X.
+    This override fires regardless of the wallPivot inspector setting.
+  HalfR and Straight walls use the wallPivot field normally.
+  Floor shift is applied in world space (Square floors always at identity rotation).
+  Corners have no pivot shift.
+
+  [Header("Output")]
+    rootName — name of the root GameObject created by Build (default "MOD_Room")
+
+### Current working values (default prefab library)
+  wallPivot        = StartX   — Straight and HalfR: pivot at -X end, mesh extends +X
+  floorPivot       = PivotNW  — _E_ floors: pivot at NW corner, mesh extends +X and -Z
+  cornerArmLength  = Full     — default; adjust to match actual corner prefab arm length
+  HalfL override   = always EndX (−2 local X), hardcoded — not affected by wallPivot
+
+### Per-mode expected placement counts for Rectangle(5,3)
+  Full   : 15 floors,  8 walls (all Straight),       4 corners
+  Half   : 15 floors, 16 walls (8 Straight + 8 Half), 4 corners
+  Column : 15 floors, 16 walls (all Straight),        4 corners
+
+### Public methods
+
+  Build()
+    Guards: floorPrefab, wallPrefab, cornerPrefab must all be assigned — logs error and aborts.
+    Warns once (naming empty slots) if cornerArmLength == Half and halfWallLPrefab or halfWallRPrefab is null.
+    Destroys previous root by name (Undo-safe in editor).
+    Builds CellMap via ShapeStamp.Rectangle(rectangleWidth, rectangleDepth).
+    Runs EdgeSolver.Solve(map, cornerArmLength). Logs all solver warnings.
+    Creates root at world origin (not at component's transform).
+    Three child grouping GameObjects: Floors / Walls / Corners.
+    Instantiates each placement under its group via PrefabUtility.InstantiatePrefab
+    (editor) or plain Instantiate (runtime). Registers Undo for all created objects.
+    Wall naming: Straight → Wall_{x}_{z}_{edge}; Half → Wall_{x}_{z}_{edge}_{kind}.
+    Corner naming: Corner_{x}_{z}. Floor naming: Floor_{x}_{z}.
+    Logs summary: "[RoomBuilder] Built N floors, N walls, N corners under 'MOD_Room'."
+
+  Clear()
+    Finds root by name; destroys it (Undo-safe). Logs what was removed or that
+    nothing was found.
+
+### RoomBuilderEditor
+  [CustomEditor(typeof(RoomBuilder))]
+  Shows default inspector, then two buttons (height 30):
+    [ Build ]  — calls Build(), wrapped in Undo.RecordObject + SetDirty
+    [ Clear ]  — calls Clear(), wrapped in Undo.RecordObject + SetDirty
+
+### Menu item
+  LevelEditor → Tests → Create RoomBuilder in Scene
+    Looks for existing "RoomBuilder" GameObject; if found, selects and returns.
+    Otherwise creates an empty "RoomBuilder" at origin, adds RoomBuilder component,
+    selects it. Prefabs must be assigned by hand via the inspector.
+
+### Current scope
+  Rectangle shape only / tier 0 only / one prefab per category.
+
+### Deferred work
+  - Catalogue-based prefab selection (per-tile-type prefab pools), replacing halfWallLPrefab/halfWallRPrefab slots
+  - Per-tile-type variant selection (triangle floors, angle/concave/convex walls)
+  - Tier stacking (tiers 1 and 2)
+  - RoomPiece bounds stamping
+  - ExitPoint placement (door workflow)
+  - Inward (concave) corners for L-shapes and notches

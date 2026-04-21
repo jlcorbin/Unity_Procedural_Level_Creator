@@ -152,7 +152,7 @@ MonoBehaviour:
   rectangleDepth: 5
   drawFloors: 1
   drawWalls: 1
-  drawCorners: 1
+  drawCorners: 0
   drawLabels: 1
   arrowLength: 1.5
 --- !u!4 &142515070
@@ -679,6 +679,61 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1942326835
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1942326837}
+  - component: {fileID: 1942326836}
+  m_Layer: 0
+  m_Name: RoomBuilder
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1942326836
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942326835}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dace78ba22c3a324fad053dbc6548eb5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelEditor.RoomBuilder
+  rectangleWidth: 8
+  rectangleDepth: 12
+  floorPrefab: {fileID: 8762968433363181219, guid: 51bbaef1ac57fc541b7d1e2792d91579, type: 3}
+  wallPrefab: {fileID: 1010640020510975024, guid: 01ab48ac054fceb44949fb6d67f1c937, type: 3}
+  cornerPrefab: {fileID: 2199184876127154880, guid: d6594c60cd12dd44ba0cab66c12795af, type: 3}
+  halfWallLPrefab: {fileID: 6935021291033707324, guid: 939e2886a659cb447ab8e68064d98847, type: 3}
+  halfWallRPrefab: {fileID: 6935021291033707324, guid: 3fb9a25c69e8c8d42a62a04974427884, type: 3}
+  wallPivot: 1
+  floorPivot: 1
+  cornerArmLength: 1
+  rootName: MOD_Room
+--- !u!4 &1942326837
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942326835}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -690,3 +745,4 @@ SceneRoots:
   - {fileID: 1386323526}
   - {fileID: 1039169530}
   - {fileID: 142515070}
+  - {fileID: 1942326837}

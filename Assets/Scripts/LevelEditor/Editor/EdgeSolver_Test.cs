@@ -69,6 +69,30 @@ namespace LevelEditor
             Selection.activeGameObject = go;
             Debug.Log($"[EdgeSolver] Created '{PreviewName}' at world origin. Select it to view gizmos.");
         }
+
+        private const string RoomBuilderName = "RoomBuilder";
+
+        /// <summary>
+        /// Creates (or re-selects) a GameObject with a <see cref="RoomBuilder"/>
+        /// component in the active scene at world origin. Drag prefabs onto the
+        /// component's inspector fields then click Build.
+        /// </summary>
+        [MenuItem("LevelEditor/Tests/Create RoomBuilder in Scene")]
+        private static void CreateRoomBuilder()
+        {
+            GameObject existing = GameObject.Find(RoomBuilderName);
+            if (existing != null)
+            {
+                Selection.activeGameObject = existing;
+                Debug.Log($"[RoomBuilder] '{RoomBuilderName}' already exists — selected it.");
+                return;
+            }
+
+            var go = new GameObject(RoomBuilderName);
+            go.AddComponent<RoomBuilder>();
+            Selection.activeGameObject = go;
+            Debug.Log($"[RoomBuilder] Created '{RoomBuilderName}' at world origin. Assign prefabs in the inspector then click Build.");
+        }
     }
 }
 #endif

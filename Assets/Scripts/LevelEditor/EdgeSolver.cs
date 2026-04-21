@@ -6,15 +6,15 @@ namespace LevelEditor
 {
     /// <summary>
     /// How a wall edge is shaped.
-    /// Only <see cref="Straight"/> is emitted in the current pass.
-    /// The remaining values are reserved for future curved/diagonal walls.
     /// </summary>
     public enum WallKind
     {
-        Straight,  // standard wall along a cell edge
-        Angle,     // deferred
-        Concave,   // deferred
-        Convex,    // deferred
+        Straight,   // standard full-length wall at edge midpoint
+        HalfL,      // 2-unit half-wall; mesh extends LEFT of pivot (local -X side)
+        HalfR,      // 2-unit half-wall; mesh extends RIGHT of pivot (local +X side)
+        Angle,      // deferred
+        Concave,    // deferred
+        Convex,     // deferred
     }
 
     /// <summary>
@@ -26,6 +26,25 @@ namespace LevelEditor
         Outward,   // 90° corner facing away from the room interior
         Inward,    // deferred — concave junction in L-shapes
         Diagonal,  // deferred — where a diagonal meets a straight wall
+    }
+
+    /// <summary>
+    /// How much of each adjacent wall the corner prefab's arms cover.
+    /// Controls whether the straight-wall pass emits walls on edges that
+    /// meet at a corner vertex, and whether half-walls are substituted.
+    /// </summary>
+    public enum CornerArmLength
+    {
+        /// <summary>Corner arms are 4 units each — corner fully replaces the two adjacent walls.</summary>
+        Full,
+        /// <summary>
+        /// Corner arms are 2 units each — the two adjacent walls are replaced with
+        /// HalfL or HalfR variants whose meshes fill the corner-adjacent half of each edge.
+        /// Requires rooms at least 3 cells on each axis.
+        /// </summary>
+        Half,
+        /// <summary>Corner has no arms (decorative/column style) — both adjacent walls remain full.</summary>
+        Column,
     }
 
     /// <summary>
@@ -63,7 +82,7 @@ namespace LevelEditor
         /// (i.e. back toward the cell centre from the edge).
         /// </summary>
         public Quaternion rotation;
-        /// <summary>Wall shape kind. Straight for this pass.</summary>
+        /// <summary>Wall shape kind (Straight, HalfL, HalfR, or deferred types).</summary>
         public WallKind   kind;
         /// <summary>Vertical tier index.</summary>
         public int        tier;
@@ -141,7 +160,7 @@ namespace LevelEditor
     /// <list type="bullet">
     /// <item><see cref="TileType.Square"/> cells only — non-Square tiles are warned and skipped.</item>
     /// <item>Tier 0 only — higher tiers are skipped in wall and corner passes.</item>
-    /// <item>Straight walls on cardinal cell edges.</item>
+    /// <item>Straight walls on cardinal cell edges, with optional corner-arm absorption.</item>
     /// <item>Outward 90-degree corners at convex junctions only.</item>
     /// </list>
     /// Triangles, quarter-circles, tier stacking, and inward (concave) corners are deferred.
@@ -149,6 +168,11 @@ namespace LevelEditor
     /// </summary>
     public static class EdgeSolver
     {
+        // Which end of a cell edge a corner vertex sits at.
+        // Start = lower grid coordinate end (−X end for N/S edges; −Z end for E/W edges).
+        // End   = higher grid coordinate end (+X or +Z).
+        private enum EdgeEndpoint { Start, End }
+
         private const float HalfCell = CellMap.CellSize * 0.5f; // 2f
 
         // Precomputed wall rotations: local +Z faces INTO the room from each edge.
@@ -157,15 +181,21 @@ namespace LevelEditor
         private static readonly Quaternion WallRotSouth = Quaternion.Euler(0f,   0f, 0f);
         private static readonly Quaternion WallRotWest  = Quaternion.Euler(0f,  90f, 0f);
 
-        // Corner rotations: local +Z bisects the two wall faces and points INTO the room.
-        // NE outward corner: walls on N and E → room interior is SW → bisector = 225°
-        private static readonly Quaternion CornerRotNE = Quaternion.Euler(0f, 225f, 0f);
-        // NW outward corner: walls on N and W → room interior is SE → bisector = 135°
-        private static readonly Quaternion CornerRotNW = Quaternion.Euler(0f, 135f, 0f);
-        // SE outward corner: walls on S and E → room interior is NW → bisector = 315°
-        private static readonly Quaternion CornerRotSE = Quaternion.Euler(0f, 315f, 0f);
-        // SW outward corner: walls on S and W → room interior is NE → bisector = 45°
-        private static readonly Quaternion CornerRotSW = Quaternion.Euler(0f,  45f, 0f);
+        // Corner rotations — FDP convention:
+        //   At rotation 0, the L-shape arms extend toward -X (west) and +Z (north).
+        //   Rotating CW by N*90° re-aligns the arms to each room corner's two walls,
+        //   pointing INTO the room. Rotations are cardinal-axis aligned (multiples of 90°).
+        //
+        // Verification table (confirmed empirically 2025-04-20):
+        //   Room corner | Arms point into room     | Rotation
+        //   SE          | west (-X) and north (+Z) |   0°
+        //   SW          | north (+Z) and east (+X) |  90°
+        //   NW          | east (+X) and south (-Z) | 180°
+        //   NE          | south (-Z) and west (-X) | 270°
+        private static readonly Quaternion CornerRotSE = Quaternion.Euler(0f,   0f, 0f);
+        private static readonly Quaternion CornerRotSW = Quaternion.Euler(0f,  90f, 0f);
+        private static readonly Quaternion CornerRotNW = Quaternion.Euler(0f, 180f, 0f);
+        private static readonly Quaternion CornerRotNE = Quaternion.Euler(0f, 270f, 0f);
 
         /// <summary>
         /// Solves the given <paramref name="map"/> and returns a <see cref="SolveResult"/>
@@ -175,7 +205,13 @@ namespace LevelEditor
         /// empty placement lists and a single warning string. Does not throw.</para>
         /// </summary>
         /// <param name="map">Source cell map. May be null.</param>
-        public static SolveResult Solve(CellMap map)
+        /// <param name="cornerArms">
+        /// How far the corner prefab's arms extend along adjacent edges.
+        /// Full suppresses adjacent walls entirely; Half replaces them with HalfL/HalfR
+        /// variants at the normal edge-midpoint position; Column leaves walls unchanged.
+        /// Half mode requires the map to be at least 3 cells on each axis.
+        /// </param>
+        public static SolveResult Solve(CellMap map, CornerArmLength cornerArms = CornerArmLength.Full)
         {
             var result = new SolveResult();
 
@@ -188,6 +224,14 @@ namespace LevelEditor
             if (map.FilledCount() == 0)
             {
                 result.warnings.Add("map has no filled cells");
+                return result;
+            }
+
+            if (cornerArms == CornerArmLength.Half && (map.Width < 3 || map.Depth < 3))
+            {
+                result.warnings.Add(
+                    $"Half corner mode requires rooms at least 3 cells on each axis. " +
+                    $"Map is {map.Width}x{map.Depth}. No placements emitted.");
                 return result;
             }
 
@@ -219,17 +263,18 @@ namespace LevelEditor
                 });
             }
 
-            // Passes 2 & 3 — Walls and Corners
-            // Only Square cells at tier 0 are processed here.
+            // Pass 2 — Corners (runs BEFORE the wall pass so claim sets are populated first).
             //
             // Corner deduplication: each grid vertex (vx, vz) is a shared point between
-            // up to four cells. A vertex is identified by an integer key derived from the
-            // column/row of the cell whose NE corner lands on that vertex. If the owning
-            // cell is outside the grid (common for boundary corners of convex shapes), the
-            // vertex is instead emitted by the first qualifying cell that checks it.
-            // A HashSet ensures each vertex is emitted at most once regardless of which
-            // cell triggers it.
-            var emittedVertices = new HashSet<long>();
+            // up to four cells. A HashSet ensures each vertex is emitted at most once.
+            //
+            // Claim sets:
+            //   fullyClaimedEdges — edges whose entire length is covered (Full mode).
+            //   halfCornerEdges   — edges where one endpoint has a Half corner, storing
+            //                       which endpoint so the wall pass can pick HalfL vs HalfR.
+            var emittedVertices  = new HashSet<long>();
+            var fullyClaimedEdges = new HashSet<long>();
+            var halfCornerEdges   = new Dictionary<long, EdgeEndpoint>();
 
             foreach (var (x, z, cell) in map.EnumerateFilled())
             {
@@ -237,81 +282,183 @@ namespace LevelEditor
 
                 Vector3 center = map.CellCenterWorld(x, z);
 
-                // -- Pass 2: Walls --
-                EmitWallIfNeeded(map, result, x, z, center, CellEdge.North);
-                EmitWallIfNeeded(map, result, x, z, center, CellEdge.East);
-                EmitWallIfNeeded(map, result, x, z, center, CellEdge.South);
-                EmitWallIfNeeded(map, result, x, z, center, CellEdge.West);
-
-                // -- Pass 3: Corners --
-                // Each filled cell checks the four vertices at its four corners.
-                // For each vertex: if the two adjacent cell-edges both have walls AND the
-                // diagonal cell across the vertex is empty, this is an outward corner.
-                // A vertex HashSet key prevents any vertex from being emitted twice.
-
-                // NE vertex: walls on N and E, diagonal at (x+1, z+1)
+                // NE vertex: walls on N and E, diagonal at (x+1, z+1).
+                // Corner arm sits at +X end of N edge (End) and +Z end of E edge (End).
                 if (map.HasWallOnEdge(x, z, CellEdge.North) &&
                     map.HasWallOnEdge(x, z, CellEdge.East)  &&
                     map.GetCell(x + 1, z + 1).IsEmpty)
                 {
-                    // Key: the vertex is at the NE of cell (x,z), i.e. grid-vertex (x+1, z+1).
-                    TryEmitCorner(result, emittedVertices,
+                    bool emitted = TryEmitCorner(result, emittedVertices,
                         x + 1, z + 1,
                         center + new Vector3( HalfCell, 0f,  HalfCell),
                         CornerRotNE, x, z);
+                    if (emitted)
+                    {
+                        if (cornerArms == CornerArmLength.Full)
+                        {
+                            fullyClaimedEdges.Add(EdgeKey(x, z, CellEdge.North));
+                            fullyClaimedEdges.Add(EdgeKey(x, z, CellEdge.East));
+                        }
+                        else if (cornerArms == CornerArmLength.Half)
+                        {
+                            halfCornerEdges[EdgeKey(x, z, CellEdge.North)] = EdgeEndpoint.End;
+                            halfCornerEdges[EdgeKey(x, z, CellEdge.East)]  = EdgeEndpoint.End;
+                        }
+                    }
                 }
 
-                // NW vertex: walls on N and W, diagonal at (x-1, z+1)
+                // NW vertex: walls on N and W, diagonal at (x-1, z+1).
+                // Corner arm sits at -X end of N edge (Start) and +Z end of W edge (End).
                 if (map.HasWallOnEdge(x, z, CellEdge.North) &&
                     map.HasWallOnEdge(x, z, CellEdge.West)  &&
                     map.GetCell(x - 1, z + 1).IsEmpty)
                 {
-                    TryEmitCorner(result, emittedVertices,
+                    bool emitted = TryEmitCorner(result, emittedVertices,
                         x, z + 1,
                         center + new Vector3(-HalfCell, 0f,  HalfCell),
                         CornerRotNW, x, z);
+                    if (emitted)
+                    {
+                        if (cornerArms == CornerArmLength.Full)
+                        {
+                            fullyClaimedEdges.Add(EdgeKey(x, z, CellEdge.North));
+                            fullyClaimedEdges.Add(EdgeKey(x, z, CellEdge.West));
+                        }
+                        else if (cornerArms == CornerArmLength.Half)
+                        {
+                            halfCornerEdges[EdgeKey(x, z, CellEdge.North)] = EdgeEndpoint.Start;
+                            halfCornerEdges[EdgeKey(x, z, CellEdge.West)]  = EdgeEndpoint.End;
+                        }
+                    }
                 }
 
-                // SE vertex: walls on S and E, diagonal at (x+1, z-1)
+                // SE vertex: walls on S and E, diagonal at (x+1, z-1).
+                // Corner arm sits at +X end of S edge (End) and -Z end of E edge (Start).
                 if (map.HasWallOnEdge(x, z, CellEdge.South) &&
-                    map.HasWallOnEdge(x, z, CellEdge.East)   &&
+                    map.HasWallOnEdge(x, z, CellEdge.East)  &&
                     map.GetCell(x + 1, z - 1).IsEmpty)
                 {
-                    TryEmitCorner(result, emittedVertices,
+                    bool emitted = TryEmitCorner(result, emittedVertices,
                         x + 1, z,
                         center + new Vector3( HalfCell, 0f, -HalfCell),
                         CornerRotSE, x, z);
+                    if (emitted)
+                    {
+                        if (cornerArms == CornerArmLength.Full)
+                        {
+                            fullyClaimedEdges.Add(EdgeKey(x, z, CellEdge.South));
+                            fullyClaimedEdges.Add(EdgeKey(x, z, CellEdge.East));
+                        }
+                        else if (cornerArms == CornerArmLength.Half)
+                        {
+                            halfCornerEdges[EdgeKey(x, z, CellEdge.South)] = EdgeEndpoint.End;
+                            halfCornerEdges[EdgeKey(x, z, CellEdge.East)]  = EdgeEndpoint.Start;
+                        }
+                    }
                 }
 
-                // SW vertex: walls on S and W, diagonal at (x-1, z-1)
+                // SW vertex: walls on S and W, diagonal at (x-1, z-1).
+                // Corner arm sits at -X end of S edge (Start) and -Z end of W edge (Start).
                 if (map.HasWallOnEdge(x, z, CellEdge.South) &&
-                    map.HasWallOnEdge(x, z, CellEdge.West)   &&
+                    map.HasWallOnEdge(x, z, CellEdge.West)  &&
                     map.GetCell(x - 1, z - 1).IsEmpty)
                 {
-                    TryEmitCorner(result, emittedVertices,
+                    bool emitted = TryEmitCorner(result, emittedVertices,
                         x, z,
                         center + new Vector3(-HalfCell, 0f, -HalfCell),
                         CornerRotSW, x, z);
+                    if (emitted)
+                    {
+                        if (cornerArms == CornerArmLength.Full)
+                        {
+                            fullyClaimedEdges.Add(EdgeKey(x, z, CellEdge.South));
+                            fullyClaimedEdges.Add(EdgeKey(x, z, CellEdge.West));
+                        }
+                        else if (cornerArms == CornerArmLength.Half)
+                        {
+                            halfCornerEdges[EdgeKey(x, z, CellEdge.South)] = EdgeEndpoint.Start;
+                            halfCornerEdges[EdgeKey(x, z, CellEdge.West)]  = EdgeEndpoint.Start;
+                        }
+                    }
                 }
+            }
+
+            // Pass 3 — Walls (after corners, so claim sets are complete).
+            foreach (var (x, z, cell) in map.EnumerateFilled())
+            {
+                if (cell.type != TileType.Square || cell.tier != 0) continue;
+
+                Vector3 center = map.CellCenterWorld(x, z);
+
+                EmitWall(map, result, fullyClaimedEdges, halfCornerEdges, x, z, center, CellEdge.North);
+                EmitWall(map, result, fullyClaimedEdges, halfCornerEdges, x, z, center, CellEdge.East);
+                EmitWall(map, result, fullyClaimedEdges, halfCornerEdges, x, z, center, CellEdge.South);
+                EmitWall(map, result, fullyClaimedEdges, halfCornerEdges, x, z, center, CellEdge.West);
             }
 
             return result;
         }
 
-        // Emits a WallPlacement for the given edge of cell (x,z) if HasWallOnEdge returns true.
-        private static void EmitWallIfNeeded(
+        // Checks claim sets and emits the appropriate wall kind for the given edge.
+        private static void EmitWall(
             CellMap map, SolveResult result,
+            HashSet<long> fullyClaimedEdges, Dictionary<long, EdgeEndpoint> halfCornerEdges,
             int x, int z, Vector3 center, CellEdge edge)
         {
             if (!map.HasWallOnEdge(x, z, edge)) return;
 
+            long key = EdgeKey(x, z, edge);
+
+            if (fullyClaimedEdges.Contains(key)) return;
+
+            if (halfCornerEdges.TryGetValue(key, out EdgeEndpoint cornerEnd))
+            {
+                WallKind kind = HalfKindForCornerEnd(edge, cornerEnd);
+                EmitWallAtMidpoint(result, x, z, center, edge, kind);
+                return;
+            }
+
+            EmitWallAtMidpoint(result, x, z, center, edge, WallKind.Straight);
+        }
+
+        // Determines HalfL or HalfR based on which end of the edge the corner sits at.
+        //
+        // Each wall's local +X direction relative to edge Start/End:
+        //   South edge (rotation   0°): local +X = east  = End   → End   → local +X → HalfL
+        //   East  edge (rotation 270°): local +X = north = End   → End   → local +X → HalfL
+        //   North edge (rotation 180°): local +X = west  = Start → Start → local +X → HalfL
+        //   West  edge (rotation  90°): local +X = south = Start → Start → local +X → HalfL
+        //
+        // Corner at wall's local +X end → HalfL (mesh extends -X, filling gap toward +X).
+        // Corner at wall's local -X end → HalfR (mesh extends +X, filling gap toward -X).
+        private static WallKind HalfKindForCornerEnd(CellEdge edge, EdgeEndpoint cornerEnd)
+        {
+            bool cornerAtLocalPlusX;
+            switch (edge)
+            {
+                case CellEdge.South:
+                case CellEdge.East:
+                    cornerAtLocalPlusX = (cornerEnd == EdgeEndpoint.End);
+                    break;
+                default: // North, West
+                    cornerAtLocalPlusX = (cornerEnd == EdgeEndpoint.Start);
+                    break;
+            }
+            return cornerAtLocalPlusX ? WallKind.HalfL : WallKind.HalfR;
+        }
+
+        // Emits a WallPlacement at the edge midpoint with the given kind.
+        // Used for Straight, HalfL, and HalfR — all use the same world position.
+        private static void EmitWallAtMidpoint(
+            SolveResult result, int x, int z, Vector3 center, CellEdge edge, WallKind kind)
+        {
             Vector3    offset;
             Quaternion rotation;
 
             switch (edge)
             {
                 case CellEdge.North:
-                    offset   = new Vector3(0f,      0f,  HalfCell);
+                    offset   = new Vector3(0f,       0f,  HalfCell);
                     rotation = WallRotNorth;
                     break;
                 case CellEdge.East:
@@ -319,7 +466,7 @@ namespace LevelEditor
                     rotation = WallRotEast;
                     break;
                 case CellEdge.South:
-                    offset   = new Vector3(0f,      0f, -HalfCell);
+                    offset   = new Vector3(0f,       0f, -HalfCell);
                     rotation = WallRotSouth;
                     break;
                 default: // West
@@ -332,7 +479,7 @@ namespace LevelEditor
             {
                 worldPosition = center + offset,
                 rotation      = rotation,
-                kind          = WallKind.Straight,
+                kind          = kind,
                 tier          = 0,
                 edge          = edge,
                 gridCoord     = new Vector2Int(x, z),
@@ -340,14 +487,15 @@ namespace LevelEditor
         }
 
         // Adds a CornerPlacement for vertex (vx,vz) if not already emitted.
-        private static void TryEmitCorner(
+        // Returns true if newly emitted, false if duplicate.
+        private static bool TryEmitCorner(
             SolveResult result, HashSet<long> emitted,
             int vx, int vz,
             Vector3 worldPos, Quaternion rotation,
             int anchorX, int anchorZ)
         {
             long key = VertexKey(vx, vz);
-            if (!emitted.Add(key)) return; // already emitted by another cell
+            if (!emitted.Add(key)) return false;
 
             result.corners.Add(new CornerPlacement
             {
@@ -357,9 +505,15 @@ namespace LevelEditor
                 tier          = 0,
                 gridCoord     = new Vector2Int(anchorX, anchorZ),
             });
+            return true;
         }
 
         // Packs two ints into a long for use as a HashSet key.
         private static long VertexKey(int vx, int vz) => ((long)vx << 32) | (uint)vz;
+
+        // Packs (cellX, cellZ, edge) into a long for use as an edge identity key.
+        // 20 bits for x (bits 24–43), 20 bits for z (bits 4–23), 4 bits for edge (bits 0–3).
+        private static long EdgeKey(int x, int z, CellEdge edge) =>
+            ((long)(x & 0xFFFFF) << 24) | ((long)(z & 0xFFFFF) << 4) | (long)edge;
     }
 }
