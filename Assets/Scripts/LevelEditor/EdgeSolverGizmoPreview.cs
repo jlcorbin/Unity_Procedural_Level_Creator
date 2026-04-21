@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -18,11 +20,26 @@ namespace LevelEditor
     /// </summary>
     public class EdgeSolverGizmoPreview : MonoBehaviour
     {
+        /// <summary>One doorway mark to apply to the preview cell map before solving.</summary>
+        [Serializable]
+        public struct DoorwayEntry
+        {
+            [Tooltip("Grid X coordinate of the cell whose edge is a doorway.")]
+            public int x;
+            [Tooltip("Grid Z coordinate of the cell whose edge is a doorway.")]
+            public int z;
+            [Tooltip("Which edge of the cell is open (no wall emitted).")]
+            public CellEdge edge;
+        }
+
         [SerializeField, Tooltip("Width of the test rectangle in cells (ShapeStamp.Rectangle first argument).")]
         private int rectangleWidth = 5;
 
         [SerializeField, Tooltip("Depth of the test rectangle in cells (ShapeStamp.Rectangle second argument).")]
         private int rectangleDepth = 3;
+
+        [SerializeField, Tooltip("Cell edges to mark as doorways before solving. Marked edges suppress wall emission and are drawn in magenta.")]
+        public List<DoorwayEntry> doorways = new List<DoorwayEntry>();
 
         [SerializeField, Tooltip("Draw semi-transparent blue cubes for each floor placement.")]
         private bool drawFloors = true;
@@ -32,6 +49,9 @@ namespace LevelEditor
 
         [SerializeField, Tooltip("Draw red wire-pillar corners with an orange +Z bisector arrow.")]
         private bool drawCorners = true;
+
+        [SerializeField, Tooltip("Draw magenta lines along each marked doorway edge.")]
+        private bool drawDoorways = true;
 
         [SerializeField, Tooltip("Draw grid-coord labels above each placement (editor-only, uses Handles.Label).")]
         private bool drawLabels = true;
@@ -46,12 +66,17 @@ namespace LevelEditor
             Gizmos.color = Color.white;
             Gizmos.DrawWireSphere(transform.position, 0.3f);
 
-            CellMap     map    = ShapeStamp.Rectangle(rectangleWidth, rectangleDepth);
+            CellMap map = ShapeStamp.Rectangle(rectangleWidth, rectangleDepth);
+
+            for (int i = 0; i < doorways.Count; i++)
+                map.AddDoorway(doorways[i].x, doorways[i].z, doorways[i].edge);
+
             SolveResult result = EdgeSolver.Solve(map);
 
             DrawFloors(result);
             DrawWalls(result);
             DrawCorners(result);
+            DrawDoorways(map);
         }
 
         // ------------------------------------------------------------------ floors
@@ -143,6 +168,45 @@ namespace LevelEditor
                         worldPos + Vector3.up * (CellMap.TierHeight + 0.3f),
                         $"corner ({corner.gridCoord.x},{corner.gridCoord.y})");
 #endif
+            }
+        }
+
+        // ------------------------------------------------------------------ doorways
+
+        private void DrawDoorways(CellMap map)
+        {
+            if (!drawDoorways) return;
+
+            float half = CellMap.CellSize * 0.5f;
+
+            Gizmos.color = Color.magenta;
+            foreach (var (x, z, edge) in map.AllDoorways())
+            {
+                Vector3 center = ToWorld(map.CellCenterWorld(x, z));
+
+                Vector3 a, b;
+                switch (edge)
+                {
+                    case CellEdge.North:
+                        a = center + new Vector3(-half, 0f,  half);
+                        b = center + new Vector3( half, 0f,  half);
+                        break;
+                    case CellEdge.South:
+                        a = center + new Vector3(-half, 0f, -half);
+                        b = center + new Vector3( half, 0f, -half);
+                        break;
+                    case CellEdge.East:
+                        a = center + new Vector3(half, 0f, -half);
+                        b = center + new Vector3(half, 0f,  half);
+                        break;
+                    default: // West
+                        a = center + new Vector3(-half, 0f, -half);
+                        b = center + new Vector3(-half, 0f,  half);
+                        break;
+                }
+
+                Gizmos.DrawLine(a, b);
+                Gizmos.DrawSphere((a + b) * 0.5f, 0.15f);
             }
         }
 

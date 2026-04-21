@@ -102,6 +102,12 @@ namespace LevelEditor
         public int Width => _width;
         public int Depth => _depth;
 
+        // Doorway set — not serialized; rebuilt at runtime by whoever owns the map.
+        // Null-safe via the Doorways property (lazy init after Unity deserialization).
+        private HashSet<(int x, int z, CellEdge edge)> _doorways;
+        private HashSet<(int x, int z, CellEdge edge)> Doorways =>
+            _doorways ??= new HashSet<(int, int, CellEdge)>();
+
         /// <summary>
         /// Creates an empty grid of the given size. All cells start as Empty.
         /// Width and depth must be at least 1.
@@ -155,12 +161,36 @@ namespace LevelEditor
         /// <summary>Clears a single cell back to Empty.</summary>
         public void Clear(int x, int z) => SetCell(x, z, Cell.Empty);
 
-        /// <summary>Clears every cell in the grid.</summary>
+        /// <summary>Clears every cell in the grid and removes all doorway marks.</summary>
         public void ClearAll()
         {
             for (int i = 0; i < _cells.Length; i++)
                 _cells[i] = Cell.Empty;
+            ClearDoorways();
         }
+
+        // ── Doorway authoring ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Marks the given cell edge as a doorway opening. Any wall that would
+        /// normally be emitted on this edge is suppressed by <see cref="HasWallOnEdge"/>.
+        /// Out-of-bounds coordinates are silently ignored.
+        /// </summary>
+        public void AddDoorway(int x, int z, CellEdge edge)
+        {
+            if (!InBounds(x, z)) return;
+            Doorways.Add((x, z, edge));
+        }
+
+        /// <summary>Returns true if the given cell edge has been marked as a doorway.</summary>
+        public bool HasDoorway(int x, int z, CellEdge edge) =>
+            Doorways.Contains((x, z, edge));
+
+        /// <summary>Removes all doorway marks from the map.</summary>
+        public void ClearDoorways() => Doorways.Clear();
+
+        /// <summary>Enumerates every doorway mark currently on the map.</summary>
+        public IEnumerable<(int x, int z, CellEdge edge)> AllDoorways() => Doorways;
 
         /// <summary>
         /// Returns the cell adjacent to (x,z) across the given edge.
@@ -189,6 +219,8 @@ namespace LevelEditor
         /// </summary>
         public bool HasWallOnEdge(int x, int z, CellEdge edge)
         {
+            if (HasDoorway(x, z, edge)) return false;
+
             Cell here = GetCell(x, z);
             if (here.IsEmpty) return false;
             if (!TileTypeInfo.OccupiesEdgeRotated(here.type, here.rotSteps, edge))
@@ -240,6 +272,19 @@ namespace LevelEditor
                 Cell c = _cells[x + z * _width];
                 if (!c.IsEmpty) yield return (x, z, c);
             }
+        }
+
+        /// <summary>
+        /// Returns the highest tier value present across all filled cells.
+        /// Returns 0 if the map is empty or all cells are at tier 0.
+        /// </summary>
+        public int GetMaxTierUsed()
+        {
+            int max = 0;
+            for (int i = 0; i < _cells.Length; i++)
+                if (!_cells[i].IsEmpty && _cells[i].tier > max)
+                    max = _cells[i].tier;
+            return max;
         }
 
         /// <summary>

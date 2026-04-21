@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using LevelGen;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -109,6 +111,13 @@ namespace LevelEditor
             "Column: corner is decorative, both adjacent walls remain full.")]
         private CornerArmLength cornerArmLength = CornerArmLength.Full;
 
+        // ── Doors ─────────────────────────────────────────────────────────────
+
+        [Header("Doors")]
+        [Range(0, 4)]
+        [SerializeField, Tooltip("Auto-places doorway openings in order: N, S, E, W. Middle cell of each wall. 0 = solid room.")]
+        public int doorCount = 0;
+
         // ── Output ────────────────────────────────────────────────────────────
 
         [Header("Output")]
@@ -144,7 +153,8 @@ namespace LevelEditor
 
             DestroyRoot();
 
-            CellMap     map    = ShapeStamp.Rectangle(rectangleWidth, rectangleDepth);
+            CellMap map = ShapeStamp.Rectangle(rectangleWidth, rectangleDepth);
+            ApplyAutoDoorways(map);
             SolveResult result = EdgeSolver.Solve(map, cornerArmLength);
 
             for (int i = 0; i < result.warnings.Count; i++)
@@ -224,6 +234,8 @@ namespace LevelEditor
             Debug.Log($"[RoomBuilder] Built {result.floors.Count} floors, " +
                       $"{result.walls.Count} walls, {result.corners.Count} corners " +
                       $"under '{rootName}'.");
+
+            PopulateRoomPiece(map);
         }
 
         /// <summary>
@@ -271,6 +283,52 @@ namespace LevelEditor
             return Instantiate(prefab, parent);
         }
 
+        // Direction order for auto-doorways. requiresWidth=true means N/S (x varies, width must be >=3);
+        // false means E/W (z varies, depth must be >=3).
+        private struct DoorSlot
+        {
+            public CellEdge edge;
+            public bool     requiresWidth;
+        }
+
+        private static readonly DoorSlot[] s_DoorOrder = new DoorSlot[]
+        {
+            new DoorSlot { edge = CellEdge.North, requiresWidth = true  },
+            new DoorSlot { edge = CellEdge.South, requiresWidth = true  },
+            new DoorSlot { edge = CellEdge.East,  requiresWidth = false },
+            new DoorSlot { edge = CellEdge.West,  requiresWidth = false },
+        };
+
+        private void ApplyAutoDoorways(CellMap map)
+        {
+            int w = map.Width;
+            int d = map.Depth;
+
+            for (int i = 0; i < Mathf.Min(doorCount, 4); i++)
+            {
+                DoorSlot slot = s_DoorOrder[i];
+                CellEdge edge = slot.edge;
+
+                if (slot.requiresWidth && w < 3)
+                {
+                    Debug.LogWarning($"[RoomBuilder] doorCount {i + 1}: room too small in {edge} direction (width={w} < 3), skipping door.");
+                    continue;
+                }
+                if (!slot.requiresWidth && d < 3)
+                {
+                    Debug.LogWarning($"[RoomBuilder] doorCount {i + 1}: room too small in {edge} direction (depth={d} < 3), skipping door.");
+                    continue;
+                }
+
+                int x = edge == CellEdge.East  ? w - 1 :
+                        edge == CellEdge.West  ? 0      : w / 2;
+                int z = edge == CellEdge.North ? d - 1 :
+                        edge == CellEdge.South ? 0      : d / 2;
+
+                map.AddDoorway(x, z, edge);
+            }
+        }
+
         private static Vector3 WallPivotShift(WallPivotPosition pivot, WallKind kind)
         {
             float half = CellMap.CellSize * 0.5f; // 2f
@@ -298,6 +356,107 @@ namespace LevelEditor
                 case FloorPivotPosition.PivotSE: return new Vector3(-half, 0f,  half);
                 default:                         return Vector3.zero; // Center
             }
+        }
+
+        // ── RoomPiece + ExitPoint stamping ────────────────────────────────────
+
+        // Per-edge data for ExitPoint placement.
+        // Indexed by (int)CellEdge: North=0, East=1, South=2, West=3.
+        private struct ExitEdgeData
+        {
+            public Vector3             posOffset;   // from cell center in solver world-space
+            public Vector3             outwardDir;  // unit vector away from room interior
+            public ExitPoint.Direction exitDir;
+        }
+
+        private static readonly ExitEdgeData[] s_ExitEdgeData = new ExitEdgeData[]
+        {
+            // North (CellEdge 0): +Z face
+            new ExitEdgeData { posOffset = new Vector3(0f,                      0f, CellMap.CellSize * 0.5f),  outwardDir = Vector3.forward, exitDir = ExitPoint.Direction.North },
+            // East  (CellEdge 1): +X face
+            new ExitEdgeData { posOffset = new Vector3(CellMap.CellSize * 0.5f, 0f, 0f),                       outwardDir = Vector3.right,   exitDir = ExitPoint.Direction.East  },
+            // South (CellEdge 2): -Z face
+            new ExitEdgeData { posOffset = new Vector3(0f,                      0f, -CellMap.CellSize * 0.5f), outwardDir = Vector3.back,    exitDir = ExitPoint.Direction.South },
+            // West  (CellEdge 3): -X face
+            new ExitEdgeData { posOffset = new Vector3(-CellMap.CellSize * 0.5f, 0f, 0f),                      outwardDir = Vector3.left,    exitDir = ExitPoint.Direction.West  },
+        };
+
+        /// <summary>
+        /// Stamps a <see cref="RoomPiece"/> component (with bounds) on this GameObject and
+        /// spawns one <see cref="ExitPoint"/> child per doorway recorded on <paramref name="map"/>.
+        /// Idempotent — stale V2_ExitPoint_ children from a prior build are destroyed first.
+        /// </summary>
+        public void PopulateRoomPiece(CellMap map)
+        {
+            // ── RoomPiece bounds ─────────────────────────────────────────────
+            var piece = GetComponent<RoomPiece>() ?? gameObject.AddComponent<RoomPiece>();
+
+            float width   = map.Width  * CellMap.CellSize;
+            float depth   = map.Depth  * CellMap.CellSize;
+            int   maxTier = map.GetMaxTierUsed();
+            float height  = (maxTier + 1) * CellMap.TierHeight;
+
+            // boundsSize = half-extents (RoomPiece convention: GetWorldBounds uses size*2).
+            // Room geometry is XZ-centered at world origin, so boundsOffset.x/z = 0.
+            // Y is floor-anchored: center sits at height/2 above Y=0.
+            piece.boundsSize   = new Vector3(width * 0.5f, height * 0.5f, depth * 0.5f);
+            piece.boundsOffset = new Vector3(0f, height * 0.5f, 0f);
+
+            Debug.Log($"[RoomPiece] size=({width}, {height}, {depth}), center=(0, {height * 0.5f}, 0), maxTier={maxTier}");
+
+            // ── Remove stale ExitPoints ──────────────────────────────────────
+            var stale = new List<GameObject>();
+            foreach (Transform child in transform)
+                if (child.name.StartsWith("V2_ExitPoint_"))
+                    stale.Add(child.gameObject);
+
+            foreach (var go in stale)
+            {
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                    DestroyImmediate(go);
+                else
+#endif
+                    Destroy(go);
+            }
+
+            // ── Spawn ExitPoints ─────────────────────────────────────────────
+            foreach (var (x, z, edge) in map.AllDoorways())
+            {
+                ExitEdgeData info = s_ExitEdgeData[(int)edge];
+
+                Vector3 localPos = map.CellCenterWorld(x, z) + info.posOffset;
+
+                var child = new GameObject($"V2_ExitPoint_{edge}_{x}_{z}");
+                child.transform.SetParent(transform, false);
+                child.transform.localPosition = localPos;
+                child.transform.localRotation = Quaternion.LookRotation(info.outwardDir, Vector3.up);
+
+                var ep = child.AddComponent<ExitPoint>();
+                ep.exitDirection = info.exitDir;
+
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                    Undo.RegisterCreatedObjectUndo(child, "Build Room");
+#endif
+            }
+
+            piece.RefreshExits();
+        }
+
+        // ── Prefab save ───────────────────────────────────────────────────────
+
+        [ContextMenu("Save as RoomPiece Prefab")]
+        private void SaveAsRoomPiecePrefab()
+        {
+#if UNITY_EDITOR
+            string defaultName = $"V2_RoomPiece_{rectangleWidth}x{rectangleDepth}.prefab";
+            string path = EditorUtility.SaveFilePanelInProject(
+                "Save RoomPiece Prefab", defaultName, "prefab", "Choose prefab save location");
+            if (string.IsNullOrEmpty(path)) return;
+            PrefabUtility.SaveAsPrefabAsset(gameObject, path);
+            Debug.Log($"[RoomBuilder] Saved prefab to {path}");
+#endif
         }
     }
 }
