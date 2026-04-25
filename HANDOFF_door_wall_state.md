@@ -178,10 +178,12 @@ The final state at the end of April 20 had deleted the original small-preset fix
 
 ## V2 Level Generator note
 
-Phases A + B complete (2026-04-25). `LevelGenSettings`,
-`V2LevelGeneratorWindow`, `V2PrefabSource`, and `V2LevelGenerator`
-in place at `Assets/Scripts/LevelGen/V2/`. Generate places Starter →
-spine rooms → Boss with hall connections and backtracking. Branches,
-theme-aware selection, scene save, and manifest output deferred to
-Phase C/D. Separately, `RoomPiece.OnDrawGizmos` now uses `Gizmos.matrix`
-so the bounds wireframe rotates with the GameObject.
+Phases A + B + C (branches) complete (2026-04-25). `LevelGenSettings`,
+`V2LevelGeneratorWindow`, `V2PrefabSource`, and `V2LevelGenerator` in
+place at `Assets/Scripts/LevelGen/V2/`. Generate places Starter → spine
+rooms → Boss → branches. Spine and branches share one combined
+S+M+L+Special pool (weighted random); branch failures skip with a
+warning instead of aborting. Theme-aware selection, scene save, and
+manifest output deferred to Phase D+. Separately,
+`RoomPiece.OnDrawGizmos` now uses `Gizmos.matrix` so the bounds
+wireframe rotates with the GameObject.

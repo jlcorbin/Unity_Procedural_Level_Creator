@@ -710,8 +710,8 @@ PieceCatalogue.cs:
 Do not touch LVL_Configurator (it is complete).
 
 Pending work (priority order):
-  1. V2 Level Generator Phase C: branches off the spine + branch hall
-     budget consumption + theme-aware prefab selection
+  1. V2 Level Generator Phase C wrap-up: theme-aware prefab selection
+     (branches landed; theme bridge still deferred)
   2. V2 Level Generator Phase D: scene save (.unity) + manifest text output
   3. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
   4. Implement Dress step (PropCatalogue / SpawnPoints)
@@ -746,6 +746,19 @@ V2 Level Generator (2026-04-25):
     `boundsOffset` is now interpreted as a local-space offset; safe for
     all current prefabs because every authored offset is `(0, Y, 0)` and
     Y is invariant under Y rotation.
+  - Phase C (branches) complete: spine and branches now both draw from a
+    single combined Small+Medium+Large+Special pool, weighted by remaining
+    counts. SpineLength = max(0, S+M+L+Special − branchSlotCount); Starter
+    and Boss are not in the pool. After spine+Boss placement, branches
+    attach to random rooms with unused exits (including earlier branches),
+    using the user's `branchHallSize` for connector halls. Branch failures
+    degrade gracefully — the slot is skipped with a console warning, no
+    abort. EditorWindow validation rule changed from
+    `branches > SpineLength-1` to `branches > pool` (the old rule became
+    self-contradicting under the new SpineLength formula). Connect-with-
+    hall code extracted into a shared `TryPlaceConnectedRoom` helper used
+    by spine, Boss, and branches. Theme-aware prefab selection still
+    deferred (Phase D+).
   - New: Assets/Scripts/LevelGen/V2/LevelGenSettings.cs
          Assets/Scripts/LevelGen/V2/Editor/V2LevelGeneratorWindow.cs
          Assets/Scripts/LevelGen/V2/Editor/V2PrefabSource.cs
