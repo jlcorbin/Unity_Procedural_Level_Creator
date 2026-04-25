@@ -52,6 +52,13 @@ namespace LevelGen.V2.Editor
                 _settings.outputFolder = PickFolderRelativeToAssets(_settings.outputFolder);
             EditorGUILayout.EndHorizontal();
 
+            _settings.saveToSceneFile = EditorGUILayout.Toggle(
+                new GUIContent("Save to scene file",
+                    "When ON, generation writes a .unity scene file to " +
+                    "outputFolder/sceneName.unity. When OFF, the generated " +
+                    "level is dropped into the currently open scene."),
+                _settings.saveToSceneFile);
+
             EditorGUILayout.Space(8);
         }
 
@@ -192,12 +199,18 @@ namespace LevelGen.V2.Editor
             if (_settings.catalogue == null)
                 errors.Add("Catalogue is required.");
 
-            if (string.IsNullOrWhiteSpace(_settings.sceneName))
-                errors.Add("Scene name is required.");
+            // sceneName / outputFolder only required when actually saving a .unity file.
+            // When saveToSceneFile is off, the manifest still writes (with a default
+            // folder + seed-based filename fallback handled by the generator).
+            if (_settings.saveToSceneFile)
+            {
+                if (string.IsNullOrWhiteSpace(_settings.sceneName))
+                    errors.Add("Scene name is required when 'Save to scene file' is on.");
 
-            if (string.IsNullOrEmpty(_settings.outputFolder)
-                || !_settings.outputFolder.StartsWith("Assets/"))
-                errors.Add("Output folder must start with \"Assets/\".");
+                if (string.IsNullOrEmpty(_settings.outputFolder)
+                    || !_settings.outputFolder.StartsWith("Assets/"))
+                    errors.Add("Output folder must start with \"Assets/\" when 'Save to scene file' is on.");
+            }
 
             if (_settings.TotalRoomCount < 2)
                 errors.Add("Total room count must be at least 2 (Starter + Boss minimum).");
@@ -233,7 +246,9 @@ namespace LevelGen.V2.Editor
                           $"rooms={result.RoomsPlaced}, halls={result.HallsPlaced}, " +
                           $"branches={result.BranchesPlaced}/{result.BranchesRequested}, " +
                           $"backtracks={result.BacktrackCount}, " +
-                          $"{result.ElapsedSeconds:F2}s");
+                          $"{result.ElapsedSeconds:F2}s\n" +
+                          $"  Manifest: {result.ManifestPath}\n" +
+                          $"  Scene:    {result.ScenePath ?? "(left in active scene)"}");
 
                 if (result.BranchesPlaced < result.BranchesRequested)
                 {
@@ -241,8 +256,16 @@ namespace LevelGen.V2.Editor
                                      $"branches placed — see warnings above.");
                 }
 
-                if (result.Root != null)
+                if (!string.IsNullOrEmpty(result.ScenePath))
+                {
+                    var sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(result.ScenePath);
+                    if (sceneAsset != null)
+                        EditorGUIUtility.PingObject(sceneAsset);
+                }
+                else if (result.Root != null)
+                {
                     Selection.activeGameObject = result.Root;
+                }
             }
             else
             {

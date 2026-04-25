@@ -1,14 +1,30 @@
 #if UNITY_EDITOR
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace LevelGen.V2
 {
-    /// <summary>
-    /// Result returned by <see cref="V2LevelGenerator.Generate"/>.
-    /// </summary>
+    /// <summary>One row in the manifest's Placements table.</summary>
+    [Serializable]
+    public class PlacementRecord
+    {
+        public int     order;              // 1-based, assigned at end of generation
+        public string  kind;               // "Starter" | "Spine" | "Boss" | "Branch" | "Hall:Spine" | "Hall:Branch"
+        public string  prefabName;         // file name without extension
+        public string  roomCategory;       // "Starter"/"Boss"/"Small"/"Medium"/"Large"/"Special"/"-" for halls
+        public Vector3 worldPosition;
+        public float   yRotation;          // 0 / 90 / 180 / 270
+        public float?  hallSlackOptional;  // hall-only: gap-vs-length (always 0 in V2; null for non-halls)
+    }
+
+    /// <summary>Result returned by <see cref="V2LevelGenerator.Generate"/>.</summary>
     public class GenerationResult
     {
         public bool        Success;
@@ -21,29 +37,28 @@ namespace LevelGen.V2
         public int         BranchesRequested;
         public int         BacktrackCount;
         public double      ElapsedSeconds;
+        public string      ScenePath;       // set when scene was saved successfully
+        public string      ManifestPath;    // always set (manifest always written)
         public List<string> Log = new List<string>();
     }
 
     /// <summary>
-    /// Phase B + C generator. Places Starter at world origin, walks down a linear
-    /// spine of rooms (Small/Medium/Large/Special drawn from a single combined pool
-    /// weighted by remaining counts) connected by spine-size halls, ends with the
-    /// Boss room. After Boss, attaches branches (same combined pool, branch-size
+    /// Phase B + C + D generator. Places Starter at world origin, walks down a
+    /// linear spine of rooms (Small/Medium/Large/Special drawn from a single
+    /// combined pool weighted by remaining counts) connected by spine-size halls,
+    /// ends with the Boss. After Boss, attaches branches (same pool, branch-size
     /// halls) onto random rooms with unused exits — including earlier branches.
-    /// Spine backtracks up to <see cref="MaxBacktracks"/>; branches degrade
-    /// gracefully (skip the slot with a warning) instead of aborting.
+    /// Phase D adds optional .unity scene save and a sibling manifest text file.
     /// </summary>
     public static class V2LevelGenerator
     {
-        const int   MaxBacktracks    = 50;
-        const float CollisionEpsilon = 0.01f;
+        const int    MaxBacktracks       = 50;
+        const float  CollisionEpsilon    = 0.01f;
+        const string DefaultOutputFolder = "Assets/Levels/Generated";
 
         // ── State types ───────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Combined remaining-count pool for Small + Medium + Large + Special.
-        /// Both spine slots and branch slots draw from this single bucket.
-        /// </summary>
+        /// <summary>Combined remaining-count pool for the four pool categories.</summary>
         class CategoryPool
         {
             public int small;
@@ -126,7 +141,7 @@ namespace LevelGen.V2
             public ExitPoint     hallEntry;
             public ExitPoint     hallExit;
             public ExitPoint     roomEntry;
-            public RoomCategory? category;   // null for Boss; spine slots use one of the four
+            public RoomCategory? category;
             public int           slotIndex;
         }
 
@@ -136,6 +151,12 @@ namespace LevelGen.V2
         {
             var result = new GenerationResult { BranchesRequested = settings.branchSlotCount };
             var sw     = System.Diagnostics.Stopwatch.StartNew();
+
+            bool       useNewScene = false;
+            Scene      newScene    = default;
+            GameObject root        = null;
+            string     scenePath   = null;
+            var        placements  = new List<PlacementRecord>();
 
             try
             {
@@ -156,7 +177,6 @@ namespace LevelGen.V2
                 var spineHallPool  = V2PrefabSource.GetHallPrefabs(settings.spineHallSize);
                 var branchHallPool = V2PrefabSource.GetHallPrefabs(settings.branchHallSize);
 
-                // Validate pools — fail fast with a clear error pointing at the empty folder
                 if (starterPool.Count == 0)
                     return Fail(result, sw, "No prefabs in Assets/Prefabs/Rooms/Starter/ (folder missing or no RoomPiece prefabs).");
                 if (bossPool.Count == 0)
@@ -175,9 +195,8 @@ namespace LevelGen.V2
                     return Fail(result, sw, $"branchSlotCount={settings.branchSlotCount} but Assets/Prefabs/Halls/{settings.branchHallSize}/ has no RoomPiece prefabs.");
 
                 if (!string.IsNullOrEmpty(settings.themeName))
-                    result.Log.Add($"Theme: {settings.themeName} (Phase C uses raw folder lookup; theme override deferred to Phase D+)");
+                    result.Log.Add($"Theme: {settings.themeName} (theme-aware selection deferred — pulling from raw folders)");
 
-                // Category → prefab list lookup
                 var roomPools = new Dictionary<RoomCategory, List<GameObject>>
                 {
                     { RoomCategory.Small,   smallPool   },
@@ -186,8 +205,54 @@ namespace LevelGen.V2
                     { RoomCategory.Special, specialPool },
                 };
 
-                // Create root
-                var root = new GameObject("GeneratedLevel");
+                // Resolve output folder (with fallback when not under Assets/)
+                string outputFolder = !string.IsNullOrEmpty(settings.outputFolder)
+                                      && settings.outputFolder.StartsWith("Assets/")
+                    ? settings.outputFolder.TrimEnd('/')
+                    : DefaultOutputFolder;
+
+                // ── Optional: prepare new scene to receive the generated level ────
+                if (settings.saveToSceneFile)
+                {
+                    string sceneFilename = !string.IsNullOrEmpty(settings.sceneName)
+                        ? settings.sceneName
+                        : $"Dungeon_{resolvedSeed}";
+                    scenePath = $"{outputFolder}/{sceneFilename}.unity";
+
+                    bool proceed = true;
+
+                    if (File.Exists(scenePath))
+                    {
+                        proceed = EditorUtility.DisplayDialog(
+                            "Scene already exists",
+                            $"{scenePath}\n\nOverwrite this scene?",
+                            "Overwrite", "Cancel");
+                        if (!proceed)
+                            result.Log.Add($"User cancelled overwrite of {scenePath}; falling back to active-scene mode.");
+                    }
+
+                    if (proceed && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                    {
+                        proceed = false;
+                        result.Log.Add("User cancelled save of modified scenes; falling back to active-scene mode.");
+                    }
+
+                    if (proceed)
+                    {
+                        EnsureAssetFolder(outputFolder);
+                        newScene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Additive);
+                        EditorSceneManager.SetActiveScene(newScene);
+                        useNewScene = true;
+                    }
+                    else
+                    {
+                        // Cancellation falls back: scene is NOT saved, root stays in active scene
+                        scenePath = null;
+                    }
+                }
+
+                // ── Create root (in newScene if useNewScene else active scene) ────
+                root = new GameObject("GeneratedLevel");
                 Undo.RegisterCreatedObjectUndo(root, "Generate V2 Level");
                 result.Root = root;
 
@@ -201,6 +266,7 @@ namespace LevelGen.V2
 
                 var placed = new List<RoomPiece> { starterPiece };
                 result.RoomsPlaced = 1;
+                placements.Add(MakeRoomRecord(starterPiece, "Starter", "Starter"));
 
                 // ── Spine + Boss loop with backtracking ────────────────────────
                 var pool = new CategoryPool
@@ -234,13 +300,18 @@ namespace LevelGen.V2
                         slots.Add(frame);
                         result.RoomsPlaced++;
                         result.HallsPlaced++;
+                        // Hall first, then room
+                        placements.Add(MakeHallRecord(frame.hallPiece, "Hall:Spine"));
+                        placements.Add(MakeRoomRecord(frame.roomPiece,
+                            isBoss ? "Boss" : "Spine",
+                            isBoss ? "Boss" : frame.category.ToString()));
                         continue;
                     }
 
                     // ── Failure: backtrack ──────────────────────────────────
                     if (slots.Count == 0)
                     {
-                        DestroyRootAndClearSelection(root);
+                        CleanupOnFailure(root, useNewScene, newScene);
                         result.Root = null;
                         return Fail(result, sw,
                             $"Slot 0 placement failed — no candidate fits any exit on Starter (or no halls in {settings.spineHallSize} pool match).");
@@ -249,7 +320,7 @@ namespace LevelGen.V2
                     backtracks++;
                     if (backtracks > MaxBacktracks)
                     {
-                        DestroyRootAndClearSelection(root);
+                        CleanupOnFailure(root, useNewScene, newScene);
                         result.Root = null;
                         return Fail(result, sw,
                             $"Backtrack cap ({MaxBacktracks}) exceeded at slot {slotIdx}.");
@@ -258,7 +329,6 @@ namespace LevelGen.V2
                     var popped = slots[slots.Count - 1];
                     slots.RemoveAt(slots.Count - 1);
 
-                    // Restore popped category to pool and mark it tried at its slot
                     if (popped.category.HasValue)
                     {
                         pool.Increment(popped.category.Value);
@@ -272,18 +342,22 @@ namespace LevelGen.V2
 
                     placed.Remove(popped.roomPiece);
                     placed.Remove(popped.hallPiece);
-                    Object.DestroyImmediate(popped.roomPiece.gameObject);
-                    Object.DestroyImmediate(popped.hallPiece.gameObject);
+                    UnityEngine.Object.DestroyImmediate(popped.roomPiece.gameObject);
+                    UnityEngine.Object.DestroyImmediate(popped.hallPiece.gameObject);
                     result.RoomsPlaced--;
                     result.HallsPlaced--;
+
+                    // Pop two records (room then hall — added in that order)
+                    if (placements.Count >= 2)
+                    {
+                        placements.RemoveAt(placements.Count - 1);
+                        placements.RemoveAt(placements.Count - 1);
+                    }
 
                     if (popped.priorExit != null) popped.priorExit.isConnected = false;
                 }
 
                 // ── Branch pass ─────────────────────────────────────────────────
-                // Snapshot of room pieces (Starter + spine + Boss). Branches placed
-                // during this loop are also eligible attach candidates for
-                // subsequent branches, so the list grows.
                 var attachRooms = new List<RoomPiece> { starterPiece };
                 foreach (var f in slots) attachRooms.Add(f.roomPiece);
 
@@ -338,6 +412,9 @@ namespace LevelGen.V2
                             result.RoomsPlaced++;
                             result.HallsPlaced++;
                             placedThisSlot = true;
+
+                            placements.Add(MakeHallRecord(output.HallPiece, "Hall:Branch"));
+                            placements.Add(MakeRoomRecord(output.RoomPiece, "Branch", cat.ToString()));
                         }
                         else
                         {
@@ -347,18 +424,50 @@ namespace LevelGen.V2
                 }
 
                 result.BranchesPlaced = branchesPlaced;
-                result.Success        = true;
                 result.BacktrackCount = backtracks;
+
+                // ── Save scene if we set it up ────────────────────────────────
+                if (useNewScene)
+                {
+                    FrameCameraInScene(newScene, root);
+                    bool saved = EditorSceneManager.SaveScene(newScene, scenePath);
+                    if (saved)
+                    {
+                        result.ScenePath = scenePath;
+                        result.Log.Add($"Scene saved: {scenePath}");
+                    }
+                    else
+                    {
+                        result.Log.Add($"Failed to save scene at {scenePath}.");
+                    }
+                    EditorSceneManager.CloseScene(newScene, removeScene: true);
+                    useNewScene = false;
+                    result.Root = null;     // Root no longer exists in any open scene
+                    AssetDatabase.Refresh();
+                }
+
+                // ── Compute final placement ordering ──────────────────────────
+                for (int i = 0; i < placements.Count; i++)
+                    placements[i].order = i + 1;
+
+                // ── Write manifest (always) ───────────────────────────────────
+                string manifestName = !string.IsNullOrEmpty(settings.sceneName)
+                    ? $"{settings.sceneName}_manifest.txt"
+                    : $"Dungeon_{resolvedSeed}_manifest.txt";
+                string manifestPath = $"{outputFolder}/{manifestName}";
+                EnsureAssetFolder(outputFolder);
+                WriteManifest(settings, result, placements, manifestPath);
+                result.ManifestPath = manifestPath;
+                result.Log.Add($"Manifest: {manifestPath}");
+
+                result.Success = true;
                 result.Log.Add($"Done: {result.RoomsPlaced} rooms, {result.HallsPlaced} halls, " +
                                $"{branchesPlaced}/{settings.branchSlotCount} branches, {backtracks} backtracks.");
             }
             catch (System.Exception e)
             {
-                if (result.Root != null)
-                {
-                    DestroyRootAndClearSelection(result.Root);
-                    result.Root = null;
-                }
+                CleanupOnFailure(root, useNewScene, newScene);
+                result.Root = null;
                 return Fail(result, sw, $"Exception: {e.Message}");
             }
             finally
@@ -394,7 +503,6 @@ namespace LevelGen.V2
 
             ExitPoint priorExit = unusedExits[rng.Next(unusedExits.Count)];
 
-            // Try categories in random-weighted order, excluding ones already tried at this slot.
             while (true)
             {
                 if (!pool.DrawRandom(rng, triedAtSlot[slotIdx], out RoomCategory cat))
@@ -459,22 +567,13 @@ namespace LevelGen.V2
                 hallEntry = output.HallEntry,
                 hallExit  = output.HallExit,
                 roomEntry = output.RoomEntry,
-                category  = null,    // Boss is not drawn from the pool
+                category  = null,
                 slotIndex = slotIdx,
             };
         }
 
         // ── Core placement: hall + room ───────────────────────────────────────
 
-        /// <summary>
-        /// Instantiates a hall + room pair, snaps the hall's entry exit to
-        /// <paramref name="priorExit"/>, then snaps the room's entry exit to the hall's
-        /// other exit. Iterates room candidates × {0/90/180/270} rotations × random
-        /// hall pick. On success, marks the four involved exits as connected and
-        /// appends both pieces to <paramref name="placed"/>. On failure, destroys any
-        /// partial instantiation and leaves all state untouched. Used by both spine
-        /// and branch placement.
-        /// </summary>
         static bool TryPlaceConnectedRoom(
             RoomPiece priorRoom,
             ExitPoint priorExit,
@@ -510,7 +609,7 @@ namespace LevelGen.V2
                     var hallExits = HorizontalExits(hallPiece);
                     if (hallExits.Count < 2)
                     {
-                        Object.DestroyImmediate(hallGO);
+                        UnityEngine.Object.DestroyImmediate(hallGO);
                         continue;
                     }
 
@@ -519,7 +618,7 @@ namespace LevelGen.V2
 
                     if (Overlaps(hallPiece, placed))
                     {
-                        Object.DestroyImmediate(hallGO);
+                        UnityEngine.Object.DestroyImmediate(hallGO);
                         continue;
                     }
 
@@ -538,8 +637,8 @@ namespace LevelGen.V2
 
                     if (roomEntry == null)
                     {
-                        Object.DestroyImmediate(roomGO);
-                        Object.DestroyImmediate(hallGO);
+                        UnityEngine.Object.DestroyImmediate(roomGO);
+                        UnityEngine.Object.DestroyImmediate(hallGO);
                         continue;
                     }
 
@@ -550,12 +649,11 @@ namespace LevelGen.V2
                     var combined = new List<RoomPiece>(placed) { hallPiece };
                     if (Overlaps(roomPiece, combined))
                     {
-                        Object.DestroyImmediate(roomGO);
-                        Object.DestroyImmediate(hallGO);
+                        UnityEngine.Object.DestroyImmediate(roomGO);
+                        UnityEngine.Object.DestroyImmediate(hallGO);
                         continue;
                     }
 
-                    // Success — mark exits as connected, append, return
                     priorExit.isConnected = true;
                     hallEntry.isConnected = true;
                     hallExit.isConnected  = true;
@@ -581,12 +679,6 @@ namespace LevelGen.V2
 
         // ── Snap math ─────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Rotates and translates <paramref name="incoming"/> so that
-        /// <paramref name="entryExit"/>'s world transform faces the negation of
-        /// <paramref name="targetExit"/>'s world forward and shares its world
-        /// position. Final Y rotation is snapped to the nearest 90°.
-        /// </summary>
         static void SnapExitToExit(GameObject incoming, ExitPoint entryExit, ExitPoint targetExit)
         {
             Vector3 desiredForward = -targetExit.transform.forward;
@@ -610,11 +702,6 @@ namespace LevelGen.V2
 
         // ── Bounds / collision ────────────────────────────────────────────────
 
-        /// <summary>
-        /// Returns <see cref="RoomPiece.GetWorldBounds"/> with X/Z extents swapped
-        /// when the piece's Y rotation is a 90° or 270° quarter turn.
-        /// <see cref="RoomPiece.GetWorldBounds"/> itself does not account for rotation.
-        /// </summary>
         static Bounds GetRotationAwareWorldBounds(RoomPiece piece)
         {
             Bounds raw = piece.GetWorldBounds();
@@ -630,7 +717,6 @@ namespace LevelGen.V2
         static bool Overlaps(RoomPiece candidate, List<RoomPiece> placed)
         {
             Bounds a = GetRotationAwareWorldBounds(candidate);
-            // Tiny shrink to avoid edge-touching false positives at shared wall planes.
             a.size = new Vector3(
                 Mathf.Max(0f, a.size.x - CollisionEpsilon * 2f),
                 Mathf.Max(0f, a.size.y - CollisionEpsilon * 2f),
@@ -643,6 +729,18 @@ namespace LevelGen.V2
                 if (a.Intersects(b)) return true;
             }
             return false;
+        }
+
+        static Bounds ComputeBoundsUnion(GameObject root)
+        {
+            var pieces = root.GetComponentsInChildren<RoomPiece>();
+            if (pieces.Length == 0)
+                return new Bounds(root.transform.position, Vector3.zero);
+
+            Bounds bounds = GetRotationAwareWorldBounds(pieces[0]);
+            for (int i = 1; i < pieces.Length; i++)
+                bounds.Encapsulate(GetRotationAwareWorldBounds(pieces[i]));
+            return bounds;
         }
 
         // ── Exit helpers ──────────────────────────────────────────────────────
@@ -689,6 +787,169 @@ namespace LevelGen.V2
             return list;
         }
 
+        // ── Placement-record helpers ──────────────────────────────────────────
+
+        static PlacementRecord MakeHallRecord(RoomPiece hall, string kind) => new PlacementRecord
+        {
+            kind              = kind,
+            prefabName        = CleanPrefabName(hall.gameObject.name),
+            roomCategory      = "-",
+            worldPosition     = hall.transform.position,
+            yRotation         = NormalizeRotY(hall.transform.eulerAngles.y),
+            hallSlackOptional = 0f,
+        };
+
+        static PlacementRecord MakeRoomRecord(RoomPiece room, string kind, string category) => new PlacementRecord
+        {
+            kind              = kind,
+            prefabName        = CleanPrefabName(room.gameObject.name),
+            roomCategory      = category,
+            worldPosition     = room.transform.position,
+            yRotation         = NormalizeRotY(room.transform.eulerAngles.y),
+            hallSlackOptional = null,
+        };
+
+        static string CleanPrefabName(string goName)
+        {
+            if (string.IsNullOrEmpty(goName)) return "(unnamed)";
+            int idx = goName.IndexOf("(Clone)");
+            return idx >= 0 ? goName.Substring(0, idx).Trim() : goName;
+        }
+
+        static float NormalizeRotY(float yEuler)
+        {
+            float y       = Mathf.Repeat(yEuler, 360f);
+            float snapped = Mathf.Round(y / 90f) * 90f;
+            return Mathf.Repeat(snapped, 360f);
+        }
+
+        // ── Scene save ────────────────────────────────────────────────────────
+
+        static void FrameCameraInScene(Scene scene, GameObject root)
+        {
+            Camera mainCam = null;
+            foreach (var go in scene.GetRootGameObjects())
+            {
+                var cam = go.GetComponent<Camera>();
+                if (cam != null) { mainCam = cam; break; }
+            }
+            if (mainCam == null) return;
+
+            var bounds = ComputeBoundsUnion(root);
+            if (bounds.size == Vector3.zero) return;
+
+            var center = bounds.center;
+            float yOff = Mathf.Max(bounds.extents.y * 4f, 50f);
+            float zOff = Mathf.Max(bounds.extents.z * 2f + 30f, 50f);
+            mainCam.transform.position = center + new Vector3(0f, yOff, -zOff);
+            mainCam.transform.LookAt(center);
+        }
+
+        static void EnsureAssetFolder(string assetFolderPath)
+        {
+            if (string.IsNullOrEmpty(assetFolderPath)) return;
+            if (AssetDatabase.IsValidFolder(assetFolderPath)) return;
+            string parent = Path.GetDirectoryName(assetFolderPath)?.Replace('\\', '/') ?? "Assets";
+            string leaf   = Path.GetFileName(assetFolderPath);
+            if (string.IsNullOrEmpty(leaf)) return;
+            EnsureAssetFolder(parent);
+            AssetDatabase.CreateFolder(parent, leaf);
+        }
+
+        // ── Manifest writer ───────────────────────────────────────────────────
+
+        static void WriteManifest(LevelGenSettings settings,
+                                  GenerationResult result,
+                                  List<PlacementRecord> placements,
+                                  string manifestPath)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine("V2 Level Generator — Manifest");
+            sb.AppendLine("==============================");
+            sb.AppendLine($"Generated:   {DateTime.UtcNow:yyyy-MM-ddTHH:mm:ssZ}");
+            sb.AppendLine($"Seed:        {result.Seed}");
+            sb.AppendLine($"Elapsed:     {result.ElapsedSeconds:F2}s");
+            sb.AppendLine();
+
+            sb.AppendLine("Output");
+            sb.AppendLine("------");
+            sb.AppendLine($"sceneName:        {(string.IsNullOrEmpty(settings.sceneName) ? "(none)" : settings.sceneName)}");
+            sb.AppendLine($"outputFolder:     {(string.IsNullOrEmpty(settings.outputFolder) ? "(none)" : settings.outputFolder)}");
+            sb.AppendLine($"saveToSceneFile:  {settings.saveToSceneFile}");
+            sb.AppendLine($"sceneSaved:       {result.ScenePath != null}");
+            sb.AppendLine($"scenePath:        {result.ScenePath ?? "(not saved)"}");
+            sb.AppendLine();
+
+            sb.AppendLine("Source");
+            sb.AppendLine("------");
+            sb.AppendLine($"catalogue:        {(settings.catalogue != null ? settings.catalogue.name : "(none)")}");
+            sb.AppendLine($"themeName:        {(string.IsNullOrEmpty(settings.themeName) ? "(none)" : settings.themeName)}");
+            sb.AppendLine();
+
+            sb.AppendLine("Room Budget");
+            sb.AppendLine("-----------");
+            sb.AppendLine($"Starter:   {settings.starterCount}");
+            sb.AppendLine($"Boss:      {settings.bossCount}");
+            sb.AppendLine($"Small:     {settings.smallCount}");
+            sb.AppendLine($"Medium:    {settings.mediumCount}");
+            sb.AppendLine($"Large:     {settings.largeCount}");
+            sb.AppendLine($"Special:   {settings.specialCount}");
+            sb.AppendLine($"Total:     {settings.TotalRoomCount}");
+            sb.AppendLine();
+
+            sb.AppendLine("Hall Budget");
+            sb.AppendLine("-----------");
+            sb.AppendLine($"Spine hall size:   {settings.spineHallSize}");
+            sb.AppendLine($"Branch hall size:  {settings.branchHallSize}");
+            sb.AppendLine();
+
+            sb.AppendLine("Layout");
+            sb.AppendLine("------");
+            sb.AppendLine($"Style:               {settings.layoutStyle}");
+            sb.AppendLine($"Branch slot count:   {settings.branchSlotCount}");
+            sb.AppendLine($"Branching factor:    {settings.branchingFactor:F2}     (logged only — not used in V2)");
+            sb.AppendLine($"Dead-end count:      {settings.deadEndCount}        (logged only — not used in V2)");
+            sb.AppendLine($"Secret-room count:   {settings.secretRoomCount}        (logged only — not used in V2)");
+            sb.AppendLine();
+
+            sb.AppendLine("Results");
+            sb.AppendLine("-------");
+            sb.AppendLine($"Rooms placed:        {result.RoomsPlaced}");
+            sb.AppendLine($"Halls placed:        {result.HallsPlaced}");
+            sb.AppendLine($"Branches placed:     {result.BranchesPlaced} / {result.BranchesRequested}");
+            sb.AppendLine($"Backtrack count:     {result.BacktrackCount}");
+            sb.AppendLine();
+
+            sb.AppendLine("Placements (in order)");
+            sb.AppendLine("---------------------");
+            sb.AppendLine("#    Kind             Category   Prefab                              Pos                       RotY  Slack");
+            foreach (var p in placements)
+            {
+                string posStr   = $"({p.worldPosition.x,7:F2},{p.worldPosition.y,7:F2},{p.worldPosition.z,7:F2})";
+                string rotStr   = ((int)p.yRotation).ToString().PadLeft(4);
+                string slackStr = p.hallSlackOptional.HasValue
+                    ? p.hallSlackOptional.Value.ToString("F1").PadLeft(4)
+                    : "  - ";
+
+                sb.AppendLine(
+                    p.order.ToString().PadRight(5) +
+                    Truncate(p.kind, 16).PadRight(17) +
+                    Truncate(p.roomCategory, 9).PadRight(11) +
+                    Truncate(p.prefabName, 35).PadRight(36) +
+                    posStr.PadRight(26) +
+                    rotStr + "  " +
+                    slackStr);
+            }
+
+            // Manifests live under Assets/, so the path is relative to project root.
+            File.WriteAllText(manifestPath, sb.ToString());
+            AssetDatabase.Refresh();
+        }
+
+        static string Truncate(string s, int max) =>
+            string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s.Substring(0, max));
+
         // ── Failure helpers ───────────────────────────────────────────────────
 
         static GenerationResult Fail(GenerationResult result,
@@ -703,12 +964,18 @@ namespace LevelGen.V2
             return result;
         }
 
-        static void DestroyRootAndClearSelection(GameObject root)
+        static void CleanupOnFailure(GameObject root, bool useNewScene, Scene newScene)
         {
-            if (root == null) return;
-            if (Selection.activeGameObject == root)
-                Selection.activeGameObject = null;
-            Object.DestroyImmediate(root);
+            if (root != null)
+            {
+                if (Selection.activeGameObject == root)
+                    Selection.activeGameObject = null;
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+            if (useNewScene && newScene.IsValid())
+            {
+                EditorSceneManager.CloseScene(newScene, removeScene: true);
+            }
         }
     }
 }

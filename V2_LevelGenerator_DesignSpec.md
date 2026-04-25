@@ -1,13 +1,13 @@
 # V2 Level Generator — Design Spec
 
-**Status:** Phase A complete. Phase B complete (spine generator). Phase C in progress (branches).
+**Status:** Phases A–D complete. Theme-aware prefab selection is the only spec item still deferred.
 **Date:** 2026-04-25
 
 **Implementation status:**
 - Phase A — EditorWindow shell + validation: COMPLETE
 - Phase B — Spine-only generator (Starter → rooms → Boss, with backtracking): COMPLETE
-- Phase C — Branches off the spine + theme-aware selection: IN PROGRESS (branches done; theme-aware deferred to Phase D+)
-- Phase D — Scene save (.unity) + manifest text output: not started
+- Phase C — Branches off the spine: COMPLETE (theme-aware selection deferred — manifest logs theme name but generator still pulls from raw folders)
+- Phase D — Scene save (.unity) + manifest text output: COMPLETE
 
 ---
 

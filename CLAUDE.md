@@ -710,13 +710,13 @@ PieceCatalogue.cs:
 Do not touch LVL_Configurator (it is complete).
 
 Pending work (priority order):
-  1. V2 Level Generator Phase C wrap-up: theme-aware prefab selection
-     (branches landed; theme bridge still deferred)
-  2. V2 Level Generator Phase D: scene save (.unity) + manifest text output
-  3. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
-  4. Implement Dress step (PropCatalogue / SpawnPoints)
-  5. Create RoomWorkshop.unity scene
-  6. Create LevelGenerator.unity scene
+  1. V2 Level Generator: theme-aware prefab selection (the only V2
+     phase-tracked item still deferred; manifest currently logs the
+     theme but the generator pulls from raw folders)
+  2. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
+  3. Implement Dress step (PropCatalogue / SpawnPoints)
+  4. Create RoomWorkshop.unity scene
+  5. Create LevelGenerator.unity scene
 
 Menu cleanup (2026-04-25):
   - Renamed `LevelGen/Whitebox/` submenu to `LevelGen/Whitebox [Complete]/`
@@ -758,7 +758,28 @@ V2 Level Generator (2026-04-25):
     self-contradicting under the new SpineLength formula). Connect-with-
     hall code extracted into a shared `TryPlaceConnectedRoom` helper used
     by spine, Boss, and branches. Theme-aware prefab selection still
-    deferred (Phase D+).
+    deferred.
+  - Phase D (scene save + manifest) complete: new `saveToSceneFile`
+    setting (default ON). When ON, generation creates a fresh additive
+    scene with Main Camera + Directional Light, generates directly into
+    it, frames the camera over the dungeon, saves to
+    `{outputFolder}/{sceneName}.unity`, and closes the scene — leaving
+    the user's active scene untouched. Overwrite dialog gates re-saves;
+    cancellation falls back to active-scene mode. When OFF, behaves
+    exactly like Phase B/C (root in active scene). A `_manifest.txt` is
+    always written next to the scene (or with a `Dungeon_<seed>` fallback
+    name when sceneName is empty) — contains seed, all input params,
+    placement order with prefab/position/rotation, and run stats. New
+    `PlacementRecord` class tracks placements during generation; on
+    backtrack the last 2 records (hall + room) are popped in lockstep
+    with the placement stack. Validation now gates `sceneName` /
+    `outputFolder` requirements on `saveToSceneFile == true`.
+  - CS0104 ambiguity fix: 9 calls to `Object.DestroyImmediate(...)` in
+    `V2LevelGenerator.cs` fully qualified to `UnityEngine.Object.
+    DestroyImmediate(...)`. Conflict was introduced by `using System;`
+    in Phase D (added for `DateTime.UtcNow` in the manifest header),
+    which made bare `Object` ambiguous between `UnityEngine.Object` and
+    `System.Object`.
   - New: Assets/Scripts/LevelGen/V2/LevelGenSettings.cs
          Assets/Scripts/LevelGen/V2/Editor/V2LevelGeneratorWindow.cs
          Assets/Scripts/LevelGen/V2/Editor/V2PrefabSource.cs

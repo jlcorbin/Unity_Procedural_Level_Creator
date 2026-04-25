@@ -1,0 +1,73 @@
+V2 Level Generator — Manifest
+==============================
+Generated:   2026-04-25T17:18:52Z
+Seed:        2
+Elapsed:     0.00s
+
+Output
+------
+sceneName:        Dungeon_New
+outputFolder:     Assets/Levels/Generated
+saveToSceneFile:  True
+sceneSaved:       True
+scenePath:        Assets/Levels/Generated/Dungeon_New.unity
+
+Source
+------
+catalogue:        DungeonComps
+themeName:        (none)
+
+Room Budget
+-----------
+Starter:   1
+Boss:      1
+Small:     5
+Medium:    2
+Large:     2
+Special:   0
+Total:     11
+
+Hall Budget
+-----------
+Spine hall size:   Medium
+Branch hall size:  Small
+
+Layout
+------
+Style:               LinearWithBranches
+Branch slot count:   4
+Branching factor:    0.50     (logged only — not used in V2)
+Dead-end count:      2        (logged only — not used in V2)
+Secret-room count:   0        (logged only — not used in V2)
+
+Results
+-------
+Rooms placed:        11
+Halls placed:        10
+Branches placed:     4 / 4
+Backtrack count:     0
+
+Placements (in order)
+---------------------
+#    Kind             Category   Prefab                              Pos                       RotY  Slack
+1    Starter          Starter    Starter_10x10                       (   0.00,   0.00,   0.00)    0    - 
+2    Hall:Spine       -          Medium_3x8                          (   2.00,   0.00,  36.00)  180   0.0
+3    Spine            Small      Small_5x3                           (   2.00,   0.00,  58.00)  180    - 
+4    Hall:Spine       -          Medium_8x8                          (   4.00,   0.00,  80.00)  180   0.0
+5    Spine            Small      Small_5x5                           ( -22.00,   0.00,  78.00)  270    - 
+6    Hall:Spine       -          Medium_8x8                          ( -48.00,   0.00,  76.00)  270   0.0
+7    Spine            Small      Small_5x5                           ( -50.00,   0.00, 102.00)    0    - 
+8    Hall:Spine       -          Medium_3x8                          ( -50.00,   0.00, 128.00)  180   0.0
+9    Spine            Large      Large_12x12                         ( -52.00,   0.00, 168.00)   90    - 
+10   Hall:Spine       -          Medium_3x8                          ( -50.00,   0.00, 208.00)  180   0.0
+11   Spine            Medium     Medium_8x8                          ( -52.00,   0.00, 240.00)   90    - 
+12   Hall:Spine       -          Medium_3x8                          ( -84.00,   0.00, 238.00)   90   0.0
+13   Boss             Boss       Boss_15x15                          (-130.00,   0.00, 238.00)   90    - 
+14   Hall:Branch      -          Small_3x5                           ( -18.00,   0.00, 166.00)  270   0.0
+15   Branch           Large      Large_12x12                         (  16.00,   0.00, 164.00)  270    - 
+16   Hall:Branch      -          Small_3x5                           ( -26.00,   0.00, 238.00)  270   0.0
+17   Branch           Small      Small_5x3                           ( -10.00,   0.00, 238.00)  270    - 
+18   Hall:Branch      -          Small_3x5                           ( -86.00,   0.00, 166.00)   90   0.0
+19   Branch           Medium     Medium_8x8                          (-112.00,   0.00, 164.00)    0    - 
+20   Hall:Branch      -          Small_3x5                           (   6.00,   0.00, 238.00)   90   0.0
+21   Branch           Small      Small_5x3                           (  22.00,   0.00, 238.00)   90    - 

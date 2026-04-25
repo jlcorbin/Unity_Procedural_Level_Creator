@@ -178,12 +178,16 @@ The final state at the end of April 20 had deleted the original small-preset fix
 
 ## V2 Level Generator note
 
-Phases A + B + C (branches) complete (2026-04-25). `LevelGenSettings`,
+Phases A + B + C + D complete (2026-04-25). `LevelGenSettings`,
 `V2LevelGeneratorWindow`, `V2PrefabSource`, and `V2LevelGenerator` in
 place at `Assets/Scripts/LevelGen/V2/`. Generate places Starter → spine
 rooms → Boss → branches. Spine and branches share one combined
 S+M+L+Special pool (weighted random); branch failures skip with a
-warning instead of aborting. Theme-aware selection, scene save, and
-manifest output deferred to Phase D+. Separately,
+warning instead of aborting. With `saveToSceneFile` ON (default), the
+output is a `{outputFolder}/{sceneName}.unity` file with Main Camera +
+Directional Light + the dungeon, plus a sibling `_manifest.txt`
+(seed, params, placement order, run stats); with the toggle OFF the
+root drops in the active scene and the manifest still writes. Only
+theme-aware prefab selection is still deferred. Separately,
 `RoomPiece.OnDrawGizmos` now uses `Gizmos.matrix` so the bounds
 wireframe rotates with the GameObject.

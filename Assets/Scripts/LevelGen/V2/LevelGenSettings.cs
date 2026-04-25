@@ -9,8 +9,9 @@ namespace LevelGen.V2
     public class LevelGenSettings
     {
         // Output
-        public string sceneName    = "Dungeon_New";
-        public string outputFolder = "Assets/Levels/Generated";
+        public string sceneName       = "Dungeon_New";
+        public string outputFolder    = "Assets/Levels/Generated";
+        public bool   saveToSceneFile = true;   // ON = write a .unity scene file; OFF = drop in active scene
 
         // Source
         public PieceCatalogue catalogue;
