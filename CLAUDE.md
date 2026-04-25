@@ -715,6 +715,13 @@ Pending work (priority order):
   3. Create RoomWorkshop.unity scene
   4. Create LevelGenerator.unity scene
 
+Menu cleanup (2026-04-25):
+  - Renamed `LevelGen/Whitebox/` submenu to `LevelGen/Whitebox [Complete]/`
+    to signal pipeline is finished. Items unchanged.
+  - Consolidated Doorway tests: removed `Manual 5x3 with 2 Doorways` and
+    `doorCount=2 equivalent on 5x3` test methods. Kept `Combined paths
+    on 5x3` as the single Doorway test entry point.
+
 ## Boss room analysis — VERIFIED ground truth
 
 Source: demoscene_dungeon_level_5_bossroom

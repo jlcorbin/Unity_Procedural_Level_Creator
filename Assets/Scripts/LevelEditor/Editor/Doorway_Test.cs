@@ -10,61 +10,6 @@ namespace LevelEditor
     /// </summary>
     public static class Doorway_Test
     {
-        // ── Phase 1: manual AddDoorway ────────────────────────────────────────
-
-        [MenuItem("LevelEditor/Tests/Doorway: Manual 5x3 with 2 Doorways")]
-        private static void RunManualDoorwayTest()
-        {
-            CellMap     baseMap    = ShapeStamp.Rectangle(5, 3);
-            SolveResult baseResult = EdgeSolver.Solve(baseMap);
-
-            // Manually stamp south edge of cell (2,0) and north edge of cell (2,2).
-            CellMap doorMap = ShapeStamp.Rectangle(5, 3);
-            doorMap.AddDoorway(2, 0, CellEdge.South);
-            doorMap.AddDoorway(2, 2, CellEdge.North);
-            SolveResult doorResult = EdgeSolver.Solve(doorMap);
-
-            int diff = baseResult.walls.Count - doorResult.walls.Count;
-
-            Debug.Log(
-                $"[Doorway_Test] [Manual] Baseline   : {baseResult}\n" +
-                $"[Doorway_Test] [Manual] +2 Doorways: {doorResult}\n" +
-                $"[Doorway_Test] [Manual] Wall diff   : {diff} (expected 2)");
-
-            Log(diff == 2, "Manual stamp");
-        }
-
-        // ── Phase 2: doorCount equivalent ────────────────────────────────────
-
-        /// <summary>
-        /// Replicates what RoomBuilder.ApplyAutoDoorways does for doorCount=2 on a
-        /// 5×3 map: North at (2,2) and South at (2,0). Proves the math matches the
-        /// manual authoring path.
-        /// </summary>
-        [MenuItem("LevelEditor/Tests/Doorway: doorCount=2 equivalent on 5x3")]
-        private static void RunDoorCountEquivalentTest()
-        {
-            int w = 5, d = 3;
-
-            CellMap     baseMap    = ShapeStamp.Rectangle(w, d);
-            SolveResult baseResult = EdgeSolver.Solve(baseMap);
-
-            // doorCount=2 → order[0]=North, order[1]=South (mirrors ApplyAutoDoorways).
-            CellMap doorMap = ShapeStamp.Rectangle(w, d);
-            doorMap.AddDoorway(w / 2,     d - 1, CellEdge.North); // (2, 2)
-            doorMap.AddDoorway(w / 2,     0,     CellEdge.South); // (2, 0)
-            SolveResult doorResult = EdgeSolver.Solve(doorMap);
-
-            int diff = baseResult.walls.Count - doorResult.walls.Count;
-
-            Debug.Log(
-                $"[Doorway_Test] [doorCount=2] Baseline  : {baseResult}\n" +
-                $"[Doorway_Test] [doorCount=2] +2 Doorways: {doorResult}\n" +
-                $"[Doorway_Test] [doorCount=2] Wall diff  : {diff} (expected 2)");
-
-            Log(diff == 2, "doorCount=2 equivalent");
-        }
-
         // ── Combined: both paths, no interference ─────────────────────────────
 
         /// <summary>

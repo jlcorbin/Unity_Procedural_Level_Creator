@@ -72,7 +72,7 @@ namespace LevelGen
         /// <c>Assets/Whitebox/Materials/</c> is preserved so Step 2 material
         /// references survive between re-runs.
         /// </summary>
-        [MenuItem("LevelGen/Whitebox/Generate (Step 1: mirror meshes)")]
+        [MenuItem("LevelGen/Whitebox [Complete]/Generate (Step 1: mirror meshes)")]
         public static void GenerateMirroredMeshes()
         {
             bool meshesExist  = AssetDatabase.IsValidFolder(WB_ASSET_ROOT);
@@ -217,7 +217,7 @@ namespace LevelGen
         ///
         /// Requires Step 1 to have been run first.
         /// </summary>
-        [MenuItem("LevelGen/Whitebox/Generate (Step 2: wrap meshes in prefabs)")]
+        [MenuItem("LevelGen/Whitebox [Complete]/Generate (Step 2: wrap meshes in prefabs)")]
         public static void GeneratePrefabs()
         {
             if (!AssetDatabase.IsValidFolder(WB_ASSET_ROOT)
@@ -514,14 +514,14 @@ namespace LevelGen
         /// replacing each FDP 01_PARTS child instance with its whitebox equivalent.
         /// Missing whitebox parts get a primitive cube placeholder.
         /// </summary>
-        [MenuItem("LevelGen/Whitebox/Generate (Step 3: mirror comps)")]
+        [MenuItem("LevelGen/Whitebox [Complete]/Generate (Step 3: mirror comps)")]
         public static void GenerateComps() => GenerateCompsImpl(dryRun: false);
 
         /// <summary>
         /// Dry run — logs every decision Step 3 would make without writing any assets.
         /// Use this to verify path mapping before committing to a full run.
         /// </summary>
-        [MenuItem("LevelGen/Whitebox/Generate (Step 3: dry run)")]
+        [MenuItem("LevelGen/Whitebox [Complete]/Generate (Step 3: dry run)")]
         public static void GenerateCompsDryRun() => GenerateCompsImpl(dryRun: true);
 
         // Core implementation shared by GenerateComps and GenerateCompsDryRun.
@@ -777,7 +777,7 @@ namespace LevelGen
         /// Loads one FDP comp prefab and logs full PrefabUtility state for every
         /// Transform in its hierarchy.  Read-only — no assets written.
         /// </summary>
-        [MenuItem("LevelGen/Whitebox/Diagnose Step 3 (log only, no output)")]
+        [MenuItem("LevelGen/Whitebox [Complete]/Diagnose Step 3 (log only, no output)")]
         public static void DiagnoseStep3()
         {
             const string preferredPath =
@@ -1020,14 +1020,14 @@ namespace LevelGen
         /// into <c>Assets/Whitebox/prefabs/LEVEL_MODULES/</c>, swapping each
         /// referenced child (part or comp) for its whitebox equivalent.
         /// </summary>
-        [MenuItem("LevelGen/Whitebox/Generate (Step 4: mirror LVL modules)")]
+        [MenuItem("LevelGen/Whitebox [Complete]/Generate (Step 4: mirror LVL modules)")]
         public static void GenerateLvlModules() => GenerateLvlModulesImpl(dryRun: false);
 
         /// <summary>
         /// Dry run — logs every decision Step 4 would make without writing any assets.
         /// Review mapping breakdown and fix ambiguities before the real run.
         /// </summary>
-        [MenuItem("LevelGen/Whitebox/Generate (Step 4: dry run)")]
+        [MenuItem("LevelGen/Whitebox [Complete]/Generate (Step 4: dry run)")]
         public static void GenerateLvlModulesDryRun() => GenerateLvlModulesImpl(dryRun: true);
 
         // Core implementation for Step 4 — two-pass generation.
