@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 
 namespace LevelEditor
@@ -79,31 +78,8 @@ namespace LevelEditor
         /// Base edge occupancy for each tile type at rotation 0.
         /// Bit 0 = North, Bit 1 = East, Bit 2 = South, Bit 3 = West.
         /// </summary>
-        private static readonly byte[] BaseEdgeMask = new byte[]
-        {
-            0b0000, // Empty       — no edges
-            0b1111, // Square      — all four
-            0b0110, // TriangleSW  — S and W... wait, occupies S and W? Let me clarify below
-            0b0011, // TriangleSE  — N and E? clarification below
-            0b1001, // TriangleNE  — N and E
-            0b1100, // TriangleNW  — N and W
-            0b0110, // QuarterSW   — same occupancy as TriangleSW (S, W)
-            0b0011, // QuarterSE   — same as TriangleSE (S, E)
-            0b1001, // QuarterNE   — same as TriangleNE (N, E)
-            0b1100, // QuarterNW   — same as TriangleNW (N, W)
-            0b1111, // Angle       — fills all four edges (inside corner cover)
-            0b1111, // Concave     — all four edges reached by the bowed geometry
-            0b1111, // Convex      — all four edges reached
-            0b0000, // Circle      — freestanding, touches no cell edges
-        };
-
-        // NOTE on occupancy convention:
-        // TriangleSW = "triangle in the SW half of the cell" = its two LEGS lie
-        //   along the S edge (y=0) and W edge (x=0). The hypotenuse runs from
-        //   the NW corner to the SE corner. So TriangleSW OCCUPIES S and W.
-        // The mask above encodes edges as: N=bit0(1), E=bit1(2), S=bit2(4), W=bit3(8).
-        //   TriangleSW -> S|W = 4|8 = 12 = 0b1100... but I wrote 0b0110.
-        //   This is a bug in the constant. Fixed in the static ctor below.
+        private static readonly byte[] BaseEdgeMask = new byte[TileTypeCount];
+        // Filled entirely by the static constructor below — do not add literals here.
 
         /// <summary>Number of distinct <see cref="TileType"/> enum values (including Empty).</summary>
         public const int TileTypeCount = 14;

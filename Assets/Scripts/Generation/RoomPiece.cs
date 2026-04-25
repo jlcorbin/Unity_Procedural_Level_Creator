@@ -43,6 +43,12 @@ namespace LevelGen
         /// </summary>
         [HideInInspector] public int generationDepth = 0;
 
+        /// <summary>
+        /// Sub-category label stamped at save time by RoomBuilder (e.g. "Starter", "Small").
+        /// Empty on prefabs that pre-date the categorised save workflow.
+        /// </summary>
+        [HideInInspector] public string categoryName = "";
+
         // ── Unity messages ────────────────────────────────────────────
         private void Awake()
         {

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using LevelGen;
 using UnityEngine;
 #if UNITY_EDITOR
@@ -40,29 +41,10 @@ namespace LevelEditor
     }
 
     /// <summary>
-    /// Turns a <see cref="SolveResult"/> from <see cref="EdgeSolver"/> into actual
-    /// scene geometry under a single root GameObject.
-    ///
-    /// <para><b>Current scope (Phase 3):</b>
-    /// <list type="bullet">
-    /// <item>Rectangle shape only.</item>
-    /// <item>Square tile type only; all others are skipped.</item>
-    /// <item>Tier 0 cells only.</item>
-    /// <item>One inspector-assigned prefab per category (floor, wall, corner,
-    ///       halfWallL, halfWallR) — no catalogue-based selection.</item>
-    /// </list>
-    /// </para>
-    ///
-    /// <para><b>Deferred work:</b>
-    /// <list type="bullet">
-    /// <item>Custom shapes (Diamond, Circle) and triangle/angle-wall tile support.</item>
-    /// <item>Catalogue-based prefab selection (per-tile-type prefab pools).</item>
-    /// <item>Tier stacking (tiers 1 and 2).</item>
-    /// <item>RoomPiece bounds stamping.</item>
-    /// <item>ExitPoint placement (door workflow).</item>
-    /// <item>Inward (concave) corners for L-shapes and notches.</item>
-    /// </list>
-    /// </para>
+    /// Turns a <see cref="SolveResult"/> from <see cref="EdgeSolver"/> into actual scene geometry
+    /// under a child <b>MOD_Room</b> GameObject. RoomPiece, ExitPoints, and all mesh prefabs live
+    /// on MOD_Room so that saving it captures complete geometry, bounds, and exit data.
+    /// The RoomBuilder GameObject is the tool; MOD_Room is the room asset.
     /// </summary>
     public class RoomBuilder : MonoBehaviour
     {
@@ -111,6 +93,16 @@ namespace LevelEditor
             "Column: corner is decorative, both adjacent walls remain full.")]
         private CornerArmLength cornerArmLength = CornerArmLength.Full;
 
+        // ── Catalogue / Theme ─────────────────────────────────────────────────
+
+        [Header("Catalogue / Theme")]
+        [Tooltip("PieceCatalogue containing named prefab bundles (themes). " +
+            "Leave empty to use the direct Prefabs slots below for every build.")]
+        public PieceCatalogue catalogue;
+
+        [Tooltip("Name of the theme to pull prefabs from. Empty = use direct Prefabs slots as fallback.")]
+        public string themeName = "";
+
         // ── Doors ─────────────────────────────────────────────────────────────
 
         [Header("Doors")]
@@ -121,29 +113,42 @@ namespace LevelEditor
         // ── Output ────────────────────────────────────────────────────────────
 
         [Header("Output")]
-        [SerializeField, Tooltip("Name of the root GameObject created by Build. Overwritten on each Build.")]
+        [SerializeField, Tooltip("Name of the child GameObject that holds all room geometry and the RoomPiece component.")]
         private string rootName = "MOD_Room";
+
+        // ── Save Classification ───────────────────────────────────────────────
+
+        [Header("Save Classification")]
+        [Tooltip("Room or Hall — determines the save sub-folder and the RoomPiece pieceType.")]
+        public PieceType pieceType = PieceType.Room;
+
+        [Tooltip("Room sub-category. Only used when PieceType is Room.")]
+        public RoomCategory roomCategory = RoomCategory.Small;
+
+        [Tooltip("Hall sub-category. Only used when PieceType is Hall.")]
+        public HallCategory hallCategory = HallCategory.Small;
 
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Destroys any existing room root by name, then solves a Rectangle cell-map
-        /// and instantiates floor, wall, and corner prefabs under a new root at world
-        /// origin. Logs all solver warnings and a completion summary.
-        ///
-        /// <para>Returns immediately and logs an error if any of the three core prefabs are
-        /// unassigned — no partial build occurs.</para>
+        /// Destroys any existing MOD_Room child, solves a Rectangle cell-map, and instantiates
+        /// floor, wall, and corner prefabs under a fresh MOD_Room child. RoomPiece and ExitPoints
+        /// are stamped on MOD_Room so the child contains the complete room asset.
+        /// Returns immediately with an error log if any core prefab is unassigned.
         /// </summary>
         public void Build()
         {
-            // Guard: all three core prefabs required.
-            if (floorPrefab == null || wallPrefab == null || cornerPrefab == null)
+            GameObject resolvedFloor  = ResolvePrefab(PieceCatalogue.PieceType.Floor);
+            GameObject resolvedWall   = ResolvePrefab(PieceCatalogue.PieceType.Wall);
+            GameObject resolvedCorner = ResolvePrefab(PieceCatalogue.PieceType.Corner);
+
+            if (resolvedFloor == null || resolvedWall == null || resolvedCorner == null)
             {
-                Debug.LogError("[RoomBuilder] Build aborted — floorPrefab, wallPrefab, and cornerPrefab are all required.");
+                Debug.LogError("[RoomBuilder] Build aborted — floor, wall, and corner prefabs are required " +
+                               "(assign via a Theme on the catalogue, or fill in the direct Prefabs slots).");
                 return;
             }
 
-            // Guard: Half mode requires both half-wall prefabs.
             if (cornerArmLength == CornerArmLength.Half &&
                 (halfWallLPrefab == null || halfWallRPrefab == null))
             {
@@ -151,7 +156,12 @@ namespace LevelEditor
                 return;
             }
 
-            DestroyRoot();
+            // One-shot migration: remove legacy components from the builder itself.
+            MigrateLegacyRoomPieceFromBuilder();
+
+            // Destroy any existing MOD_Room child, then create a fresh one.
+            DestroyChildRoot();
+            GameObject root = GetOrCreateRoomRoot();
 
             CellMap map = ShapeStamp.Rectangle(rectangleWidth, rectangleDepth);
             ApplyAutoDoorways(map);
@@ -159,16 +169,6 @@ namespace LevelEditor
 
             for (int i = 0; i < result.warnings.Count; i++)
                 Debug.LogWarning($"[RoomBuilder] Solver warning: {result.warnings[i]}");
-
-            // Root at world origin — position/rotation are explicit so the builder's
-            // own transform has no effect on room placement.
-            var root = new GameObject(rootName);
-            root.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
-            root.transform.localScale = Vector3.one;
-
-#if UNITY_EDITOR
-            Undo.RegisterCreatedObjectUndo(root, "Build Room");
-#endif
 
             var floorsGroup  = new GameObject("Floors").transform;
             var wallsGroup   = new GameObject("Walls").transform;
@@ -181,22 +181,18 @@ namespace LevelEditor
             Vector3 floorShift = FloorPivotShift(floorPivot);
 
             // ── Floors ────────────────────────────────────────────────────────
-            // Pivot shift applied in world space (Square floors at identity rotation, tier 0).
             for (int i = 0; i < result.floors.Count; i++)
             {
                 FloorPlacement floor = result.floors[i];
                 if (floor.tileType != TileType.Square) continue;
 
-                GameObject go = InstantiatePiece(floorPrefab, floorsGroup);
+                GameObject go = InstantiatePiece(resolvedFloor, floorsGroup);
                 go.name                    = $"Floor_{floor.gridCoord.x}_{floor.gridCoord.y}";
                 go.transform.localPosition = floor.worldPosition + floorShift;
                 go.transform.localRotation = floor.rotation;
             }
 
             // ── Walls ─────────────────────────────────────────────────────────
-            // Wall pivot shift is along the wall's own local X, so it is rotated by the
-            // wall's rotation before being added to the world-space position.
-            // HalfL uses a hardcoded EndX-equivalent shift (mirror authoring vs. HalfR).
             for (int i = 0; i < result.walls.Count; i++)
             {
                 WallPlacement wall = result.walls[i];
@@ -204,10 +200,10 @@ namespace LevelEditor
                 GameObject prefab;
                 switch (wall.kind)
                 {
-                    case WallKind.Straight: prefab = wallPrefab;      break;
+                    case WallKind.Straight: prefab = resolvedWall;    break;
                     case WallKind.HalfL:    prefab = halfWallLPrefab; break;
                     case WallKind.HalfR:    prefab = halfWallRPrefab; break;
-                    default:                continue; // Angle/Concave/Convex deferred
+                    default:                continue;
                 }
 
                 if (prefab == null) continue;
@@ -225,7 +221,7 @@ namespace LevelEditor
             for (int i = 0; i < result.corners.Count; i++)
             {
                 CornerPlacement corner = result.corners[i];
-                GameObject      go     = InstantiatePiece(cornerPrefab, cornersGroup);
+                GameObject      go     = InstantiatePiece(resolvedCorner, cornersGroup);
                 go.name                    = $"Corner_{corner.gridCoord.x}_{corner.gridCoord.y}";
                 go.transform.localPosition = corner.worldPosition;
                 go.transform.localRotation = corner.rotation;
@@ -239,33 +235,117 @@ namespace LevelEditor
         }
 
         /// <summary>
-        /// Finds and destroys the room root GameObject by name. Does nothing if not found.
+        /// Removes the RoomPiece component and all children from the MOD_Room child, leaving
+        /// an empty child ready for the next build. Also runs the legacy migration.
         /// </summary>
         public void Clear()
         {
-            int count = DestroyRoot();
-            if (count == 0)
+            MigrateLegacyRoomPieceFromBuilder();
+
+            var rootTf = transform.Find(rootName);
+            if (rootTf == null)
+            {
                 Debug.Log($"[RoomBuilder] Nothing to clear — '{rootName}' not found.");
+                return;
+            }
+
+            GameObject roomRoot = rootTf.gameObject;
+
+            var piece = roomRoot.GetComponent<RoomPiece>();
+            if (piece != null)
+            {
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                    Undo.DestroyObjectImmediate(piece);
+                else
+#endif
+                    DestroyImmediate(piece);
+            }
+
+            // Destroy all children (mesh groups + ExitPoints) in reverse index order.
+            for (int i = roomRoot.transform.childCount - 1; i >= 0; i--)
+            {
+                var child = roomRoot.transform.GetChild(i).gameObject;
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                {
+                    Undo.DestroyObjectImmediate(child);
+                    continue;
+                }
+#endif
+                if (Application.isPlaying)
+                    Destroy(child);
+                else
+                    DestroyImmediate(child);
+            }
+
+            Debug.Log($"[RoomBuilder] Cleared '{rootName}' — meshes, exits, and RoomPiece removed.");
         }
 
         // ─────────────────────────────────────────────────────────────────────
 
-        // Finds and destroys the existing root, returning how many objects were removed.
-        private int DestroyRoot()
+        // Returns the MOD_Room child, creating it as a child of this transform if absent.
+        private GameObject GetOrCreateRoomRoot()
         {
-            GameObject existing = GameObject.Find(rootName);
-            if (existing == null) return 0;
+            var existing = transform.Find(rootName);
+            if (existing != null) return existing.gameObject;
+
+            var go = new GameObject(rootName);
+            go.transform.SetParent(transform, false);
+#if UNITY_EDITOR
+            Undo.RegisterCreatedObjectUndo(go, "Build Room");
+#endif
+            return go;
+        }
+
+        // Destroys the MOD_Room child (and its entire subtree) with Undo support in the editor.
+        private void DestroyChildRoot()
+        {
+            var existing = transform.Find(rootName);
+            if (existing == null) return;
 
 #if UNITY_EDITOR
-            Undo.DestroyObjectImmediate(existing);
+            Undo.DestroyObjectImmediate(existing.gameObject);
 #else
             if (Application.isPlaying)
-                Destroy(existing);
+                Destroy(existing.gameObject);
             else
-                DestroyImmediate(existing);
+                DestroyImmediate(existing.gameObject);
 #endif
             Debug.Log($"[RoomBuilder] Removed existing '{rootName}'.");
-            return 1;
+        }
+
+        // Removes stale RoomPiece and V2_ExitPoint_* children that older code placed directly
+        // on the RoomBuilder GameObject. Also destroys any scene-level MOD_Room that is not
+        // a child of this builder (created by the pre-child-root architecture).
+        private void MigrateLegacyRoomPieceFromBuilder()
+        {
+            var legacyPiece = GetComponent<RoomPiece>();
+            if (legacyPiece != null)
+            {
+                DestroyImmediate(legacyPiece);
+                Debug.Log("[RoomBuilder] Migrated legacy RoomPiece off the builder GameObject.");
+            }
+
+            var legacyExits = new List<GameObject>();
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                var child = transform.GetChild(i);
+                if (child.name.StartsWith("V2_ExitPoint_"))
+                    legacyExits.Add(child.gameObject);
+            }
+            foreach (var go in legacyExits)
+                DestroyImmediate(go);
+            if (legacyExits.Count > 0)
+                Debug.Log($"[RoomBuilder] Migrated {legacyExits.Count} legacy ExitPoint children off the builder GameObject.");
+
+            // Scene-level MOD_Room left over from the old architecture (not a child of this builder).
+            var sceneRoot = GameObject.Find(rootName);
+            if (sceneRoot != null && sceneRoot.transform.parent != transform)
+            {
+                DestroyImmediate(sceneRoot);
+                Debug.Log($"[RoomBuilder] Destroyed legacy scene-level '{rootName}'.");
+            }
         }
 
         // Instantiates a prefab under the given parent. Uses PrefabUtility in the editor
@@ -283,8 +363,41 @@ namespace LevelEditor
             return Instantiate(prefab, parent);
         }
 
-        // Direction order for auto-doorways. requiresWidth=true means N/S (x varies, width must be >=3);
-        // false means E/W (z varies, depth must be >=3).
+        // ── Catalogue / theme resolution ──────────────────────────────────────
+
+        /// <summary>
+        /// Returns the prefab to use for the given category.
+        /// Priority: theme slot → direct inspector slot fallback.
+        /// </summary>
+        public GameObject ResolvePrefab(PieceCatalogue.PieceType cat)
+        {
+            if (catalogue != null && !string.IsNullOrEmpty(themeName))
+            {
+                PieceCatalogue.Theme theme = catalogue.GetTheme(themeName);
+                if (theme != null)
+                {
+                    GameObject themed = cat switch
+                    {
+                        PieceCatalogue.PieceType.Floor   => theme.floor,
+                        PieceCatalogue.PieceType.Wall    => theme.wall,
+                        PieceCatalogue.PieceType.Corner  => theme.corner,
+                        PieceCatalogue.PieceType.Column  => theme.column,
+                        PieceCatalogue.PieceType.Doorway => theme.doorway,
+                        _                                => null,
+                    };
+                    if (themed != null) return themed;
+                    Debug.LogWarning($"[RoomBuilder] Theme '{themeName}' has no prefab for {cat}. Falling back to direct slot.");
+                }
+            }
+            return cat switch
+            {
+                PieceCatalogue.PieceType.Floor  => floorPrefab,
+                PieceCatalogue.PieceType.Wall   => wallPrefab,
+                PieceCatalogue.PieceType.Corner => cornerPrefab,
+                _                               => null,
+            };
+        }
+
         private struct DoorSlot
         {
             public CellEdge edge;
@@ -331,82 +444,78 @@ namespace LevelEditor
 
         private static Vector3 WallPivotShift(WallPivotPosition pivot, WallKind kind)
         {
-            float half = CellMap.CellSize * 0.5f; // 2f
-
-            // HalfL: mirror pivot authoring, always EndX-equivalent (-2 on local X).
+            float half = CellMap.CellSize * 0.5f;
             if (kind == WallKind.HalfL) return new Vector3(-half, 0f, 0f);
-
-            // Straight/HalfR: use user's wallPivot setting.
             switch (pivot)
             {
                 case WallPivotPosition.StartX: return new Vector3( half, 0f, 0f);
                 case WallPivotPosition.EndX:   return new Vector3(-half, 0f, 0f);
-                default:                       return Vector3.zero; // Center
+                default:                       return Vector3.zero;
             }
         }
 
         private static Vector3 FloorPivotShift(FloorPivotPosition pivot)
         {
-            float half = CellMap.CellSize * 0.5f; // 2f
+            float half = CellMap.CellSize * 0.5f;
             switch (pivot)
             {
                 case FloorPivotPosition.PivotNW: return new Vector3( half, 0f, -half);
                 case FloorPivotPosition.PivotNE: return new Vector3(-half, 0f, -half);
                 case FloorPivotPosition.PivotSW: return new Vector3( half, 0f,  half);
                 case FloorPivotPosition.PivotSE: return new Vector3(-half, 0f,  half);
-                default:                         return Vector3.zero; // Center
+                default:                         return Vector3.zero;
             }
         }
 
         // ── RoomPiece + ExitPoint stamping ────────────────────────────────────
 
-        // Per-edge data for ExitPoint placement.
-        // Indexed by (int)CellEdge: North=0, East=1, South=2, West=3.
         private struct ExitEdgeData
         {
-            public Vector3             posOffset;   // from cell center in solver world-space
-            public Vector3             outwardDir;  // unit vector away from room interior
+            public Vector3             posOffset;
+            public Vector3             outwardDir;
             public ExitPoint.Direction exitDir;
         }
 
         private static readonly ExitEdgeData[] s_ExitEdgeData = new ExitEdgeData[]
         {
             // North (CellEdge 0): +Z face
-            new ExitEdgeData { posOffset = new Vector3(0f,                      0f, CellMap.CellSize * 0.5f),  outwardDir = Vector3.forward, exitDir = ExitPoint.Direction.North },
+            new ExitEdgeData { posOffset = new Vector3(0f,                       0f, CellMap.CellSize * 0.5f),  outwardDir = Vector3.forward, exitDir = ExitPoint.Direction.North },
             // East  (CellEdge 1): +X face
-            new ExitEdgeData { posOffset = new Vector3(CellMap.CellSize * 0.5f, 0f, 0f),                       outwardDir = Vector3.right,   exitDir = ExitPoint.Direction.East  },
+            new ExitEdgeData { posOffset = new Vector3(CellMap.CellSize * 0.5f,  0f, 0f),                       outwardDir = Vector3.right,   exitDir = ExitPoint.Direction.East  },
             // South (CellEdge 2): -Z face
-            new ExitEdgeData { posOffset = new Vector3(0f,                      0f, -CellMap.CellSize * 0.5f), outwardDir = Vector3.back,    exitDir = ExitPoint.Direction.South },
+            new ExitEdgeData { posOffset = new Vector3(0f,                       0f, -CellMap.CellSize * 0.5f), outwardDir = Vector3.back,    exitDir = ExitPoint.Direction.South },
             // West  (CellEdge 3): -X face
-            new ExitEdgeData { posOffset = new Vector3(-CellMap.CellSize * 0.5f, 0f, 0f),                      outwardDir = Vector3.left,    exitDir = ExitPoint.Direction.West  },
+            new ExitEdgeData { posOffset = new Vector3(-CellMap.CellSize * 0.5f, 0f, 0f),                       outwardDir = Vector3.left,    exitDir = ExitPoint.Direction.West  },
         };
 
         /// <summary>
-        /// Stamps a <see cref="RoomPiece"/> component (with bounds) on this GameObject and
-        /// spawns one <see cref="ExitPoint"/> child per doorway recorded on <paramref name="map"/>.
-        /// Idempotent — stale V2_ExitPoint_ children from a prior build are destroyed first.
+        /// Stamps a <see cref="RoomPiece"/> component (with bounds) on the <b>MOD_Room</b> child
+        /// and spawns one <see cref="ExitPoint"/> child per doorway on <paramref name="map"/>.
+        /// Creates MOD_Room if absent. Idempotent — stale V2_ExitPoint_* children are destroyed first.
         /// </summary>
         public void PopulateRoomPiece(CellMap map)
         {
+            GameObject roomRoot = GetOrCreateRoomRoot();
+
             // ── RoomPiece bounds ─────────────────────────────────────────────
-            var piece = GetComponent<RoomPiece>() ?? gameObject.AddComponent<RoomPiece>();
+            var piece = roomRoot.GetComponent<RoomPiece>() ?? roomRoot.AddComponent<RoomPiece>();
 
             float width   = map.Width  * CellMap.CellSize;
             float depth   = map.Depth  * CellMap.CellSize;
             int   maxTier = map.GetMaxTierUsed();
             float height  = (maxTier + 1) * CellMap.TierHeight;
 
-            // boundsSize = half-extents (RoomPiece convention: GetWorldBounds uses size*2).
-            // Room geometry is XZ-centered at world origin, so boundsOffset.x/z = 0.
-            // Y is floor-anchored: center sits at height/2 above Y=0.
             piece.boundsSize   = new Vector3(width * 0.5f, height * 0.5f, depth * 0.5f);
             piece.boundsOffset = new Vector3(0f, height * 0.5f, 0f);
 
             Debug.Log($"[RoomPiece] size=({width}, {height}, {depth}), center=(0, {height * 0.5f}, 0), maxTier={maxTier}");
 
-            // ── Remove stale ExitPoints ──────────────────────────────────────
+            piece.pieceType    = pieceType == PieceType.Room ? RoomPiece.PieceType.Room : RoomPiece.PieceType.Hall;
+            piece.categoryName = ResolveCategoryName();
+
+            // ── Remove stale ExitPoints on MOD_Room ──────────────────────────
             var stale = new List<GameObject>();
-            foreach (Transform child in transform)
+            foreach (Transform child in roomRoot.transform)
                 if (child.name.StartsWith("V2_ExitPoint_"))
                     stale.Add(child.gameObject);
 
@@ -420,15 +529,16 @@ namespace LevelEditor
                     Destroy(go);
             }
 
-            // ── Spawn ExitPoints ─────────────────────────────────────────────
+            // ── Spawn ExitPoints as children of MOD_Room ─────────────────────
+            // Positions are in the solver's origin-centered frame, which equals MOD_Room's
+            // local space (MOD_Room sits at (0,0,0) local on the RoomBuilder).
             foreach (var (x, z, edge) in map.AllDoorways())
             {
-                ExitEdgeData info = s_ExitEdgeData[(int)edge];
-
-                Vector3 localPos = map.CellCenterWorld(x, z) + info.posOffset;
+                ExitEdgeData info     = s_ExitEdgeData[(int)edge];
+                Vector3      localPos = map.CellCenterWorld(x, z) + info.posOffset;
 
                 var child = new GameObject($"V2_ExitPoint_{edge}_{x}_{z}");
-                child.transform.SetParent(transform, false);
+                child.transform.SetParent(roomRoot.transform, false);
                 child.transform.localPosition = localPos;
                 child.transform.localRotation = Quaternion.LookRotation(info.outwardDir, Vector3.up);
 
@@ -444,19 +554,118 @@ namespace LevelEditor
             piece.RefreshExits();
         }
 
+        // ── Save folder helpers ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the asset-relative folder path for the current Type + Category selection.
+        /// Example: "Assets/Prefabs/Rooms/Starter".
+        /// </summary>
+        public string ResolveSaveFolder()
+        {
+            string typeFolder = pieceType == PieceType.Room ? "Rooms" : "Halls";
+            return $"Assets/Prefabs/{typeFolder}/{ResolveCategoryName()}";
+        }
+
+        /// <summary>Returns the display name of the currently selected category ("Starter", "Small", etc).</summary>
+        public string ResolveCategoryName()
+        {
+            return pieceType == PieceType.Room
+                ? roomCategory.ToString()
+                : hallCategory.ToString();
+        }
+
         // ── Prefab save ───────────────────────────────────────────────────────
 
-        [ContextMenu("Save as RoomPiece Prefab")]
-        private void SaveAsRoomPiecePrefab()
+        /// <summary>
+        /// Saves the MOD_Room child as a prefab into the categorized folder.
+        /// Opens a file-save panel starting in that folder; cancels silently if dismissed.
+        /// </summary>
+        [ContextMenu("Save as RoomPiece")]
+        public void SaveAsRoomPiece()
         {
 #if UNITY_EDITOR
-            string defaultName = $"V2_RoomPiece_{rectangleWidth}x{rectangleDepth}.prefab";
+            string folder = ResolveSaveFolder();
+            EnsureFolderExists(folder);
+
+            string defaultName = $"{ResolveCategoryName()}_{rectangleWidth}x{rectangleDepth}";
             string path = EditorUtility.SaveFilePanelInProject(
-                "Save RoomPiece Prefab", defaultName, "prefab", "Choose prefab save location");
-            if (string.IsNullOrEmpty(path)) return;
-            PrefabUtility.SaveAsPrefabAsset(gameObject, path);
-            Debug.Log($"[RoomBuilder] Saved prefab to {path}");
+                "Save RoomPiece", defaultName, "prefab", "", folder);
+
+            if (string.IsNullOrEmpty(path))
+            {
+                Debug.Log("[RoomBuilder] Save cancelled.");
+                return;
+            }
+
+            SaveRoomRootAsPrefab(path, Path.GetFileNameWithoutExtension(path));
 #endif
         }
+
+        /// <summary>
+        /// Saves the MOD_Room child to a user-chosen path.
+        /// Kept as a fallback when the categorized folder is not appropriate.
+        /// </summary>
+        [ContextMenu("Save to Custom Path…")]
+        public void SaveToCustomPath()
+        {
+#if UNITY_EDITOR
+            string defaultName = $"V2_RoomPiece_{rectangleWidth}x{rectangleDepth}";
+            string path = EditorUtility.SaveFilePanelInProject(
+                "Save RoomPiece (Custom Path)", defaultName, "prefab", "");
+            if (string.IsNullOrEmpty(path)) return;
+            SaveRoomRootAsPrefab(path, Path.GetFileNameWithoutExtension(path));
+#endif
+        }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Walks <paramref name="assetPath"/> component-by-component and creates any missing folders.
+        /// Safe to call when the folder already exists.
+        /// </summary>
+        public void EnsureFolderExists(string assetPath)
+        {
+            var    parts   = assetPath.Split('/');
+            string current = parts[0];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string next = $"{current}/{parts[i]}";
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    AssetDatabase.CreateFolder(current, parts[i]);
+                    Debug.Log($"[RoomBuilder] Created folder {next}");
+                }
+                current = next;
+            }
+        }
+
+        /// <summary>
+        /// Duplicates the MOD_Room child, renames the copy to <paramref name="newName"/>,
+        /// saves it as a prefab at <paramref name="path"/>, then destroys the copy.
+        /// The scene's MOD_Room is left intact. The duplicate is always destroyed — even if
+        /// the save throws.
+        /// </summary>
+        public void SaveRoomRootAsPrefab(string path, string newName)
+        {
+            var rootTf = transform.Find(rootName);
+            if (rootTf == null)
+            {
+                Debug.LogError("[RoomBuilder] No room root found. Build the room first.");
+                return;
+            }
+
+            GameObject dup = Instantiate(rootTf.gameObject);
+            dup.name = newName;
+            dup.transform.SetParent(null, true);
+            try
+            {
+                PrefabUtility.SaveAsPrefabAsset(dup, path);
+                Debug.Log($"[RoomBuilder] Saved '{newName}' to {path}");
+            }
+            finally
+            {
+                DestroyImmediate(dup);
+            }
+        }
+#endif
     }
 }

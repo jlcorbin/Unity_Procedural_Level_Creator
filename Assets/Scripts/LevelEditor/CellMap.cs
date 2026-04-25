@@ -158,9 +158,6 @@ namespace LevelEditor
 
         public void SetCell(Vector2Int p, Cell cell) => SetCell(p.x, p.y, cell);
 
-        /// <summary>Clears a single cell back to Empty.</summary>
-        public void Clear(int x, int z) => SetCell(x, z, Cell.Empty);
-
         /// <summary>Clears every cell in the grid and removes all doorway marks.</summary>
         public void ClearAll()
         {
@@ -296,32 +293,6 @@ namespace LevelEditor
             for (int i = 0; i < _cells.Length; i++)
                 if (!_cells[i].IsEmpty) n++;
             return n;
-        }
-
-        /// <summary>
-        /// Returns the tight AABB in GRID SPACE around all filled cells.
-        /// Returns (Vector2Int.zero, Vector2Int.zero) size (0,0) if the map is empty.
-        /// </summary>
-        public (Vector2Int min, Vector2Int size) FilledBounds()
-        {
-            int minX = int.MaxValue, minZ = int.MaxValue;
-            int maxX = int.MinValue, maxZ = int.MinValue;
-            bool any = false;
-
-            for (int z = 0; z < _depth; z++)
-            for (int x = 0; x < _width; x++)
-            {
-                if (_cells[x + z * _width].IsEmpty) continue;
-                if (x < minX) minX = x;
-                if (z < minZ) minZ = z;
-                if (x > maxX) maxX = x;
-                if (z > maxZ) maxZ = z;
-                any = true;
-            }
-
-            if (!any) return (Vector2Int.zero, Vector2Int.zero);
-            return (new Vector2Int(minX, minZ),
-                    new Vector2Int(maxX - minX + 1, maxZ - minZ + 1));
         }
 
         /// <summary>
