@@ -8,10 +8,10 @@ namespace LevelGen.V2
     [Serializable]
     public class LevelGenSettings
     {
-        // Output
-        public string sceneName       = "Dungeon_New";
-        public string outputFolder    = "Assets/Levels/Generated";
-        public bool   saveToSceneFile = true;   // ON = write a .unity scene file; OFF = drop in active scene
+        // Output (set by the Save dialog at save time, not surfaced in the EditorWindow).
+        // [NonSerialized] keeps these out of any serialized blob so they default cleanly each session.
+        [NonSerialized] public string sceneName    = "";
+        [NonSerialized] public string outputFolder = "Assets/Levels/Generated";
 
         // Source
         public PieceCatalogue catalogue;

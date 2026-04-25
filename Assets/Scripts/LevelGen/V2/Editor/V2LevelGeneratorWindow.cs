@@ -10,6 +10,12 @@ namespace LevelGen.V2.Editor
         LevelGenSettings _settings = new LevelGenSettings();
         Vector2          _scroll;
 
+        // Last successful Generate's output. Save button uses these.
+        // Cleared at the start of every Generate click; set on success.
+        // _lastGeneratedRoot uses Unity's destroyed-object null check naturally.
+        GameObject       _lastGeneratedRoot;
+        GenerationResult _lastGenerationResult;
+
         // ── Entry point ───────────────────────────────────────────────────────
 
         [MenuItem("LevelGen/V2 Level Generator")]
@@ -25,7 +31,6 @@ namespace LevelGen.V2.Editor
         {
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
 
-            DrawOutputSection();
             DrawSourceSection();
             DrawRoomBudgetSection();
             DrawHallSizingSection();
@@ -34,33 +39,13 @@ namespace LevelGen.V2.Editor
             DrawReproducibilitySection();
             EditorGUILayout.Space(12);
             DrawGenerateButton();
+            EditorGUILayout.Space(8);
+            DrawSaveButton();
 
             EditorGUILayout.EndScrollView();
         }
 
         // ── Sections ──────────────────────────────────────────────────────────
-
-        void DrawOutputSection()
-        {
-            EditorGUILayout.LabelField("Output", EditorStyles.boldLabel);
-
-            _settings.sceneName = EditorGUILayout.TextField("Scene name", _settings.sceneName);
-
-            EditorGUILayout.BeginHorizontal();
-            _settings.outputFolder = EditorGUILayout.TextField("Output folder", _settings.outputFolder);
-            if (GUILayout.Button("…", GUILayout.Width(28)))
-                _settings.outputFolder = PickFolderRelativeToAssets(_settings.outputFolder);
-            EditorGUILayout.EndHorizontal();
-
-            _settings.saveToSceneFile = EditorGUILayout.Toggle(
-                new GUIContent("Save to scene file",
-                    "When ON, generation writes a .unity scene file to " +
-                    "outputFolder/sceneName.unity. When OFF, the generated " +
-                    "level is dropped into the currently open scene."),
-                _settings.saveToSceneFile);
-
-            EditorGUILayout.Space(8);
-        }
 
         void DrawSourceSection()
         {
@@ -199,19 +184,6 @@ namespace LevelGen.V2.Editor
             if (_settings.catalogue == null)
                 errors.Add("Catalogue is required.");
 
-            // sceneName / outputFolder only required when actually saving a .unity file.
-            // When saveToSceneFile is off, the manifest still writes (with a default
-            // folder + seed-based filename fallback handled by the generator).
-            if (_settings.saveToSceneFile)
-            {
-                if (string.IsNullOrWhiteSpace(_settings.sceneName))
-                    errors.Add("Scene name is required when 'Save to scene file' is on.");
-
-                if (string.IsNullOrEmpty(_settings.outputFolder)
-                    || !_settings.outputFolder.StartsWith("Assets/"))
-                    errors.Add("Output folder must start with \"Assets/\" when 'Save to scene file' is on.");
-            }
-
             if (_settings.TotalRoomCount < 2)
                 errors.Add("Total room count must be at least 2 (Starter + Boss minimum).");
 
@@ -239,6 +211,10 @@ namespace LevelGen.V2.Editor
 
         void OnGenerate()
         {
+            // Reset state at the start of every Generate click.
+            _lastGeneratedRoot    = null;
+            _lastGenerationResult = null;
+
             var result = V2LevelGenerator.Generate(_settings);
             if (result.Success)
             {
@@ -246,9 +222,8 @@ namespace LevelGen.V2.Editor
                           $"rooms={result.RoomsPlaced}, halls={result.HallsPlaced}, " +
                           $"branches={result.BranchesPlaced}/{result.BranchesRequested}, " +
                           $"backtracks={result.BacktrackCount}, " +
-                          $"{result.ElapsedSeconds:F2}s\n" +
-                          $"  Manifest: {result.ManifestPath}\n" +
-                          $"  Scene:    {result.ScenePath ?? "(left in active scene)"}");
+                          $"{result.ElapsedSeconds:F2}s. " +
+                          $"Click Save Generated Level to write a .unity + manifest.");
 
                 if (result.BranchesPlaced < result.BranchesRequested)
                 {
@@ -256,16 +231,11 @@ namespace LevelGen.V2.Editor
                                      $"branches placed — see warnings above.");
                 }
 
-                if (!string.IsNullOrEmpty(result.ScenePath))
-                {
-                    var sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(result.ScenePath);
-                    if (sceneAsset != null)
-                        EditorGUIUtility.PingObject(sceneAsset);
-                }
-                else if (result.Root != null)
-                {
+                _lastGeneratedRoot    = result.Root;
+                _lastGenerationResult = result;
+
+                if (result.Root != null)
                     Selection.activeGameObject = result.Root;
-                }
             }
             else
             {
@@ -275,29 +245,78 @@ namespace LevelGen.V2.Editor
             }
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────
+        // ── Save button + dialog ──────────────────────────────────────────────
 
-        string PickFolderRelativeToAssets(string current)
+        void DrawSaveButton()
         {
-            string startPath = string.IsNullOrEmpty(current)
-                ? Application.dataPath
-                : current;
+            // _lastGeneratedRoot uses Unity's overloaded == — a destroyed root
+            // satisfies the != null check failing, which is what we want.
+            bool canSave = _lastGeneratedRoot != null;
 
-            string abs = EditorUtility.OpenFolderPanel("Output folder", startPath, "");
-
-            if (string.IsNullOrEmpty(abs))
-                return current;
-
-            if (!abs.StartsWith(Application.dataPath))
+            using (new EditorGUI.DisabledScope(!canSave))
             {
-                EditorUtility.DisplayDialog(
-                    "Invalid folder",
-                    "Folder must be under Assets/.",
-                    "OK");
-                return current;
+                if (GUILayout.Button("Save Generated Level", GUILayout.Height(28)))
+                    OnSaveClicked();
             }
 
-            return "Assets" + abs.Substring(Application.dataPath.Length);
+            if (!canSave)
+            {
+                EditorGUILayout.HelpBox(
+                    "Generate a level first. The Save button writes the " +
+                    "GeneratedLevel root in the active scene to a new " +
+                    ".unity file plus a sibling manifest.",
+                    MessageType.Info);
+            }
+        }
+
+        void OnSaveClicked()
+        {
+            const string DefaultFolder = "Assets/Levels/Generated";
+            V2LevelGenerator.EnsureAssetFolder(DefaultFolder);
+
+            string defaultName = _lastGenerationResult != null
+                ? $"Dungeon_{_lastGenerationResult.Seed}"
+                : "Dungeon_New";
+
+            string assetPath = EditorUtility.SaveFilePanelInProject(
+                "Save Generated Level",
+                defaultName,
+                "unity",
+                "Choose a folder and name for the generated dungeon scene.",
+                DefaultFolder);
+
+            if (string.IsNullOrEmpty(assetPath))
+                return;     // User cancelled.
+
+            var outcome = V2LevelGenerator.SaveGeneratedLevel(
+                _lastGeneratedRoot,
+                _lastGenerationResult,
+                _settings,
+                V2LevelGenerator.LastPlacements,
+                assetPath);
+
+            if (outcome.Success)
+            {
+                Debug.Log($"[V2 Gen] Saved scene → {outcome.ScenePath}\n" +
+                          $"          manifest → {outcome.ManifestPath}");
+
+                var sceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(outcome.ScenePath);
+                if (sceneAsset != null)
+                    EditorGUIUtility.PingObject(sceneAsset);
+
+                // Root has been moved into the saved scene and that scene closed,
+                // so the in-memory reference is destroyed. Clear our state so the
+                // Save button disables until the next Generate.
+                _lastGeneratedRoot    = null;
+                _lastGenerationResult = null;
+            }
+            else
+            {
+                EditorUtility.DisplayDialog(
+                    "Save failed",
+                    outcome.FailureReason ?? "Unknown error.",
+                    "OK");
+            }
         }
     }
 }

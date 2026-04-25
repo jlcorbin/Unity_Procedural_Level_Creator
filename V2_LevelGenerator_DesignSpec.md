@@ -1,6 +1,6 @@
 # V2 Level Generator — Design Spec
 
-**Status:** Phases A–D complete. Theme-aware prefab selection is the only spec item still deferred.
+**Status:** Phases A–D complete. Save UI revised: scene + manifest output is now driven by an explicit Save Generated Level button with a file dialog, replacing the auto-save checkbox from Phase D. Theme-aware prefab selection is the only spec item still deferred.
 **Date:** 2026-04-25
 
 **Implementation status:**
@@ -29,8 +29,10 @@ rotation, backtracking, scene saving) is new V2 code.
 ## User-facing controls (EditorWindow params)
 
 ### Output
-- **Scene name** (string, e.g. `Dungeon_Tutorial_01`)
-- **Output folder** (Assets-relative path, e.g. `Assets/Levels/Generated/`)
+Output is captured at Save time, not at Generate time. The
+Save Generated Level button opens a file dialog anchored at
+`Assets/Levels/Generated/` where the user names the scene and
+picks the destination folder.
 
 ### Source
 - **Catalogue** (PieceCatalogue reference)
@@ -75,9 +77,9 @@ rotation, backtracking, scene saving) is new V2 code.
 
 1. Place **Starter** room at world origin, parented under
    `GeneratedLevel` root GameObject.
-2. **Spine length** = total Rooms (Small + Medium + Large) − Branch slot
-   count. Boss is appended at the end of the spine, so the spine ends
-   at Boss.
+2. **Spine length** = total Rooms (Small + Medium + Large + Special)
+   − Branch slot count. Boss is appended at the end of the spine, so
+   the spine ends at Boss. Starter and Boss are not counted in the pool.
 3. For each spine position 1..N:
    - Pick a random unused exit on the previous room.
    - Pick a random room category from the remaining unused budget
@@ -183,15 +185,18 @@ Starter and Boss are not counted in the pool.
 ### Output
 
 - Single root GameObject `GeneratedLevel` parents every spawned room
-  and hall.
-- Scene saved to `{outputFolder}/{sceneName}.unity`.
-- Manifest saved to `{outputFolder}/{sceneName}_manifest.txt` —
-  contents:
+  and hall, placed in the currently active scene.
+- When the user clicks **Save Generated Level**, the root is moved
+  into a brand-new scene saved to a user-chosen path under `Assets/`.
+  The scene contains GeneratedLevel + a default Main Camera + a
+  Directional Light.
+- The manifest is written alongside the saved scene as
+  `{sceneName}_manifest.txt` — contents:
   - Seed used
   - All input params (catalogue, theme, counts, layout settings)
   - Final room/hall list with placement order
   - Backtrack count
-  - Slack per hall (gap vs hall length)
+  - Slack per hall (gap vs hall length; reserved, always 0 in V2)
   - Total generation time
 
 ---
@@ -205,23 +210,31 @@ Starter and Boss are not counted in the pool.
 
 ### Layout
 
-Single scrollable EditorWindow with collapsible sections:
-- Output (scene name, folder)
+Single scrollable EditorWindow with sections (no Output section
+— output path is captured at Save time):
 - Source (catalogue, theme picker)
 - Room Budget (six int fields)
-- Hall Budget (four int fields + auto-fill toggle)
+- Hall Sizing (Spine + Branch hall size enums)
 - Layout (style dropdown, branch slots, difficulty fields)
+- Difficulty Signals (slider + ints, logged-only)
 - Reproducibility (seed)
-- **Generate** button at the bottom — disabled until required params
-  are valid (catalogue assigned, scene name non-empty)
+- **Generate** button — disabled until required params are valid
+  (catalogue assigned).
+- **Save Generated Level** button (below Generate) — disabled
+  until a successful Generate has placed something in the active
+  scene. Opens a save-as dialog anchored at
+  `Assets/Levels/Generated/` with default name `Dungeon_<seed>`.
 
 ### Validation before generate
 
 - Catalogue assigned
-- Scene name non-empty and unique in target folder (or prompt to
-  overwrite)
 - Total room count ≥ 2 (Starter + Boss minimum)
-- Branch slot count ≤ spine length − 1
+- Exactly 1 Starter; exactly 1 Boss
+- Branch slot count ≤ combined Small+Medium+Large+Special pool
+
+(Scene-name and output-folder validation no longer apply — the
+output path is chosen at Save time via the file dialog, which
+itself constrains results to under `Assets/`.)
 
 ---
 

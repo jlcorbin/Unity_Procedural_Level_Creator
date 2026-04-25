@@ -1,7 +1,7 @@
 V2 Level Generator — Manifest
 ==============================
-Generated:   2026-04-25T17:18:52Z
-Seed:        2
+Generated:   2026-04-25T20:51:53Z
+Seed:        1584413918
 Elapsed:     0.00s
 
 Output
@@ -21,11 +21,11 @@ Room Budget
 -----------
 Starter:   1
 Boss:      1
-Small:     5
-Medium:    2
-Large:     2
+Small:     8
+Medium:    11
+Large:     3
 Special:   0
-Total:     11
+Total:     24
 
 Hall Budget
 -----------
@@ -35,39 +35,65 @@ Branch hall size:  Small
 Layout
 ------
 Style:               LinearWithBranches
-Branch slot count:   4
+Branch slot count:   2
 Branching factor:    0.50     (logged only — not used in V2)
-Dead-end count:      2        (logged only — not used in V2)
+Dead-end count:      0        (logged only — not used in V2)
 Secret-room count:   0        (logged only — not used in V2)
 
 Results
 -------
-Rooms placed:        11
-Halls placed:        10
-Branches placed:     4 / 4
-Backtrack count:     0
+Rooms placed:        24
+Halls placed:        23
+Branches placed:     2 / 2
+Backtrack count:     5
 
 Placements (in order)
 ---------------------
 #    Kind             Category   Prefab                              Pos                       RotY  Slack
 1    Starter          Starter    Starter_10x10                       (   0.00,   0.00,   0.00)    0    - 
-2    Hall:Spine       -          Medium_3x8                          (   2.00,   0.00,  36.00)  180   0.0
-3    Spine            Small      Small_5x3                           (   2.00,   0.00,  58.00)  180    - 
-4    Hall:Spine       -          Medium_8x8                          (   4.00,   0.00,  80.00)  180   0.0
-5    Spine            Small      Small_5x5                           ( -22.00,   0.00,  78.00)  270    - 
-6    Hall:Spine       -          Medium_8x8                          ( -48.00,   0.00,  76.00)  270   0.0
-7    Spine            Small      Small_5x5                           ( -50.00,   0.00, 102.00)    0    - 
-8    Hall:Spine       -          Medium_3x8                          ( -50.00,   0.00, 128.00)  180   0.0
-9    Spine            Large      Large_12x12                         ( -52.00,   0.00, 168.00)   90    - 
-10   Hall:Spine       -          Medium_3x8                          ( -50.00,   0.00, 208.00)  180   0.0
-11   Spine            Medium     Medium_8x8                          ( -52.00,   0.00, 240.00)   90    - 
-12   Hall:Spine       -          Medium_3x8                          ( -84.00,   0.00, 238.00)   90   0.0
-13   Boss             Boss       Boss_15x15                          (-130.00,   0.00, 238.00)   90    - 
-14   Hall:Branch      -          Small_3x5                           ( -18.00,   0.00, 166.00)  270   0.0
-15   Branch           Large      Large_12x12                         (  16.00,   0.00, 164.00)  270    - 
-16   Hall:Branch      -          Small_3x5                           ( -26.00,   0.00, 238.00)  270   0.0
-17   Branch           Small      Small_5x3                           ( -10.00,   0.00, 238.00)  270    - 
-18   Hall:Branch      -          Small_3x5                           ( -86.00,   0.00, 166.00)   90   0.0
-19   Branch           Medium     Medium_8x8                          (-112.00,   0.00, 164.00)    0    - 
-20   Hall:Branch      -          Small_3x5                           (   6.00,   0.00, 238.00)   90   0.0
-21   Branch           Small      Small_5x3                           (  22.00,   0.00, 238.00)   90    - 
+2    Hall:Spine       -          Medium_8x8                          (   0.00,   0.00,  36.00)    0   0.0
+3    Spine            Medium     Medium_8x8                          (   4.00,   0.00,  68.00)  180    - 
+4    Hall:Spine       -          Medium_8x8                          (   0.00,   0.00, 100.00)    0   0.0
+5    Spine            Large      Large_12x12                         (   0.00,   0.00, 140.00)   90    - 
+6    Hall:Spine       -          Medium_8x8                          (   0.00,   0.00, 180.00)   90   0.0
+7    Spine            Small      Small_5x3                           ( -22.00,   0.00, 178.00)  270    - 
+8    Hall:Spine       -          Medium_3x8                          ( -44.00,   0.00, 178.00)   90   0.0
+9    Spine            Small      Small_5x3                           ( -66.00,   0.00, 178.00)  270    - 
+10   Hall:Spine       -          Medium_8x8                          ( -88.00,   0.00, 180.00)   90   0.0
+11   Spine            Medium     Medium_8x8                          ( -84.00,   0.00, 148.00)  270    - 
+12   Hall:Spine       -          Medium_3x8                          (-116.00,   0.00, 150.00)  270   0.0
+13   Spine            Large      Large_12x12                         (-156.00,   0.00, 152.00)   90    - 
+14   Hall:Spine       -          Medium_3x8                          (-154.00,   0.00, 192.00)  180   0.0
+15   Spine            Small      Small_5x3                           (-154.00,   0.00, 214.00)    0    - 
+16   Hall:Spine       -          Medium_8x8                          (-156.00,   0.00, 236.00)    0   0.0
+17   Spine            Medium     Medium_8x8                          (-156.00,   0.00, 268.00)    0    - 
+18   Hall:Spine       -          Medium_3x8                          (-124.00,   0.00, 270.00)   90   0.0
+19   Spine            Small      Small_5x5                           ( -98.00,   0.00, 270.00)  270    - 
+20   Hall:Spine       -          Medium_3x8                          ( -72.00,   0.00, 270.00)  270   0.0
+21   Spine            Small      Small_5x3                           ( -50.00,   0.00, 270.00)  270    - 
+22   Hall:Spine       -          Medium_8x8                          ( -28.00,   0.00, 272.00)   90   0.0
+23   Spine            Medium     Medium_8x8                          ( -24.00,   0.00, 240.00)  270    - 
+24   Hall:Spine       -          Medium_3x8                          (   8.00,   0.00, 242.00)  270   0.0
+25   Spine            Large      Large_12x12                         (  48.00,   0.00, 244.00)   90    - 
+26   Hall:Spine       -          Medium_3x8                          (  50.00,   0.00, 284.00)  180   0.0
+27   Spine            Small      Small_5x5                           (  50.00,   0.00, 310.00)  180    - 
+28   Hall:Spine       -          Medium_3x8                          (  50.00,   0.00, 336.00)    0   0.0
+29   Spine            Medium     Medium_8x8                          (  48.00,   0.00, 368.00)    0    - 
+30   Hall:Spine       -          Medium_8x8                          (  48.00,   0.00, 400.00)    0   0.0
+31   Spine            Medium     Medium_8x8                          (  48.00,   0.00, 432.00)   90    - 
+32   Hall:Spine       -          Medium_8x8                          (  80.00,   0.00, 432.00)  180   0.0
+33   Spine            Medium     Medium_8x8                          (  76.00,   0.00, 464.00)    0    - 
+34   Hall:Spine       -          Medium_8x8                          (  80.00,   0.00, 496.00)  180   0.0
+35   Spine            Medium     Medium_8x8                          (  80.00,   0.00, 528.00)  180    - 
+36   Hall:Spine       -          Medium_3x8                          (  78.00,   0.00, 560.00)  180   0.0
+37   Spine            Medium     Medium_8x8                          (  76.00,   0.00, 592.00)    0    - 
+38   Hall:Spine       -          Medium_3x8                          (  78.00,   0.00, 624.00)    0   0.0
+39   Spine            Medium     Medium_8x8                          (  76.00,   0.00, 656.00)    0    - 
+40   Hall:Spine       -          Medium_3x8                          ( 108.00,   0.00, 658.00)   90   0.0
+41   Spine            Small      Small_5x3                           ( 130.00,   0.00, 658.00)   90    - 
+42   Hall:Spine       -          Medium_8x8                          ( 152.00,   0.00, 660.00)   90   0.0
+43   Boss             Boss       Boss_15x15                          ( 198.00,   0.00, 658.00)  270    - 
+44   Hall:Branch      -          Small_3x5                           (-154.00,   0.00, 294.00)  180   0.0
+45   Branch           Small      Small_5x5                           (-154.00,   0.00, 314.00)  180    - 
+46   Hall:Branch      -          Small_3x5                           ( -22.00,   0.00,  66.00)   90   0.0
+47   Branch           Medium     Medium_8x8                          ( -48.00,   0.00,  64.00)    0    - 

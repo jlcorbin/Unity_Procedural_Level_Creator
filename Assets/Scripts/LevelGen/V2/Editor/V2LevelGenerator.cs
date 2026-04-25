@@ -37,24 +37,41 @@ namespace LevelGen.V2
         public int         BranchesRequested;
         public int         BacktrackCount;
         public double      ElapsedSeconds;
-        public string      ScenePath;       // set when scene was saved successfully
-        public string      ManifestPath;    // always set (manifest always written)
+        public string      ScenePath;       // null until SaveGeneratedLevel succeeds
+        public string      ManifestPath;    // null until SaveGeneratedLevel succeeds
         public List<string> Log = new List<string>();
     }
 
+    /// <summary>Result returned by <see cref="V2LevelGenerator.SaveGeneratedLevel"/>.</summary>
+    public class SaveOutcome
+    {
+        public bool   Success;
+        public string ScenePath;     // null on failure or cancel
+        public string ManifestPath;  // null on failure or cancel
+        public string FailureReason; // null on success
+    }
+
     /// <summary>
-    /// Phase B + C + D generator. Places Starter at world origin, walks down a
-    /// linear spine of rooms (Small/Medium/Large/Special drawn from a single
-    /// combined pool weighted by remaining counts) connected by spine-size halls,
-    /// ends with the Boss. After Boss, attaches branches (same pool, branch-size
-    /// halls) onto random rooms with unused exits — including earlier branches.
-    /// Phase D adds optional .unity scene save and a sibling manifest text file.
+    /// Phase B + C generator. Places Starter at world origin, walks down a linear
+    /// spine of rooms (Small/Medium/Large/Special drawn from a single combined pool
+    /// weighted by remaining counts) connected by spine-size halls, ends with the
+    /// Boss. After Boss, attaches branches (same pool, branch-size halls) onto
+    /// random rooms with unused exits — including earlier branches. Phase D-revision
+    /// drops the auto-save: the generator always parents to the active scene, and a
+    /// separate Save button writes the .unity file + manifest at user-chosen path.
     /// </summary>
     public static class V2LevelGenerator
     {
-        const int    MaxBacktracks       = 50;
-        const float  CollisionEpsilon    = 0.01f;
-        const string DefaultOutputFolder = "Assets/Levels/Generated";
+        const int    MaxBacktracks = 50;
+        const float  CollisionEpsilon = 0.01f;
+
+        /// <summary>
+        /// Snapshot of the placement records from the most recent successful Generate.
+        /// Read by the EditorWindow when it calls SaveGeneratedLevel. A subsequent
+        /// Generate overwrites this — you save what's currently in the scene.
+        /// </summary>
+        public static List<PlacementRecord> LastPlacements { get; private set; }
+            = new List<PlacementRecord>();
 
         // ── State types ───────────────────────────────────────────────────────
 
@@ -145,18 +162,19 @@ namespace LevelGen.V2
             public int           slotIndex;
         }
 
-        // ── Public entry ──────────────────────────────────────────────────────
+        // ── Public entry: Generate ────────────────────────────────────────────
 
         public static GenerationResult Generate(LevelGenSettings settings)
         {
             var result = new GenerationResult { BranchesRequested = settings.branchSlotCount };
             var sw     = System.Diagnostics.Stopwatch.StartNew();
 
-            bool       useNewScene = false;
-            Scene      newScene    = default;
-            GameObject root        = null;
-            string     scenePath   = null;
-            var        placements  = new List<PlacementRecord>();
+            GameObject root       = null;
+            var        placements = new List<PlacementRecord>();
+
+            // Reset cached placements at the start of every attempt so the window's
+            // Save button never operates on stale data after a failed/aborted run.
+            LastPlacements = new List<PlacementRecord>();
 
             try
             {
@@ -205,53 +223,17 @@ namespace LevelGen.V2
                     { RoomCategory.Special, specialPool },
                 };
 
-                // Resolve output folder (with fallback when not under Assets/)
-                string outputFolder = !string.IsNullOrEmpty(settings.outputFolder)
-                                      && settings.outputFolder.StartsWith("Assets/")
-                    ? settings.outputFolder.TrimEnd('/')
-                    : DefaultOutputFolder;
-
-                // ── Optional: prepare new scene to receive the generated level ────
-                if (settings.saveToSceneFile)
+                // Destroy any prior GeneratedLevel root in the active scene so successive
+                // Generate clicks don't pile up duplicates.
+                var prior = GameObject.Find("GeneratedLevel");
+                if (prior != null)
                 {
-                    string sceneFilename = !string.IsNullOrEmpty(settings.sceneName)
-                        ? settings.sceneName
-                        : $"Dungeon_{resolvedSeed}";
-                    scenePath = $"{outputFolder}/{sceneFilename}.unity";
-
-                    bool proceed = true;
-
-                    if (File.Exists(scenePath))
-                    {
-                        proceed = EditorUtility.DisplayDialog(
-                            "Scene already exists",
-                            $"{scenePath}\n\nOverwrite this scene?",
-                            "Overwrite", "Cancel");
-                        if (!proceed)
-                            result.Log.Add($"User cancelled overwrite of {scenePath}; falling back to active-scene mode.");
-                    }
-
-                    if (proceed && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
-                    {
-                        proceed = false;
-                        result.Log.Add("User cancelled save of modified scenes; falling back to active-scene mode.");
-                    }
-
-                    if (proceed)
-                    {
-                        EnsureAssetFolder(outputFolder);
-                        newScene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Additive);
-                        EditorSceneManager.SetActiveScene(newScene);
-                        useNewScene = true;
-                    }
-                    else
-                    {
-                        // Cancellation falls back: scene is NOT saved, root stays in active scene
-                        scenePath = null;
-                    }
+                    if (Selection.activeGameObject == prior)
+                        Selection.activeGameObject = null;
+                    UnityEngine.Object.DestroyImmediate(prior);
                 }
 
-                // ── Create root (in newScene if useNewScene else active scene) ────
+                // Create root in the currently active scene
                 root = new GameObject("GeneratedLevel");
                 Undo.RegisterCreatedObjectUndo(root, "Generate V2 Level");
                 result.Root = root;
@@ -300,7 +282,6 @@ namespace LevelGen.V2
                         slots.Add(frame);
                         result.RoomsPlaced++;
                         result.HallsPlaced++;
-                        // Hall first, then room
                         placements.Add(MakeHallRecord(frame.hallPiece, "Hall:Spine"));
                         placements.Add(MakeRoomRecord(frame.roomPiece,
                             isBoss ? "Boss" : "Spine",
@@ -311,7 +292,7 @@ namespace LevelGen.V2
                     // ── Failure: backtrack ──────────────────────────────────
                     if (slots.Count == 0)
                     {
-                        CleanupOnFailure(root, useNewScene, newScene);
+                        DestroyRoot(root);
                         result.Root = null;
                         return Fail(result, sw,
                             $"Slot 0 placement failed — no candidate fits any exit on Starter (or no halls in {settings.spineHallSize} pool match).");
@@ -320,7 +301,7 @@ namespace LevelGen.V2
                     backtracks++;
                     if (backtracks > MaxBacktracks)
                     {
-                        CleanupOnFailure(root, useNewScene, newScene);
+                        DestroyRoot(root);
                         result.Root = null;
                         return Fail(result, sw,
                             $"Backtrack cap ({MaxBacktracks}) exceeded at slot {slotIdx}.");
@@ -347,7 +328,6 @@ namespace LevelGen.V2
                     result.RoomsPlaced--;
                     result.HallsPlaced--;
 
-                    // Pop two records (room then hall — added in that order)
                     if (placements.Count >= 2)
                     {
                         placements.RemoveAt(placements.Count - 1);
@@ -426,39 +406,15 @@ namespace LevelGen.V2
                 result.BranchesPlaced = branchesPlaced;
                 result.BacktrackCount = backtracks;
 
-                // ── Save scene if we set it up ────────────────────────────────
-                if (useNewScene)
-                {
-                    FrameCameraInScene(newScene, root);
-                    bool saved = EditorSceneManager.SaveScene(newScene, scenePath);
-                    if (saved)
-                    {
-                        result.ScenePath = scenePath;
-                        result.Log.Add($"Scene saved: {scenePath}");
-                    }
-                    else
-                    {
-                        result.Log.Add($"Failed to save scene at {scenePath}.");
-                    }
-                    EditorSceneManager.CloseScene(newScene, removeScene: true);
-                    useNewScene = false;
-                    result.Root = null;     // Root no longer exists in any open scene
-                    AssetDatabase.Refresh();
-                }
-
-                // ── Compute final placement ordering ──────────────────────────
+                // Final ordering for the manifest
                 for (int i = 0; i < placements.Count; i++)
                     placements[i].order = i + 1;
 
-                // ── Write manifest (always) ───────────────────────────────────
-                string manifestName = !string.IsNullOrEmpty(settings.sceneName)
-                    ? $"{settings.sceneName}_manifest.txt"
-                    : $"Dungeon_{resolvedSeed}_manifest.txt";
-                string manifestPath = $"{outputFolder}/{manifestName}";
-                EnsureAssetFolder(outputFolder);
-                WriteManifest(settings, result, placements, manifestPath);
-                result.ManifestPath = manifestPath;
-                result.Log.Add($"Manifest: {manifestPath}");
+                // Cache placements for the Save button
+                LastPlacements = new List<PlacementRecord>(placements);
+
+                // Select root for user visibility — same as Phase B/C UX
+                Selection.activeGameObject = root;
 
                 result.Success = true;
                 result.Log.Add($"Done: {result.RoomsPlaced} rooms, {result.HallsPlaced} halls, " +
@@ -466,8 +422,11 @@ namespace LevelGen.V2
             }
             catch (System.Exception e)
             {
-                CleanupOnFailure(root, useNewScene, newScene);
-                result.Root = null;
+                if (root != null)
+                {
+                    DestroyRoot(root);
+                    result.Root = null;
+                }
                 return Fail(result, sw, $"Exception: {e.Message}");
             }
             finally
@@ -477,6 +436,85 @@ namespace LevelGen.V2
             }
 
             return result;
+        }
+
+        // ── Public entry: Save ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Saves the generated GeneratedLevel root (currently in the active scene)
+        /// to a brand-new .unity file at <paramref name="scenePath"/>, with a sibling
+        /// <c>{sceneName}_manifest.txt</c>. Updates <paramref name="settings"/>'s
+        /// sceneName/outputFolder to match the chosen path so the manifest reflects
+        /// where it was saved. Returns Success=false (and writes nothing) if the
+        /// user cancels the existing-file overwrite prompt.
+        /// </summary>
+        public static SaveOutcome SaveGeneratedLevel(
+            GameObject root,
+            GenerationResult lastResult,
+            LevelGenSettings settings,
+            List<PlacementRecord> placements,
+            string scenePath)
+        {
+            var outcome = new SaveOutcome();
+
+            if (root == null)
+            {
+                outcome.FailureReason = "No GeneratedLevel root to save (was it deleted?).";
+                return outcome;
+            }
+            if (lastResult == null)
+            {
+                outcome.FailureReason = "No prior generation result to save.";
+                return outcome;
+            }
+            if (settings == null)
+            {
+                outcome.FailureReason = "Settings reference is null.";
+                return outcome;
+            }
+            if (string.IsNullOrEmpty(scenePath))
+            {
+                outcome.FailureReason = "Save path is empty.";
+                return outcome;
+            }
+
+            string normalizedPath = scenePath.Replace('\\', '/');
+            if (!normalizedPath.EndsWith(".unity"))
+            {
+                outcome.FailureReason = $"Save path must end with .unity (got '{scenePath}').";
+                return outcome;
+            }
+            if (!normalizedPath.StartsWith("Assets/"))
+            {
+                outcome.FailureReason = $"Save path must be under Assets/ (got '{scenePath}').";
+                return outcome;
+            }
+
+            string outputFolder = Path.GetDirectoryName(normalizedPath)?.Replace('\\', '/') ?? "Assets";
+            string sceneName    = Path.GetFileNameWithoutExtension(normalizedPath);
+
+            settings.outputFolder = outputFolder;
+            settings.sceneName    = sceneName;
+
+            bool saved = SaveLevelToScene(root, normalizedPath, lastResult.Log);
+            if (!saved)
+            {
+                outcome.FailureReason = "Scene save failed (or user cancelled overwrite). Manifest not written.";
+                return outcome;
+            }
+
+            // Record save success on the result before WriteManifest reads it.
+            lastResult.ScenePath = normalizedPath;
+
+            string manifestPath = $"{outputFolder}/{sceneName}_manifest.txt";
+            EnsureAssetFolder(outputFolder);
+            WriteManifest(settings, lastResult, placements ?? new List<PlacementRecord>(), manifestPath);
+
+            lastResult.ManifestPath  = manifestPath;
+            outcome.Success          = true;
+            outcome.ScenePath        = normalizedPath;
+            outcome.ManifestPath     = manifestPath;
+            return outcome;
         }
 
         // ── Spine slot placement ──────────────────────────────────────────────
@@ -823,7 +861,70 @@ namespace LevelGen.V2
             return Mathf.Repeat(snapped, 360f);
         }
 
-        // ── Scene save ────────────────────────────────────────────────────────
+        // ── Scene save / folder ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Moves <paramref name="root"/> from the active scene into a brand-new
+        /// scene saved at <paramref name="scenePath"/>. The new scene contains
+        /// Main Camera + Directional Light (default) + GeneratedLevel. Closes the
+        /// new scene after save so the user's active scene is the only one open.
+        /// Returns false on overwrite cancellation or save failure.
+        ///
+        /// Note: does NOT call <see cref="EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo"/>
+        /// — the user clicked "Save Generated Level" with the explicit intent of
+        /// saving the generated content. Prompting about the active scene at that
+        /// point would interrupt them, and a "Don't Save" response would discard
+        /// the active scene's modifications, including our root.
+        /// </summary>
+        static bool SaveLevelToScene(GameObject root, string scenePath, List<string> log)
+        {
+            if (root == null)
+            {
+                log.Add("SaveLevelToScene: root is null.");
+                return false;
+            }
+            if (string.IsNullOrEmpty(scenePath) || !scenePath.EndsWith(".unity"))
+            {
+                log.Add($"SaveLevelToScene: invalid path '{scenePath}'.");
+                return false;
+            }
+
+            string folder = Path.GetDirectoryName(scenePath)?.Replace('\\', '/') ?? "Assets";
+            if (!string.IsNullOrEmpty(folder))
+                EnsureAssetFolder(folder);
+
+            if (File.Exists(scenePath))
+            {
+                bool ok = EditorUtility.DisplayDialog(
+                    "Scene already exists",
+                    $"{scenePath}\n\nOverwrite this scene?",
+                    "Overwrite", "Cancel");
+                if (!ok)
+                {
+                    log.Add($"User cancelled overwrite of {scenePath}.");
+                    return false;
+                }
+            }
+
+            // Create new additive scene with default Main Camera + Directional Light
+            var newScene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Additive);
+
+            // Move root from active scene to the new scene (root must be parentless,
+            // which it is — see Generate)
+            EditorSceneManager.MoveGameObjectToScene(root, newScene);
+
+            FrameCameraInScene(newScene, root);
+
+            bool saved = EditorSceneManager.SaveScene(newScene, scenePath);
+
+            if (saved) log.Add($"Scene saved: {scenePath}");
+            else       log.Add($"SaveScene returned false for {scenePath}.");
+
+            EditorSceneManager.CloseScene(newScene, removeScene: true);
+            AssetDatabase.Refresh();
+
+            return saved;
+        }
 
         static void FrameCameraInScene(Scene scene, GameObject root)
         {
@@ -845,7 +946,7 @@ namespace LevelGen.V2
             mainCam.transform.LookAt(center);
         }
 
-        static void EnsureAssetFolder(string assetFolderPath)
+        public static void EnsureAssetFolder(string assetFolderPath)
         {
             if (string.IsNullOrEmpty(assetFolderPath)) return;
             if (AssetDatabase.IsValidFolder(assetFolderPath)) return;
@@ -876,7 +977,6 @@ namespace LevelGen.V2
             sb.AppendLine("------");
             sb.AppendLine($"sceneName:        {(string.IsNullOrEmpty(settings.sceneName) ? "(none)" : settings.sceneName)}");
             sb.AppendLine($"outputFolder:     {(string.IsNullOrEmpty(settings.outputFolder) ? "(none)" : settings.outputFolder)}");
-            sb.AppendLine($"saveToSceneFile:  {settings.saveToSceneFile}");
             sb.AppendLine($"sceneSaved:       {result.ScenePath != null}");
             sb.AppendLine($"scenePath:        {result.ScenePath ?? "(not saved)"}");
             sb.AppendLine();
@@ -942,7 +1042,6 @@ namespace LevelGen.V2
                     slackStr);
             }
 
-            // Manifests live under Assets/, so the path is relative to project root.
             File.WriteAllText(manifestPath, sb.ToString());
             AssetDatabase.Refresh();
         }
@@ -964,18 +1063,12 @@ namespace LevelGen.V2
             return result;
         }
 
-        static void CleanupOnFailure(GameObject root, bool useNewScene, Scene newScene)
+        static void DestroyRoot(GameObject root)
         {
-            if (root != null)
-            {
-                if (Selection.activeGameObject == root)
-                    Selection.activeGameObject = null;
-                UnityEngine.Object.DestroyImmediate(root);
-            }
-            if (useNewScene && newScene.IsValid())
-            {
-                EditorSceneManager.CloseScene(newScene, removeScene: true);
-            }
+            if (root == null) return;
+            if (Selection.activeGameObject == root)
+                Selection.activeGameObject = null;
+            UnityEngine.Object.DestroyImmediate(root);
         }
     }
 }

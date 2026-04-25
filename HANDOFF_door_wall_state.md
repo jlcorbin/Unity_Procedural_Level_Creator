@@ -1,5 +1,13 @@
 # Door/Wall Placement — State Handoff
 
+---
+**Status note (this session):** V2 Level Generator was built
+end-to-end (Phases A–D + save refactor) while this V1 Room
+Workshop work paused. The handoff content below is still the
+operative state for Room Workshop. Returning to it next
+session.
+---
+
 **Context for:** new Claude chat, tomorrow
 **Project:** Unity LevelGen RoomWorkshopWindow.cs
 **Upload with this file:** the current `RoomWorkshopWindow.cs` and `CLAUDE.md`
@@ -178,16 +186,18 @@ The final state at the end of April 20 had deleted the original small-preset fix
 
 ## V2 Level Generator note
 
-Phases A + B + C + D complete (2026-04-25). `LevelGenSettings`,
-`V2LevelGeneratorWindow`, `V2PrefabSource`, and `V2LevelGenerator` in
-place at `Assets/Scripts/LevelGen/V2/`. Generate places Starter → spine
-rooms → Boss → branches. Spine and branches share one combined
-S+M+L+Special pool (weighted random); branch failures skip with a
-warning instead of aborting. With `saveToSceneFile` ON (default), the
-output is a `{outputFolder}/{sceneName}.unity` file with Main Camera +
-Directional Light + the dungeon, plus a sibling `_manifest.txt`
-(seed, params, placement order, run stats); with the toggle OFF the
-root drops in the active scene and the manifest still writes. Only
+Phases A + B + C + D complete (2026-04-25), plus a save-button
+refactor on top. `LevelGenSettings`, `V2LevelGeneratorWindow`,
+`V2PrefabSource`, and `V2LevelGenerator` in place at
+`Assets/Scripts/LevelGen/V2/`. Generate places Starter → spine
+rooms → Boss → branches into the active scene. Spine and branches
+share one combined S+M+L+Special pool (weighted random); branch
+failures skip with a warning instead of aborting. Output is now
+captured at Save time: a `Save Generated Level` button below
+Generate opens a save-as dialog (anchored at
+`Assets/Levels/Generated/`, default name `Dungeon_<seed>`) — the
+chosen path determines where the `.unity` and the sibling
+`_manifest.txt` are written; cancellation aborts both. Only
 theme-aware prefab selection is still deferred. Separately,
 `RoomPiece.OnDrawGizmos` now uses `Gizmos.matrix` so the bounds
 wireframe rotates with the GameObject.

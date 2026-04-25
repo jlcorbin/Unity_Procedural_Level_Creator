@@ -710,13 +710,31 @@ PieceCatalogue.cs:
 Do not touch LVL_Configurator (it is complete).
 
 Pending work (priority order):
-  1. V2 Level Generator: theme-aware prefab selection (the only V2
-     phase-tracked item still deferred; manifest currently logs the
-     theme but the generator pulls from raw folders)
-  2. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
-  3. Implement Dress step (PropCatalogue / SpawnPoints)
-  4. Create RoomWorkshop.unity scene
-  5. Create LevelGenerator.unity scene
+
+V2 generator is on a stable checkpoint and not under active development.
+Returning to Room Workshop next session — items below in priority order:
+
+  1. Openings/doorway workflow (V1 failure point — primary V2
+     Room Workshop focus)
+  2. Tier stacking
+  3. Room connection logic — door geometry vs. open passages
+  4. Player integration (`LevelGen.Player` namespace)
+  5. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
+  6. Implement Dress step (PropCatalogue / SpawnPoints)
+  7. Whitebox `PieceCatalogue` wiring + `LVL_Configurator` end-to-end
+  8. ExitPoint misalignment on non-straight LVL modules (Option A:
+     geometry scanning via `DetectExitPosition`)
+  9. Create RoomWorkshop.unity scene
+ 10. Create LevelGenerator.unity scene
+ 11. Diamond / Circle room shapes (deferred indefinitely)
+
+Within V2 generator, deferred for later (post-Room-Workshop):
+  - Theme-aware prefab selection (currently logged-only)
+  - Difficulty-signal influence on category pick (currently logged-only)
+  - Layout styles beyond Linear-with-branches (Grid / Organic /
+    Corridor stubs)
+  - Player spawn / boss trigger / save-point objects in saved scenes
+  - Multi-floor stacking (one .unity = one floor for now)
 
 Menu cleanup (2026-04-25):
   - Renamed `LevelGen/Whitebox/` submenu to `LevelGen/Whitebox [Complete]/`
@@ -780,6 +798,39 @@ V2 Level Generator (2026-04-25):
     in Phase D (added for `DateTime.UtcNow` in the manifest header),
     which made bare `Object` ambiguous between `UnityEngine.Object` and
     `System.Object`.
+  - Save refactor (replaces Phase D auto-save): the EditorWindow no
+    longer has Output / Scene Name / Output Folder / Save-to-scene-file
+    fields. Generate places `GeneratedLevel` in the active scene and
+    stops. A new `Save Generated Level` button below Generate opens
+    `EditorUtility.SaveFilePanelInProject` anchored at
+    `Assets/Levels/Generated/` with default name `Dungeon_<seed>` —
+    user picks any path under `Assets/`, can create new folders in the
+    dialog. The chosen path's directory becomes `outputFolder`,
+    filename-without-extension becomes `sceneName`, and the manifest
+    writes alongside as `{sceneName}_manifest.txt`. Cancellation
+    aborts both the scene write and the manifest (all-or-nothing).
+    `LevelGenSettings.saveToSceneFile` removed; `sceneName` and
+    `outputFolder` marked `[NonSerialized]`. New public types
+    `SaveOutcome` and static `LastPlacements` on V2LevelGenerator;
+    `EnsureAssetFolder` promoted to public so the window can pre-
+    create the dialog's anchor folder.
+  - SaveLevelToScene helper note: the `EditorSceneManager.
+    SaveCurrentModifiedScenesIfUserWantsTo()` call from Phase D was
+    removed in the save-refactor. In the new flow the active scene
+    has been modified by the Generate click; prompting the user about
+    those modifications mid-Save would let "Don't Save" revert the
+    active scene, destroying our root before `MoveGameObjectToScene`
+    can run.
+  - CS0618 fix in `V2_SampleThemeBuilder.cs`: `FindFirstObjectByType`
+    swapped to `FindAnyObjectByType` (Unity 6.4 deprecation).
+  - CS0426 fix in `V2LevelGeneratorWindow.cs`: line 17 referenced
+    `V2LevelGenerator.GenerationResult` as a nested type, but
+    `GenerationResult`, `SaveOutcome`, and `PlacementRecord` are all
+    top-level inside `LevelGen.V2`. Window now uses bare names
+    (resolved via the enclosing-namespace lookup since the window's
+    own namespace is `LevelGen.V2.Editor`). The compile error was
+    masking the entire save-refactor — Unity was falling back to the
+    Phase D auto-save assembly until this was resolved.
   - New: Assets/Scripts/LevelGen/V2/LevelGenSettings.cs
          Assets/Scripts/LevelGen/V2/Editor/V2LevelGeneratorWindow.cs
          Assets/Scripts/LevelGen/V2/Editor/V2PrefabSource.cs
