@@ -28,11 +28,12 @@ Source files: `Assets/Scripts/LevelEditor/Editor/`
 
 ## LevelGen
 
-Source files: `Assets/Scripts/Editor/`
+Source files: `Assets/Scripts/Editor/`, `Assets/Scripts/LevelGen/V2/Editor/`
 
 | Path | File:Line | What it does | Status | Rec |
 |------|-----------|--------------|--------|-----|
 | `LevelGen/LVL Configurator` | `LVL_Configurator.cs:46` | Opens LVL Configurator EditorWindow — stamps RoomPiece + ExitPoints onto LVL_ prefabs by parsing their names | ACTIVE | KEEP |
+| `LevelGen/V2 Level Generator` | `V2LevelGeneratorWindow.cs:15` | Opens V2 Level Generator EditorWindow (Phase A: params + validation, no generation) | ACTIVE | KEEP |
 | `LevelGen/Whitebox [Complete]/Generate (Step 1: mirror meshes)` | `WhiteboxPackFactory.cs:75` | Walks FDP 3d/modular/, extracts mesh sub-assets from FBXs, saves as standalone .asset files | ACTIVE | KEEP |
 | `LevelGen/Whitebox [Complete]/Generate (Step 2: wrap meshes in prefabs)` | `WhiteboxPackFactory.cs:220` | Creates one prefab per mesh with MeshFilter + MeshRenderer + tinted URP/Lit material per category | ACTIVE | KEEP |
 | `LevelGen/Whitebox [Complete]/Generate (Step 3: mirror comps)` | `WhiteboxPackFactory.cs:517` | Mirrors FDP 02_COMPS/ — replaces each FDP part instance with its whitebox equivalent | ACTIVE | KEEP |
@@ -69,11 +70,11 @@ Source files: `Assets/Scripts/LevelEditor/Editor/`
 
 | Status | Count |
 |--------|-------|
-| ACTIVE | 7 |
+| ACTIVE | 8 |
 | DIAGNOSTIC | 11 |
 | LEGACY | 0 |
 | UNCLEAR | 0 |
-| **Total** | **18** |
+| **Total** | **19** |
 
 ---
 

@@ -710,10 +710,11 @@ PieceCatalogue.cs:
 Do not touch LVL_Configurator (it is complete).
 
 Pending work (priority order):
-  1. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
-  2. Implement Dress step (PropCatalogue / SpawnPoints)
-  3. Create RoomWorkshop.unity scene
-  4. Create LevelGenerator.unity scene
+  1. V2 Level Generator Phase B: spine-only generator (Starter → rooms → Boss)
+  2. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
+  3. Implement Dress step (PropCatalogue / SpawnPoints)
+  4. Create RoomWorkshop.unity scene
+  5. Create LevelGenerator.unity scene
 
 Menu cleanup (2026-04-25):
   - Renamed `LevelGen/Whitebox/` submenu to `LevelGen/Whitebox [Complete]/`
@@ -721,6 +722,15 @@ Menu cleanup (2026-04-25):
   - Consolidated Doorway tests: removed `Manual 5x3 with 2 Doorways` and
     `doorCount=2 equivalent on 5x3` test methods. Kept `Combined paths
     on 5x3` as the single Doorway test entry point.
+
+V2 Level Generator (2026-04-25):
+  - Phase A complete: LevelGenSettings data class and V2LevelGeneratorWindow
+    EditorWindow with all params and validation. MenuItem at
+    `LevelGen/V2 Level Generator`. Generate click logs settings; placement
+    logic deferred to Phase B.
+  - V1 audit confirmed no placement engine existed — engine built from scratch.
+  - New: Assets/Scripts/LevelGen/V2/LevelGenSettings.cs
+         Assets/Scripts/LevelGen/V2/Editor/V2LevelGeneratorWindow.cs
 
 ## Boss room analysis — VERIFIED ground truth
 

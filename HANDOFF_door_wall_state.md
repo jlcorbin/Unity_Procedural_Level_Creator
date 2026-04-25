@@ -175,3 +175,10 @@ The final state at the end of April 20 had deleted the original small-preset fix
 ---
 
 *Generated from session log analysis of four Claude Code .jsonl files spanning April 10 – April 20, 2026.*
+
+## V2 Level Generator note
+
+Phase A complete (2026-04-25). `LevelGenSettings` data class and
+`V2LevelGeneratorWindow` EditorWindow in place at
+`Assets/Scripts/LevelGen/V2/`. Generate click logs settings and stops;
+placement logic is Phase B.
