@@ -14,46 +14,127 @@ namespace LevelGen.V2
         public bool        Success;
         public string      FailureReason;
         public GameObject  Root;
+        public int         Seed;
         public int         RoomsPlaced;
         public int         HallsPlaced;
+        public int         BranchesPlaced;
+        public int         BranchesRequested;
         public int         BacktrackCount;
         public double      ElapsedSeconds;
         public List<string> Log = new List<string>();
     }
 
     /// <summary>
-    /// Phase B spine-only generator. Places Starter at world origin, walks down a
-    /// linear spine of rooms (random pick from remaining Small/Medium/Large budget)
-    /// connected by spine-size halls, ending with the Boss room. Backtracks up to
-    /// <see cref="MaxBacktracks"/> times when a slot can't be placed.
-    /// Branches, theme-aware selection, scene save, and manifest output are
-    /// out of scope for this phase.
+    /// Phase B + C generator. Places Starter at world origin, walks down a linear
+    /// spine of rooms (Small/Medium/Large/Special drawn from a single combined pool
+    /// weighted by remaining counts) connected by spine-size halls, ends with the
+    /// Boss room. After Boss, attaches branches (same combined pool, branch-size
+    /// halls) onto random rooms with unused exits — including earlier branches.
+    /// Spine backtracks up to <see cref="MaxBacktracks"/>; branches degrade
+    /// gracefully (skip the slot with a warning) instead of aborting.
     /// </summary>
     public static class V2LevelGenerator
     {
         const int   MaxBacktracks    = 50;
         const float CollisionEpsilon = 0.01f;
 
-        // ── Frame ─────────────────────────────────────────────────────────────
+        // ── State types ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Combined remaining-count pool for Small + Medium + Large + Special.
+        /// Both spine slots and branch slots draw from this single bucket.
+        /// </summary>
+        class CategoryPool
+        {
+            public int small;
+            public int medium;
+            public int large;
+            public int special;
+
+            public int Total => small + medium + large + special;
+
+            public bool DrawRandom(System.Random rng, out RoomCategory cat)
+            {
+                cat = default;
+                int total = Total;
+                if (total <= 0) return false;
+                int roll = rng.Next(total);
+                if (roll < small)            { cat = RoomCategory.Small;   return true; }
+                roll -= small;
+                if (roll < medium)           { cat = RoomCategory.Medium;  return true; }
+                roll -= medium;
+                if (roll < large)            { cat = RoomCategory.Large;   return true; }
+                cat = RoomCategory.Special;  return true;
+            }
+
+            public bool DrawRandom(System.Random rng, HashSet<RoomCategory> excluded, out RoomCategory cat)
+            {
+                cat = default;
+                int sw = excluded.Contains(RoomCategory.Small)   ? 0 : small;
+                int mw = excluded.Contains(RoomCategory.Medium)  ? 0 : medium;
+                int lw = excluded.Contains(RoomCategory.Large)   ? 0 : large;
+                int xw = excluded.Contains(RoomCategory.Special) ? 0 : special;
+                int total = sw + mw + lw + xw;
+                if (total <= 0) return false;
+                int roll = rng.Next(total);
+                if (roll < sw)            { cat = RoomCategory.Small;   return true; }
+                roll -= sw;
+                if (roll < mw)            { cat = RoomCategory.Medium;  return true; }
+                roll -= mw;
+                if (roll < lw)            { cat = RoomCategory.Large;   return true; }
+                cat = RoomCategory.Special; return true;
+            }
+
+            public void Decrement(RoomCategory cat)
+            {
+                switch (cat)
+                {
+                    case RoomCategory.Small:   small--;   break;
+                    case RoomCategory.Medium:  medium--;  break;
+                    case RoomCategory.Large:   large--;   break;
+                    case RoomCategory.Special: special--; break;
+                }
+            }
+
+            public void Increment(RoomCategory cat)
+            {
+                switch (cat)
+                {
+                    case RoomCategory.Small:   small++;   break;
+                    case RoomCategory.Medium:  medium++;  break;
+                    case RoomCategory.Large:   large++;   break;
+                    case RoomCategory.Special: special++; break;
+                }
+            }
+        }
+
+        struct PlacementOutput
+        {
+            public RoomPiece HallPiece;
+            public RoomPiece RoomPiece;
+            public ExitPoint HallEntry;
+            public ExitPoint HallExit;
+            public ExitPoint RoomEntry;
+        }
 
         class Frame
         {
-            public RoomPiece    priorRoom;
-            public ExitPoint    priorExit;
-            public RoomPiece    hallPiece;
-            public RoomPiece    roomPiece;
-            public ExitPoint    hallEntry;
-            public ExitPoint    hallExit;
-            public ExitPoint    roomEntry;
-            public RoomCategory? category;   // null for Boss; spine slots use Small/Medium/Large
-            public int          slotIndex;
+            public RoomPiece     priorRoom;
+            public ExitPoint     priorExit;
+            public RoomPiece     hallPiece;
+            public RoomPiece     roomPiece;
+            public ExitPoint     hallEntry;
+            public ExitPoint     hallExit;
+            public ExitPoint     roomEntry;
+            public RoomCategory? category;   // null for Boss; spine slots use one of the four
+            public int           slotIndex;
         }
 
         // ── Public entry ──────────────────────────────────────────────────────
 
         public static GenerationResult Generate(LevelGenSettings settings)
         {
-            var result = new GenerationResult();
+            var result = new GenerationResult { BranchesRequested = settings.branchSlotCount };
             var sw     = System.Diagnostics.Stopwatch.StartNew();
 
             try
@@ -61,22 +142,26 @@ namespace LevelGen.V2
                 int resolvedSeed = settings.seed != 0
                     ? settings.seed
                     : new System.Random().Next(1, int.MaxValue);
-                var rng = new System.Random(resolvedSeed);
+                var rng     = new System.Random(resolvedSeed);
+                result.Seed = resolvedSeed;
                 result.Log.Add($"Seed: {resolvedSeed}");
 
                 // Load pools
-                var starterPool = V2PrefabSource.GetRoomPrefabs(RoomCategory.Starter);
-                var bossPool    = V2PrefabSource.GetRoomPrefabs(RoomCategory.Boss);
-                var smallPool   = V2PrefabSource.GetRoomPrefabs(RoomCategory.Small);
-                var mediumPool  = V2PrefabSource.GetRoomPrefabs(RoomCategory.Medium);
-                var largePool   = V2PrefabSource.GetRoomPrefabs(RoomCategory.Large);
-                var hallPool    = V2PrefabSource.GetHallPrefabs(settings.spineHallSize);
+                var starterPool    = V2PrefabSource.GetRoomPrefabs(RoomCategory.Starter);
+                var bossPool       = V2PrefabSource.GetRoomPrefabs(RoomCategory.Boss);
+                var smallPool      = V2PrefabSource.GetRoomPrefabs(RoomCategory.Small);
+                var mediumPool     = V2PrefabSource.GetRoomPrefabs(RoomCategory.Medium);
+                var largePool      = V2PrefabSource.GetRoomPrefabs(RoomCategory.Large);
+                var specialPool    = V2PrefabSource.GetRoomPrefabs(RoomCategory.Special);
+                var spineHallPool  = V2PrefabSource.GetHallPrefabs(settings.spineHallSize);
+                var branchHallPool = V2PrefabSource.GetHallPrefabs(settings.branchHallSize);
 
+                // Validate pools — fail fast with a clear error pointing at the empty folder
                 if (starterPool.Count == 0)
                     return Fail(result, sw, "No prefabs in Assets/Prefabs/Rooms/Starter/ (folder missing or no RoomPiece prefabs).");
                 if (bossPool.Count == 0)
                     return Fail(result, sw, "No prefabs in Assets/Prefabs/Rooms/Boss/ (folder missing or no RoomPiece prefabs).");
-                if (hallPool.Count == 0)
+                if (spineHallPool.Count == 0)
                     return Fail(result, sw, $"No prefabs in Assets/Prefabs/Halls/{settings.spineHallSize}/ (folder missing or no RoomPiece prefabs).");
                 if (settings.smallCount > 0 && smallPool.Count == 0)
                     return Fail(result, sw, $"smallCount={settings.smallCount} but Assets/Prefabs/Rooms/Small/ has no RoomPiece prefabs.");
@@ -84,9 +169,22 @@ namespace LevelGen.V2
                     return Fail(result, sw, $"mediumCount={settings.mediumCount} but Assets/Prefabs/Rooms/Medium/ has no RoomPiece prefabs.");
                 if (settings.largeCount > 0 && largePool.Count == 0)
                     return Fail(result, sw, $"largeCount={settings.largeCount} but Assets/Prefabs/Rooms/Large/ has no RoomPiece prefabs.");
+                if (settings.specialCount > 0 && specialPool.Count == 0)
+                    return Fail(result, sw, $"specialCount={settings.specialCount} but Assets/Prefabs/Rooms/Special/ has no RoomPiece prefabs.");
+                if (settings.branchSlotCount > 0 && branchHallPool.Count == 0)
+                    return Fail(result, sw, $"branchSlotCount={settings.branchSlotCount} but Assets/Prefabs/Halls/{settings.branchHallSize}/ has no RoomPiece prefabs.");
 
                 if (!string.IsNullOrEmpty(settings.themeName))
-                    result.Log.Add($"Theme: {settings.themeName} (Phase B uses raw folder lookup; theme override deferred to Phase C+)");
+                    result.Log.Add($"Theme: {settings.themeName} (Phase C uses raw folder lookup; theme override deferred to Phase D+)");
+
+                // Category → prefab list lookup
+                var roomPools = new Dictionary<RoomCategory, List<GameObject>>
+                {
+                    { RoomCategory.Small,   smallPool   },
+                    { RoomCategory.Medium,  mediumPool  },
+                    { RoomCategory.Large,   largePool   },
+                    { RoomCategory.Special, specialPool },
+                };
 
                 // Create root
                 var root = new GameObject("GeneratedLevel");
@@ -104,11 +202,16 @@ namespace LevelGen.V2
                 var placed = new List<RoomPiece> { starterPiece };
                 result.RoomsPlaced = 1;
 
-                // Spine + Boss loop with backtracking
-                int s = settings.smallCount;
-                int m = settings.mediumCount;
-                int l = settings.largeCount;
-                int spineLen        = s + m + l;
+                // ── Spine + Boss loop with backtracking ────────────────────────
+                var pool = new CategoryPool
+                {
+                    small   = settings.smallCount,
+                    medium  = settings.mediumCount,
+                    large   = settings.largeCount,
+                    special = settings.specialCount,
+                };
+
+                int spineLen        = settings.SpineLength;
                 int targetSlotCount = spineLen + 1;     // +1 for Boss
 
                 var slots        = new List<Frame>();
@@ -121,11 +224,10 @@ namespace LevelGen.V2
                     bool isBoss  = (slotIdx == spineLen);
 
                     Frame frame = isBoss
-                        ? TryPlaceBoss(slots, starterPiece, bossPool, hallPool, placed, root, rng, slotIdx)
+                        ? TryPlaceBoss(slots, starterPiece, bossPool, spineHallPool, placed, root, rng, slotIdx)
                         : TryPlaceSpineSlot(slotIdx, slots, starterPiece,
-                                            ref s, ref m, ref l,
-                                            smallPool, mediumPool, largePool,
-                                            hallPool, placed, root, rng, triedAtSlot);
+                                            pool, roomPools, spineHallPool,
+                                            placed, root, rng, triedAtSlot);
 
                     if (frame != null)
                     {
@@ -156,25 +258,18 @@ namespace LevelGen.V2
                     var popped = slots[slots.Count - 1];
                     slots.RemoveAt(slots.Count - 1);
 
-                    // Restore popped category to budget and mark it tried at its slot
+                    // Restore popped category to pool and mark it tried at its slot
                     if (popped.category.HasValue)
                     {
-                        switch (popped.category.Value)
-                        {
-                            case RoomCategory.Small:  s++; break;
-                            case RoomCategory.Medium: m++; break;
-                            case RoomCategory.Large:  l++; break;
-                        }
+                        pool.Increment(popped.category.Value);
                         if (!triedAtSlot.ContainsKey(popped.slotIndex))
                             triedAtSlot[popped.slotIndex] = new HashSet<RoomCategory>();
                         triedAtSlot[popped.slotIndex].Add(popped.category.Value);
                     }
 
-                    // Reset the failed slot's tried set — next attempt is with a different prior
                     if (triedAtSlot.ContainsKey(slotIdx))
                         triedAtSlot[slotIdx].Clear();
 
-                    // Destroy popped pieces
                     placed.Remove(popped.roomPiece);
                     placed.Remove(popped.hallPiece);
                     Object.DestroyImmediate(popped.roomPiece.gameObject);
@@ -182,13 +277,80 @@ namespace LevelGen.V2
                     result.RoomsPlaced--;
                     result.HallsPlaced--;
 
-                    // Reset prior exit so it can be reused
                     if (popped.priorExit != null) popped.priorExit.isConnected = false;
                 }
 
-                result.Success         = true;
-                result.BacktrackCount  = backtracks;
-                result.Log.Add($"Done: {result.RoomsPlaced} rooms, {result.HallsPlaced} halls, {backtracks} backtracks.");
+                // ── Branch pass ─────────────────────────────────────────────────
+                // Snapshot of room pieces (Starter + spine + Boss). Branches placed
+                // during this loop are also eligible attach candidates for
+                // subsequent branches, so the list grows.
+                var attachRooms = new List<RoomPiece> { starterPiece };
+                foreach (var f in slots) attachRooms.Add(f.roomPiece);
+
+                int branchesPlaced = 0;
+                for (int b = 0; b < settings.branchSlotCount; b++)
+                {
+                    if (pool.Total == 0)
+                    {
+                        result.Log.Add($"Branch slot {b} skipped: combined pool empty.");
+                        Debug.LogWarning($"[V2 Gen] Branch slot {b} skipped: combined pool empty.");
+                        break;
+                    }
+
+                    var triedAttachRooms = new HashSet<RoomPiece>();
+                    bool placedThisSlot  = false;
+
+                    while (!placedThisSlot)
+                    {
+                        var available = attachRooms
+                            .Where(r => r != null
+                                        && !triedAttachRooms.Contains(r)
+                                        && HorizontalExits(r).Count > 0)
+                            .ToList();
+
+                        if (available.Count == 0)
+                        {
+                            result.Log.Add($"Branch slot {b} skipped: no attach room with an unused exit.");
+                            Debug.LogWarning($"[V2 Gen] Branch slot {b} skipped: no attach room with an unused exit.");
+                            break;
+                        }
+
+                        var attachRoom  = available[rng.Next(available.Count)];
+                        var attachExits = HorizontalExits(attachRoom);
+                        var attachExit  = attachExits[rng.Next(attachExits.Count)];
+
+                        if (!pool.DrawRandom(rng, out RoomCategory cat))
+                        {
+                            result.Log.Add($"Branch slot {b} skipped: pool emptied mid-attempt.");
+                            Debug.LogWarning($"[V2 Gen] Branch slot {b} skipped: pool emptied mid-attempt.");
+                            break;
+                        }
+
+                        var candidates = roomPools[cat];
+
+                        if (TryPlaceConnectedRoom(attachRoom, attachExit, candidates,
+                                                  branchHallPool, placed, root, rng,
+                                                  out PlacementOutput output))
+                        {
+                            pool.Decrement(cat);
+                            branchesPlaced++;
+                            attachRooms.Add(output.RoomPiece);
+                            result.RoomsPlaced++;
+                            result.HallsPlaced++;
+                            placedThisSlot = true;
+                        }
+                        else
+                        {
+                            triedAttachRooms.Add(attachRoom);
+                        }
+                    }
+                }
+
+                result.BranchesPlaced = branchesPlaced;
+                result.Success        = true;
+                result.BacktrackCount = backtracks;
+                result.Log.Add($"Done: {result.RoomsPlaced} rooms, {result.HallsPlaced} halls, " +
+                               $"{branchesPlaced}/{settings.branchSlotCount} branches, {backtracks} backtracks.");
             }
             catch (System.Exception e)
             {
@@ -208,17 +370,15 @@ namespace LevelGen.V2
             return result;
         }
 
-        // ── Slot placement ────────────────────────────────────────────────────
+        // ── Spine slot placement ──────────────────────────────────────────────
 
         static Frame TryPlaceSpineSlot(
             int slotIdx,
             List<Frame> slots,
             RoomPiece starterPiece,
-            ref int s, ref int m, ref int l,
-            List<GameObject> smallPool,
-            List<GameObject> mediumPool,
-            List<GameObject> largePool,
-            List<GameObject> hallPool,
+            CategoryPool pool,
+            Dictionary<RoomCategory, List<GameObject>> roomPools,
+            List<GameObject> spineHallPool,
             List<RoomPiece> placed,
             GameObject root,
             System.Random rng,
@@ -234,39 +394,38 @@ namespace LevelGen.V2
 
             ExitPoint priorExit = unusedExits[rng.Next(unusedExits.Count)];
 
-            // Pick category from remaining budget (excluding tried), retry on category failure
+            // Try categories in random-weighted order, excluding ones already tried at this slot.
             while (true)
             {
-                RoomCategory? cat = PickWeightedCategory(s, m, l, triedAtSlot[slotIdx], rng);
-                if (cat == null) return null;
+                if (!pool.DrawRandom(rng, triedAtSlot[slotIdx], out RoomCategory cat))
+                    return null;
 
-                List<GameObject> pool = cat.Value switch
+                var candidates = roomPools.TryGetValue(cat, out var p) ? p : null;
+                if (candidates == null || candidates.Count == 0)
                 {
-                    RoomCategory.Small  => smallPool,
-                    RoomCategory.Medium => mediumPool,
-                    RoomCategory.Large  => largePool,
-                    _                   => null,
-                };
-
-                if (pool == null || pool.Count == 0)
-                {
-                    triedAtSlot[slotIdx].Add(cat.Value);
+                    triedAtSlot[slotIdx].Add(cat);
                     continue;
                 }
 
-                Frame frame = TryPlaceRoomViaHall(prior, priorExit, pool, hallPool, placed, root, rng, slotIdx, cat.Value);
-                if (frame != null)
+                if (TryPlaceConnectedRoom(prior, priorExit, candidates, spineHallPool,
+                                          placed, root, rng, out PlacementOutput output))
                 {
-                    switch (cat.Value)
+                    pool.Decrement(cat);
+                    return new Frame
                     {
-                        case RoomCategory.Small:  s--; break;
-                        case RoomCategory.Medium: m--; break;
-                        case RoomCategory.Large:  l--; break;
-                    }
-                    return frame;
+                        priorRoom = prior,
+                        priorExit = priorExit,
+                        hallPiece = output.HallPiece,
+                        roomPiece = output.RoomPiece,
+                        hallEntry = output.HallEntry,
+                        hallExit  = output.HallExit,
+                        roomEntry = output.RoomEntry,
+                        category  = cat,
+                        slotIndex = slotIdx,
+                    };
                 }
 
-                triedAtSlot[slotIdx].Add(cat.Value);
+                triedAtSlot[slotIdx].Add(cat);
             }
         }
 
@@ -274,7 +433,7 @@ namespace LevelGen.V2
             List<Frame> slots,
             RoomPiece starterPiece,
             List<GameObject> bossPool,
-            List<GameObject> hallPool,
+            List<GameObject> spineHallPool,
             List<RoomPiece> placed,
             GameObject root,
             System.Random rng,
@@ -287,12 +446,36 @@ namespace LevelGen.V2
 
             ExitPoint priorExit = unusedExits[rng.Next(unusedExits.Count)];
 
-            return TryPlaceRoomViaHall(prior, priorExit, bossPool, hallPool, placed, root, rng, slotIdx, null);
+            if (!TryPlaceConnectedRoom(prior, priorExit, bossPool, spineHallPool,
+                                       placed, root, rng, out PlacementOutput output))
+                return null;
+
+            return new Frame
+            {
+                priorRoom = prior,
+                priorExit = priorExit,
+                hallPiece = output.HallPiece,
+                roomPiece = output.RoomPiece,
+                hallEntry = output.HallEntry,
+                hallExit  = output.HallExit,
+                roomEntry = output.RoomEntry,
+                category  = null,    // Boss is not drawn from the pool
+                slotIndex = slotIdx,
+            };
         }
 
         // ── Core placement: hall + room ───────────────────────────────────────
 
-        static Frame TryPlaceRoomViaHall(
+        /// <summary>
+        /// Instantiates a hall + room pair, snaps the hall's entry exit to
+        /// <paramref name="priorExit"/>, then snaps the room's entry exit to the hall's
+        /// other exit. Iterates room candidates × {0/90/180/270} rotations × random
+        /// hall pick. On success, marks the four involved exits as connected and
+        /// appends both pieces to <paramref name="placed"/>. On failure, destroys any
+        /// partial instantiation and leaves all state untouched. Used by both spine
+        /// and branch placement.
+        /// </summary>
+        static bool TryPlaceConnectedRoom(
             RoomPiece priorRoom,
             ExitPoint priorExit,
             List<GameObject> roomCandidates,
@@ -300,9 +483,13 @@ namespace LevelGen.V2
             List<RoomPiece> placed,
             GameObject root,
             System.Random rng,
-            int slotIdx,
-            RoomCategory? category)
+            out PlacementOutput output)
         {
+            output = default;
+            if (priorExit == null) return false;
+            if (roomCandidates == null || roomCandidates.Count == 0) return false;
+            if (hallPool == null || hallPool.Count == 0) return false;
+
             var candidates = ShuffleCopy(roomCandidates, rng);
             var rotations  = new[] { 0f, 90f, 180f, 270f };
 
@@ -339,7 +526,6 @@ namespace LevelGen.V2
                     var hallExitOptions = hallExits.Where(e => e != hallEntry).ToList();
                     var hallExit       = hallExitOptions[rng.Next(hallExitOptions.Count)];
 
-                    // Place candidate room at the iterated rotation
                     var roomGO = (GameObject)PrefabUtility.InstantiatePrefab(roomPrefab, root.transform);
                     roomGO.transform.localPosition = Vector3.zero;
                     roomGO.transform.localRotation = Quaternion.Euler(0f, roomRotY, 0f);
@@ -369,7 +555,7 @@ namespace LevelGen.V2
                         continue;
                     }
 
-                    // Success — mark exits as connected
+                    // Success — mark exits as connected, append, return
                     priorExit.isConnected = true;
                     hallEntry.isConnected = true;
                     hallExit.isConnected  = true;
@@ -378,22 +564,19 @@ namespace LevelGen.V2
                     placed.Add(hallPiece);
                     placed.Add(roomPiece);
 
-                    return new Frame
+                    output = new PlacementOutput
                     {
-                        priorRoom = priorRoom,
-                        priorExit = priorExit,
-                        hallPiece = hallPiece,
-                        roomPiece = roomPiece,
-                        hallEntry = hallEntry,
-                        hallExit  = hallExit,
-                        roomEntry = roomEntry,
-                        category  = category,
-                        slotIndex = slotIdx,
+                        HallPiece = hallPiece,
+                        RoomPiece = roomPiece,
+                        HallEntry = hallEntry,
+                        HallExit  = hallExit,
+                        RoomEntry = roomEntry,
                     };
+                    return true;
                 }
             }
 
-            return null;
+            return false;
         }
 
         // ── Snap math ─────────────────────────────────────────────────────────
@@ -493,23 +676,7 @@ namespace LevelGen.V2
             return null;
         }
 
-        // ── Random / category helpers ─────────────────────────────────────────
-
-        static RoomCategory? PickWeightedCategory(int s, int m, int l,
-                                                  HashSet<RoomCategory> excluded,
-                                                  System.Random rng)
-        {
-            int sw = excluded.Contains(RoomCategory.Small)  ? 0 : s;
-            int mw = excluded.Contains(RoomCategory.Medium) ? 0 : m;
-            int lw = excluded.Contains(RoomCategory.Large)  ? 0 : l;
-            int total = sw + mw + lw;
-            if (total <= 0) return null;
-
-            int pick = rng.Next(total);
-            if (pick < sw)       return RoomCategory.Small;
-            if (pick < sw + mw)  return RoomCategory.Medium;
-            return RoomCategory.Large;
-        }
+        // ── Random helpers ────────────────────────────────────────────────────
 
         static List<T> ShuffleCopy<T>(IEnumerable<T> source, System.Random rng)
         {

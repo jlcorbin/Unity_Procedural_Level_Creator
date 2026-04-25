@@ -1,12 +1,12 @@
 # V2 Level Generator — Design Spec
 
-**Status:** Phase B complete. Awaiting Phase C (branches + theme-aware selection).
+**Status:** Phase A complete. Phase B complete (spine generator). Phase C in progress (branches).
 **Date:** 2026-04-25
 
 **Implementation status:**
 - Phase A — EditorWindow shell + validation: COMPLETE
 - Phase B — Spine-only generator (Starter → rooms → Boss, with backtracking): COMPLETE
-- Phase C — Branches off the spine + theme-aware selection: not started
+- Phase C — Branches off the spine + theme-aware selection: IN PROGRESS (branches done; theme-aware deferred to Phase D+)
 - Phase D — Scene save (.unity) + manifest text output: not started
 
 ---
@@ -56,8 +56,9 @@ rotation, backtracking, scene saving) is new V2 code.
 ### Layout
 - **Layout style:** Linear / Grid / Organic / Corridor (initial:
   Linear-with-branches; others stubbed for later)
-- **Branch slot count:** N reserved branch positions distributed along
-  the spine
+- **Branch slot count:** N reserved branch positions. These are
+  drawn from the same Small/Medium/Large/Special pool as the spine.
+  Spine length = (S+M+L+Special) − branchSlotCount.
 - **Difficulty signals:**
   - Branching factor (0–1 chance multiplier)
   - Dead-end count (rooms with one exit only)
@@ -80,9 +81,12 @@ rotation, backtracking, scene saving) is new V2 code.
 3. For each spine position 1..N:
    - Pick a random unused exit on the previous room.
    - Pick a random room category from the remaining unused budget
-     (Small + Medium + Large pool combined). Decrement that category's
-     counter. No round-robin or weighting — purely random within
-     remaining budget.
+     across **Small + Medium + Large + Special** (single combined
+     pool). The draw is weighted by remaining counts: if remaining is
+     `(small=2, medium=1, large=0, special=1)`, the random draw pool
+     size is 4 — 2/4 chance Small, 1/4 chance Medium, 1/4 chance
+     Special. Decrement that category's counter. No round-robin
+     ordering — every placement is a random draw from whatever's left.
    - Pick a random room prefab from that category's folder that has at
      least one ExitPoint matching the required incoming direction
      (after rotation candidates are considered).
@@ -102,12 +106,21 @@ rotation, backtracking, scene saving) is new V2 code.
 
 4. For each reserved branch slot:
    - Pick a random spine room with at least one unused exit.
+     "Spine room" means Starter, any spine room placed in step 3,
+     or Boss — anything currently in the placed list that came
+     from a non-branch slot.
    - Pick a random unused exit on that spine room.
-   - Pick a random room from remaining Small/Special budget (branches
-     do not consume Medium or Large from the pool — only Small/Special).
-   - Place + connect via the **Branch hall** prefab (chosen size from
-     EditorWindow) the same way as spine rooms.
-   - Same backtracking rules.
+   - Pick a random category from the **same combined pool** as the
+     spine — Small / Medium / Large / Special — weighted by
+     remaining counts. (No spine-vs-branch budget distinction.)
+   - Place + connect via the **Branch hall** prefab (chosen size
+     from EditorWindow) the same way as spine rooms.
+   - Same backtracking rules. On dead end, restore the budget
+     counter and try a different category, then a different
+     attach exit, then a different attach room.
+
+Spine length = (Small + Medium + Large + Special) − branchSlotCount.
+Starter and Boss are not counted in the pool.
 
 ### Boss room
 
@@ -281,5 +294,10 @@ overlap check.
   before the overlap check. Square rooms (LVL_*) need no swap.
 - **Hall sizing:** Halls are structural prefabs picked by user choice,
   not by gap measurement. See "Hall sizing" section above.
-- **Budget consumption:** Random pick from remaining Small/Medium/Large
-  pool per spine position. Branches use Small/Special only.
+- **Budget consumption:** Weighted random pick from remaining
+  Small/Medium/Large/Special pool per slot. Both spine and branch
+  slots draw from the same combined bucket.
+- **Spine vs branch budget split:** Single combined pool of
+  Small + Medium + Large + Special. Both spine and branch slots
+  draw from the same remaining-counts bucket via weighted random
+  pick. Branches no longer have a privileged Special-only budget.

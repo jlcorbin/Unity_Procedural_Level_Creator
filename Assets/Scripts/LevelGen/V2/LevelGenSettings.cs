@@ -46,11 +46,11 @@ namespace LevelGen.V2
             starterCount + bossCount + smallCount + mediumCount + largeCount + specialCount;
 
         /// <summary>
-        /// Spine positions = Starter + (Small+Medium+Large − branch slots, min 0) + Boss.
-        /// Branch slots reduce the number of rooms on the main path (they become side branches).
+        /// Number of rooms on the main path between Starter and Boss (excludes both).
+        /// Spine and branches both draw from the combined Small+Medium+Large+Special
+        /// pool; branches reduce spine length.
         /// </summary>
         public int SpineLength =>
-            Mathf.Max(0, smallCount + mediumCount + largeCount - branchSlotCount)
-            + starterCount + bossCount;
+            Mathf.Max(0, smallCount + mediumCount + largeCount + specialCount - branchSlotCount);
     }
 }

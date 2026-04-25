@@ -134,9 +134,10 @@ namespace LevelGen.V2.Editor
                     MessageType.Warning);
             }
 
-            int maxBranchSlots = Mathf.Max(0, _settings.SpineLength - 1);
+            int poolSize = _settings.smallCount + _settings.mediumCount
+                         + _settings.largeCount + _settings.specialCount;
             int rawBranch = EditorGUILayout.IntField("Branch slot count", _settings.branchSlotCount);
-            _settings.branchSlotCount = Mathf.Clamp(rawBranch, 0, maxBranchSlots);
+            _settings.branchSlotCount = Mathf.Clamp(rawBranch, 0, poolSize);
 
             EditorGUILayout.Space(8);
         }
@@ -207,8 +208,10 @@ namespace LevelGen.V2.Editor
             if (_settings.bossCount != 1)
                 errors.Add("Exactly 1 Boss room is required.");
 
-            if (_settings.branchSlotCount > _settings.SpineLength - 1)
-                errors.Add("Branch slot count exceeds spine length minus 1.");
+            int pool = _settings.smallCount + _settings.mediumCount
+                     + _settings.largeCount + _settings.specialCount;
+            if (_settings.branchSlotCount > pool)
+                errors.Add("Branch slot count exceeds combined Small+Medium+Large+Special pool size.");
 
             if (!string.IsNullOrEmpty(_settings.themeName) && _settings.catalogue != null
                 && _settings.catalogue.GetTheme(_settings.themeName) == null)
@@ -226,10 +229,18 @@ namespace LevelGen.V2.Editor
             var result = V2LevelGenerator.Generate(_settings);
             if (result.Success)
             {
-                Debug.Log($"[V2 Gen] Success — {result.RoomsPlaced} rooms, " +
-                          $"{result.HallsPlaced} halls, " +
-                          $"{result.BacktrackCount} backtracks, " +
+                Debug.Log($"[V2 Gen] Success — seed={result.Seed}, " +
+                          $"rooms={result.RoomsPlaced}, halls={result.HallsPlaced}, " +
+                          $"branches={result.BranchesPlaced}/{result.BranchesRequested}, " +
+                          $"backtracks={result.BacktrackCount}, " +
                           $"{result.ElapsedSeconds:F2}s");
+
+                if (result.BranchesPlaced < result.BranchesRequested)
+                {
+                    Debug.LogWarning($"[V2 Gen] Only {result.BranchesPlaced}/{result.BranchesRequested} " +
+                                     $"branches placed — see warnings above.");
+                }
+
                 if (result.Root != null)
                     Selection.activeGameObject = result.Root;
             }
