@@ -223,34 +223,22 @@ namespace LevelGen.V2.Editor
 
         void OnGenerate()
         {
-            Debug.Log(
-                "[V2 LevelGen] Validated settings:\n" +
-                $"  Scene name:       {_settings.sceneName}\n" +
-                $"  Output folder:    {_settings.outputFolder}\n" +
-                $"  Catalogue:        {_settings.catalogue.name}\n" +
-                $"  Theme:            {(string.IsNullOrEmpty(_settings.themeName) ? "(none)" : _settings.themeName)}\n" +
-                $"  Starter:          {_settings.starterCount}\n" +
-                $"  Boss:             {_settings.bossCount}\n" +
-                $"  Small:            {_settings.smallCount}\n" +
-                $"  Medium:           {_settings.mediumCount}\n" +
-                $"  Large:            {_settings.largeCount}\n" +
-                $"  Special:          {_settings.specialCount}\n" +
-                $"  Total rooms:      {_settings.TotalRoomCount}\n" +
-                $"  Spine length:     {_settings.SpineLength}\n" +
-                $"  Spine hall size:  {_settings.spineHallSize}\n" +
-                $"  Branch hall size: {_settings.branchHallSize}\n" +
-                $"  Layout style:     {_settings.layoutStyle}\n" +
-                $"  Branch slots:     {_settings.branchSlotCount}\n" +
-                $"  Branching factor: {_settings.branchingFactor:F2}\n" +
-                $"  Dead ends:        {_settings.deadEndCount}\n" +
-                $"  Secret rooms:     {_settings.secretRoomCount}\n" +
-                $"  Seed:             {_settings.seed} (0 = random; will be resolved at generation time)"
-            );
-
-            EditorUtility.DisplayDialog(
-                "Generate",
-                "Generation logic not yet implemented (Phase A). Settings logged to Console.",
-                "OK");
+            var result = V2LevelGenerator.Generate(_settings);
+            if (result.Success)
+            {
+                Debug.Log($"[V2 Gen] Success — {result.RoomsPlaced} rooms, " +
+                          $"{result.HallsPlaced} halls, " +
+                          $"{result.BacktrackCount} backtracks, " +
+                          $"{result.ElapsedSeconds:F2}s");
+                if (result.Root != null)
+                    Selection.activeGameObject = result.Root;
+            }
+            else
+            {
+                Debug.LogError($"[V2 Gen] Failed: {result.FailureReason}");
+                EditorUtility.DisplayDialog("Generation failed",
+                    result.FailureReason, "OK");
+            }
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

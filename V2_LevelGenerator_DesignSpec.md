@@ -1,13 +1,13 @@
 # V2 Level Generator — Design Spec
 
-**Status:** Phase A complete. Awaiting Phase B (spine generation).
+**Status:** Phase B complete. Awaiting Phase C (branches + theme-aware selection).
 **Date:** 2026-04-25
 
 **Implementation status:**
 - Phase A — EditorWindow shell + validation: COMPLETE
-- Phase B — Spine-only generator: not started
-- Phase C — Branches + backtracking: not started
-- Phase D — Manifest output + scene save polish: not started
+- Phase B — Spine-only generator (Starter → rooms → Boss, with backtracking): COMPLETE
+- Phase C — Branches off the spine + theme-aware selection: not started
+- Phase D — Scene save (.unity) + manifest text output: not started
 
 ---
 

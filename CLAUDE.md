@@ -710,11 +710,13 @@ PieceCatalogue.cs:
 Do not touch LVL_Configurator (it is complete).
 
 Pending work (priority order):
-  1. V2 Level Generator Phase B: spine-only generator (Starter → rooms → Boss)
-  2. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
-  3. Implement Dress step (PropCatalogue / SpawnPoints)
-  4. Create RoomWorkshop.unity scene
-  5. Create LevelGenerator.unity scene
+  1. V2 Level Generator Phase C: branches off the spine + branch hall
+     budget consumption + theme-aware prefab selection
+  2. V2 Level Generator Phase D: scene save (.unity) + manifest text output
+  3. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
+  4. Implement Dress step (PropCatalogue / SpawnPoints)
+  5. Create RoomWorkshop.unity scene
+  6. Create LevelGenerator.unity scene
 
 Menu cleanup (2026-04-25):
   - Renamed `LevelGen/Whitebox/` submenu to `LevelGen/Whitebox [Complete]/`
@@ -729,8 +731,25 @@ V2 Level Generator (2026-04-25):
     `LevelGen/V2 Level Generator`. Generate click logs settings; placement
     logic deferred to Phase B.
   - V1 audit confirmed no placement engine existed — engine built from scratch.
+  - Phase B complete: V2LevelGenerator + V2PrefabSource. Spine-only generator
+    places Starter at world origin, walks down a linear spine of rooms
+    (random pick from remaining Small/Medium/Large budget) connected by
+    spine-size halls, ends with Boss. Backtracking cap = 50.
+    Uses `System.Random`, `PrefabUtility.InstantiatePrefab`, and
+    `RoomPiece.RefreshExits()` after every spawn (Awake-bypass-in-edit-mode
+    bridge from the audit). Collision uses a rotation-aware AABB helper
+    that swaps X/Z extents on 90°/270° turns. Branches, theme-aware
+    selection, scene save, and manifest output deferred to Phase C/D.
+  - RoomPiece gizmo fixed: `OnDrawGizmos()` now uses `Gizmos.matrix` so
+    the bounds box rotates with the GameObject. Previously axis-aligned —
+    misled debugging for non-square rooms (e.g. Medium_3x8) at Y=±90°.
+    `boundsOffset` is now interpreted as a local-space offset; safe for
+    all current prefabs because every authored offset is `(0, Y, 0)` and
+    Y is invariant under Y rotation.
   - New: Assets/Scripts/LevelGen/V2/LevelGenSettings.cs
          Assets/Scripts/LevelGen/V2/Editor/V2LevelGeneratorWindow.cs
+         Assets/Scripts/LevelGen/V2/Editor/V2PrefabSource.cs
+         Assets/Scripts/LevelGen/V2/Editor/V2LevelGenerator.cs
 
 ## Boss room analysis — VERIFIED ground truth
 

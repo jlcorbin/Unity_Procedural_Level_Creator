@@ -108,18 +108,25 @@ namespace LevelGen
 #if UNITY_EDITOR
         private void OnDrawGizmos()
         {
-            // Show the bounding box so you can size it correctly in editor
+            // Draw in the room's local space so the box rotates with the
+            // GameObject. boundsOffset is treated as a local-space offset,
+            // matching how rooms are authored in RoomBuilder / LVL_Configurator.
+            Matrix4x4 prev = Gizmos.matrix;
+            Gizmos.matrix  = Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one);
+
+            // Filled
             Gizmos.color = isPlaced
                 ? new Color(0f, 1f, 0f, 0.15f)
                 : new Color(1f, 1f, 0f, 0.15f);
+            Gizmos.DrawCube(boundsOffset, boundsSize * 2f);
 
-            Gizmos.DrawCube(transform.position + boundsOffset, boundsSize * 2f);
-
+            // Wireframe
             Gizmos.color = isPlaced
                 ? new Color(0f, 1f, 0f, 0.6f)
                 : new Color(1f, 1f, 0f, 0.6f);
+            Gizmos.DrawWireCube(boundsOffset, boundsSize * 2f);
 
-            Gizmos.DrawWireCube(transform.position + boundsOffset, boundsSize * 2f);
+            Gizmos.matrix = prev;
         }
 #endif
     }
