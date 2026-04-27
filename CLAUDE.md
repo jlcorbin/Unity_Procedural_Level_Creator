@@ -11,6 +11,11 @@ No Blueprints, no visual scripting.
 Renderer: URP (Universal Render Pipeline).
 Target platforms: Android (IL2CPP, ARM64) and iOS.
 
+## Project dependencies (Unity packages)
+Notable additions beyond the URP/InputSystem baseline:
+- `com.unity.cinemachine` 3.1.6 — added 2026-04-27 for M2-A player camera follow.
+  Note: Cinemachine 3.x namespace is `Unity.Cinemachine` (not `Cinemachine` as in 2.x).
+
 ## Level generator overview
 The V2 generator places saved RoomPiece + Hall prefabs into a `GeneratedLevel`
 root in the active scene, then optionally saves the result to a user-chosen
@@ -435,24 +440,85 @@ Experimental/:
   ShapeStamp_Shapes.cs (Diamond + Circle, #if FALSE)
   README.md
 
-Player (M1 + M2-C COMPLETE — see Documentation/Player_Animator_Design_2026-04-26.md):
+Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2026-04-26.md):
   M1 (idle + walk locomotion): all assets shipped & verified
     PlayerBaseController.controller ✓ (4 params, 3 states, 6 transitions post-Sprint)
     PlayerOverride_MaleHero.overrideController ✓ (6 slots post-Sprint)
     PlayerInputReader.cs, PlayerController.cs, PlayerAnimator.cs, PlayerSpawner.cs ✓
-    Player_MaleHero.prefab ✓ (9 persistent UnityEvent listeners)
+    Player_MaleHero.prefab ✓ (9 persistent UnityEvent listeners + CameraTarget child at local (0,1.6,0))
     Test scene: Assets/Scenes/Test/Player_M1_Test.unity ✓
     Acceptance: Documentation/Player_M1_Acceptance_2026-04-26.md
     Builder: Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs
-             (LevelGen ▶ Player ▶ Build Player_MaleHero Prefab / Create M1 Test Scene)
+             (LevelGen ▶ Player ▶ Build Player_MaleHero Prefab / Create M1 Test Scene
+              / Add CameraTarget to Player_MaleHero Prefab
+              / Add Cinemachine Follow Camera to Active Scene)
   M2-C (sprint state): Animator state added, scripts extended ✓ (visual verification pending in Player_M1_Test.unity)
     IsSprinting Bool parameter, Sprint state with SprintFWD_Battle_InPlace clip
     Locomotion → Sprint when (IsSprinting && MoveZ>0.7 && Speed>0.1), 0.10s blend
     Three Sprint → Locomotion transitions (IsSprinting==false / MoveZ<0.7 / Speed<0.1), 0.15s blend
     sprintMultiplier=1.75 in PlayerController (3.5 m/s effective at default 2.0 walk)
     Hold-to-sprint (ctx.ReadValueAsButton), state-speed-bound to Speed parameter
-  M2-A (camera follow): pending — next prompt
-  M2-D (level integration): pending
+  M2-A (camera follow): Cinemachine 3.x installed, behind-the-back follow camera in
+    Player_M1_Test.unity, deoccluder enabled, Look input wired, Y-inverted by default
+    ✓ (visual verification pending in test scene)
+    Component combo (canonical, post-08-A-2 revert):
+                     CinemachineCamera + CinemachineOrbitalFollow (Sphere, R=4) +
+                     CinemachineRotationComposer + CinemachineDeoccluder (Min=1) +
+                     CinemachineInputAxisController (yaw/pitch only; radial unwired)
+    M2-A camera fix history (2026-04-27): 08-A removed RotationComposer on a wrong
+                     diagnosis (claimed it overrode OrbitalFollow input-aim);
+                     08-A-2 restored it after empirical evidence that
+                     OrbitalFollow runs Body-stage only and needs an Aim-stage
+                     component for rotation. Body+Aim are complementary in CM 3.x.
+                     Reader Gain also bumped from ±0.2 → ±1.0 (the 0.2 spec value
+                     was visually too subtle in the featureless test scene; tune
+                     in Inspector if needed).
+  M2 strafe locomotion (2026-04-27): switched from rotate-to-face to strafe with
+    snap body alignment. Body yaw locked to camera yaw every frame. SetMove now
+    writes (input.x, input.y) so blend tree exercises all 4 corners. Sprint still
+    gated to forward-mostly input (MoveZ > 0.7). PlayerController.cs steps 7+8
+    rewritten; RotateTowardsMoveDir → SnapBodyToCameraYaw. rotationSpeed inspector
+    field unused under snap model — kept to avoid prefab churn, removable in cleanup.
+    Documentation/Player_Animator_Design_2026-04-26.md gained "Design Course
+    Correction — 2026-04-27" section.
+    Verification: L1–L8 in Documentation/Player_M1_Acceptance_2026-04-26.md.
+  MoveRGT repair (2026-04-27): two-stage fix. The FINAL root cause was that
+    the MoveRGT FBX's ModelImporter was set to Generic rig
+    (animationType=2, avatarSetup=NoAvatar, sourceAvatar=null) instead of
+    Humanoid like every other clip in the pack. Generic-rig clips can't
+    retarget to the player's Humanoid avatar — pressing D played the clip
+    but produced a "bunched up ball" pose because the bone tracks didn't
+    map to the Humanoid skeleton. The "Missing (Motion)" Inspector
+    symptom + empty internalIDToNameTable + stale fileID were all
+    DOWNSTREAM consequences of the wrong rig type, not separate bugs.
+    Fix: copy ModelImporter settings from MoveLFT to MoveRGT (animationType
+    Human, avatarSetup CopyFromOther, sourceAvatar = shared Humanoid
+    Avatar), SaveAndReimport, then rewrite blend tree (1,0) with the new
+    post-reimport fileID. Override controller auto-redivved cleanly to
+    6 slots.
+    Lessons:
+    - When a clip plays but produces a wrong pose on a Humanoid character,
+      check FBX animationType FIRST. Generic vs Humanoid retargeting is
+      the most common cause.
+    - Inspector resolution ≠ correct retargeting. A motion reference can
+      look fine in the controller while playing as Generic on a Humanoid
+      rig (broken result, no error logged).
+    - When repairing one FBX's import settings, copy from a known-good
+      sibling. Don't trust reimport-with-defaults to re-derive correct
+      settings — whatever's already in the .meta is preserved.
+    See Documentation/Player_M1_Acceptance_2026-04-26.md "MoveRGT Repair —
+    Correction #2" for the full diagnostic history including dead ends.
+    HorizontalAxis range (-180,180) wrap; VerticalAxis range (-10,70) initial 15°
+    Substituted CinemachineOrbitalFollow for the design doc's prompted CinemachineFollow
+    because Follow doesn't expose IInputAxisOwner axes — InputAxisController has nothing
+    to drive on Follow+RotationComposer alone. OrbitalFollow exposes HorizontalAxis +
+    VerticalAxis + RadialAxis; we wire only yaw + pitch and defensively null the
+    radial Reader.Input (CM 3.1.6 auto-populates it with Player/Look on AddComponent).
+    Player scripts byte-identical post-M2-A — Cinemachine drives Camera.main.transform,
+    which PlayerController.BuildCameraRelativeMove already projects from.
+  M2-D (level integration): pending — refactor to Player_RuntimeRig composite prefab
+        during this milestone
+  M2-B (combat: jump, attack, hit): pending
 
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
@@ -489,8 +555,8 @@ Returning to Room Workshop next session — items below in priority order:
      Room Workshop focus)
   2. Tier stacking
   3. Room connection logic — door geometry vs. open passages
-  4. Player integration — M1 + M2-C COMPLETE (idle + walk + sprint).
-     M2 remaining: camera follow, jump, attack, hit reactions, level integration.
+  4. Player integration — M1 + M2-C + M2-A COMPLETE.
+     M2 remaining: level integration (M2-D), combat (M2-B: jump, attack, hit).
   5. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
   6. Implement Dress step (PropCatalogue / SpawnPoints)
   7. Whitebox `PieceCatalogue` wiring + `LVL_Configurator` end-to-end

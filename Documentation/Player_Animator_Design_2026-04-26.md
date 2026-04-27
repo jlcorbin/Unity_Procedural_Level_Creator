@@ -578,6 +578,71 @@ Project window searches. Recommendations:
 
 ---
 
+## Design Course Correction — 2026-04-27
+
+### What changed
+
+Locomotion model switched from **rotate-to-face** to **strafe with
+snap body alignment**.
+
+### Why
+
+User clarified the intended locomotion model after observing M2-C
+behavior: W/S = move along camera-forward axis; A/D = move
+perpendicular to camera-forward. The original M1 design assumed
+Witcher-3-style rotate-to-face; user wanted RE4-style strafe.
+
+### Verification before changing
+
+The pack's `MoveBWD`, `MoveLFT`, `MoveRGT` clips were manually scrubbed
+in the Animator window before code change to confirm they are real
+strafe / reverse-walk clips (no body pivot baked in). Verified.
+
+### What's identical
+
+- Camera-relative movement math (`BuildCameraRelativeMove`)
+- Gravity, sticky-grounded, magnitude clamp
+- All animator clips, all states, all transitions
+- Sprint gating (still requires `IsSprinting && MoveZ > 0.7`)
+- CharacterController, prefab structure, override controller pattern
+
+### What changed in `PlayerController`
+
+- Step 7: `RotateTowardsMoveDir(moveDirXZ)` → `SnapBodyToCameraYaw()`
+- Step 8: `SetMove(0f, input.magnitude)` → `SetMove(input.x, input.y)`
+- `RotateTowardsMoveDir` helper method removed
+- `SnapBodyToCameraYaw` helper method added
+
+### Body alignment style
+
+Snap (decision α). Body yaw is set to camera yaw every frame, no
+smoothing. Tight RE4-Remake feel.
+
+If this feels wrong in practice, options for follow-up:
+- (β) smooth chase at `rotationSpeed` deg/sec — body trails camera
+  during fast spins, catches up
+- (γ) smart — snap when input is non-zero, free-aim when standing
+  still
+
+The existing `rotationSpeed` inspector field (default 900) is unused
+under (α). Kept in the script to avoid prefab serialization churn —
+will be removed in a cleanup pass if (β) or (γ) is never chosen.
+
+### Sprint behavior under strafe
+
+Sprint state still gated on `IsSprinting && MoveZ > 0.7 && Speed > 0.1`.
+Under strafe semantics:
+- W only → MoveZ = 1.0 → sprint engages (when LeftShift held)
+- W + slight A or D (e.g. stick at ~30° off forward) → MoveZ ≈ 0.87 →
+  sprints
+- W + heavy A or D (45°+) → MoveZ ≈ 0.71 → just below threshold,
+  walks
+- A/S/D alone → MoveZ ≤ 0 → no sprint
+
+This matches Souls/RE-style "sprint forward only" convention.
+
+---
+
 ## Ready-to-Implement Checklist
 
 Prompt 03 (controller authoring):

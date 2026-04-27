@@ -1,10 +1,21 @@
-// PlayerPrefabBuilder.cs — M1 final prefab + test scene authoring.
+// PlayerPrefabBuilder.cs — M1 final prefab + test scene authoring,
+// extended in M2-A with Cinemachine 3.x camera setup.
 //
-// Two menu items:
+// Four menu items:
 //   LevelGen ▶ Player ▶ Build Player_MaleHero Prefab
 //   LevelGen ▶ Player ▶ Create M1 Test Scene
+//   LevelGen ▶ Player ▶ Add CameraTarget to Player_MaleHero Prefab  (M2-A)
+//   LevelGen ▶ Player ▶ Add Cinemachine Follow Camera to Active Scene  (M2-A)
 //
-// Both are idempotent — re-running rebuilds from scratch.
+// All four are idempotent — re-running rebuilds/refreshes without
+// duplicating state. The camera setup aborts cleanly if a
+// CinemachineCamera already exists in the active scene.
+//
+// M2-A note: the design doc's "CinemachineFollow + RotationComposer"
+// combination doesn't expose input axes for InputAxisController to
+// drive. This implementation substitutes CinemachineOrbitalFollow
+// (which DOES expose HorizontalAxis / VerticalAxis) and keeps
+// CinemachineRotationComposer for the look-at framing.
 //
 // Why programmatic? UnityEvent persistent listeners survive prefab
 // save/reload only when written via UnityEventTools.AddPersistentListener
@@ -18,10 +29,12 @@
 
 #if UNITY_EDITOR
 using System.IO;
+using Unity.Cinemachine;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace LevelGen.Player.Editor
 {
@@ -153,6 +166,12 @@ namespace LevelGen.Player.Editor
             animator.updateMode      = AnimatorUpdateMode.Normal;
             animator.cullingMode     = AnimatorCullingMode.CullUpdateTransforms;
             EditorUtility.SetDirty(animator);
+
+            // ── M2-A: CameraTarget child for Cinemachine follow ──────────────
+            // Local (0, 1.6, 0) ≈ chest height. Cinemachine's Follow + LookAt
+            // both target this transform — pointing at the root would frame
+            // the player's feet.
+            EnsureCameraTargetChild(root);
 
             // ── Save the prefab ──────────────────────────────────────────────
             bool success;
@@ -417,11 +436,18 @@ namespace LevelGen.Player.Editor
                 }
             }
 
+            // CameraTarget child check (M2-A)
+            var ctTf = reloaded.transform.Find("CameraTarget");
+            string camTargetState = ctTf != null
+                ? $"present at local {ctTf.localPosition}"
+                : "MISSING";
+
             Debug.Log(
                 $"[PlayerPrefabBuilder] Saved {PrefabPath}.\n" +
                 $"  ActionEvents: {eventCount} (expected 9).\n" +
                 $"  Persistent listeners after reload: {totalListeners} (expected: 9).\n" +
-                $"  Nested Animator: {animatorState} (expected: Controller=PlayerOverride_MaleHero, applyRootMotion=False)."
+                $"  Nested Animator: {animatorState} (expected: Controller=PlayerOverride_MaleHero, applyRootMotion=False).\n" +
+                $"  CameraTarget child: {camTargetState} (expected: present at (0.0, 1.6, 0.0))."
             );
 
             if (totalListeners != s_Bindings.Length)
@@ -441,6 +467,350 @@ namespace LevelGen.Player.Editor
                 Debug.LogError($"[PlayerPrefabBuilder] Failed to create folder: {path}");
             else
                 Debug.Log($"[PlayerPrefabBuilder] Created folder: {path}");
+        }
+
+        /// <summary>
+        /// Idempotently adds a CameraTarget child at local (0, 1.6, 0).
+        /// Used by both <see cref="BuildPlayerMaleHeroPrefab"/> (in-memory
+        /// path) and <see cref="AddCameraTargetToExistingPrefab"/>
+        /// (LoadPrefabContents path).
+        /// </summary>
+        private static void EnsureCameraTargetChild(GameObject prefabRoot)
+        {
+            var existing = prefabRoot.transform.Find("CameraTarget");
+            if (existing != null)
+            {
+                Debug.Log($"[PlayerPrefabBuilder] CameraTarget already present at local {existing.localPosition}; leaving in place.");
+                return;
+            }
+
+            var camTarget = new GameObject("CameraTarget");
+            camTarget.transform.SetParent(prefabRoot.transform, worldPositionStays: false);
+            camTarget.transform.localPosition = new Vector3(0f, 1.6f, 0f);
+            camTarget.transform.localRotation = Quaternion.identity;
+            camTarget.transform.localScale    = Vector3.one;
+            Debug.Log("[PlayerPrefabBuilder] Added CameraTarget child at local (0, 1.6, 0).");
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // M2-A Menu item: add CameraTarget to existing prefab without rebuild
+        // ════════════════════════════════════════════════════════════════════
+
+        [MenuItem("LevelGen/Player/Add CameraTarget to Player_MaleHero Prefab")]
+        private static void AddCameraTargetToExistingPrefab()
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) == null)
+            {
+                Debug.LogError($"[PlayerPrefabBuilder] {PrefabPath} not found. Run 'Build Player_MaleHero Prefab' first.");
+                return;
+            }
+
+            var prefabRoot = PrefabUtility.LoadPrefabContents(PrefabPath);
+            if (prefabRoot == null)
+            {
+                Debug.LogError($"[PlayerPrefabBuilder] LoadPrefabContents failed for {PrefabPath}.");
+                return;
+            }
+
+            try
+            {
+                EnsureCameraTargetChild(prefabRoot);
+                PrefabUtility.SaveAsPrefabAsset(prefabRoot, PrefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(prefabRoot);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            // Reload + verify
+            var reloaded = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+            var ct = reloaded != null ? reloaded.transform.Find("CameraTarget") : null;
+            Debug.Log(ct != null
+                ? $"[PlayerPrefabBuilder] CameraTarget verified on saved prefab at local {ct.localPosition}."
+                : "[PlayerPrefabBuilder] CameraTarget MISSING after save/reload.");
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // M2-A Menu item: add Cinemachine 3.x follow camera to active scene
+        // ════════════════════════════════════════════════════════════════════
+
+        [MenuItem("LevelGen/Player/Add Cinemachine Follow Camera to Active Scene")]
+        private static void AddCinemachineFollowCameraToActiveScene()
+        {
+            // ── Preflight ────────────────────────────────────────────────────
+            var activeScene = SceneManager.GetActiveScene();
+            if (!activeScene.IsValid() || string.IsNullOrEmpty(activeScene.path))
+            {
+                Debug.LogError("[CM Setup] Active scene must be saved on disk before running. Save the scene and re-try.");
+                return;
+            }
+
+            // Idempotency guard: bail if any CinemachineCamera already exists.
+            var existingVcam = Object.FindAnyObjectByType<CinemachineCamera>();
+            if (existingVcam != null)
+            {
+                Debug.LogError($"[CM Setup] Scene already has a CinemachineCamera ('{existingVcam.name}'). " +
+                               "Delete it (and any CM Brain Camera GameObject) before re-running this menu item.");
+                return;
+            }
+
+            // Find player + CameraTarget
+            var playerCtrl = Object.FindAnyObjectByType<PlayerController>();
+            if (playerCtrl == null)
+            {
+                Debug.LogError("[CM Setup] No PlayerController found in active scene. Drop Player_MaleHero.prefab in first.");
+                return;
+            }
+            var camTarget = playerCtrl.transform.Find("CameraTarget");
+            if (camTarget == null)
+            {
+                Debug.LogError($"[CM Setup] '{playerCtrl.name}' has no CameraTarget child. " +
+                               "Run 'Add CameraTarget to Player_MaleHero Prefab' first (or rebuild the prefab).");
+                return;
+            }
+
+            // Look up InputActionReference for Look (sub-asset of the .inputactions)
+            var lookRef = FindInputActionReference("Player", "Look");
+            if (lookRef == null)
+            {
+                Debug.LogError(
+                    "[CM Setup] No InputActionReference sub-asset found for Player/Look. " +
+                    "Open Assets/InputSystem_Actions.inputactions in the editor once (which auto-generates the references), " +
+                    "save, then re-run this menu item.");
+                return;
+            }
+
+            // ── Remove existing MainCamera ───────────────────────────────────
+            // Two MainCamera-tagged cameras = undefined Camera.main behavior.
+            int removed = 0;
+            var taggedCams = GameObject.FindGameObjectsWithTag("MainCamera");
+            foreach (var go in taggedCams)
+            {
+                Object.DestroyImmediate(go);
+                removed++;
+            }
+            if (removed > 0)
+                Debug.Log($"[CM Setup] Removed {removed} existing MainCamera-tagged GameObject(s).");
+
+            // ── Create CM Brain Camera (the rendering camera) ───────────────
+            var brainGO = new GameObject("CM Brain Camera");
+            brainGO.tag = "MainCamera";
+            brainGO.AddComponent<Camera>();
+            brainGO.AddComponent<AudioListener>();
+            brainGO.AddComponent<CinemachineBrain>();
+            // Reasonable default position; Brain doesn't move on its own — the
+            // vcam drives it once Play starts.
+            brainGO.transform.position = new Vector3(0f, 5f, -8f);
+            brainGO.transform.rotation = Quaternion.Euler(20f, 0f, 0f);
+
+            // ── Create CM Follow Camera (the virtual camera) ────────────────
+            var vcamGO = new GameObject("CM Follow Camera");
+            var vcam = vcamGO.AddComponent<CinemachineCamera>();
+            // Priority struct in CM 3.x: assign a fresh CameraPriority with Value 10
+            vcam.Priority = new PrioritySettings { Value = 10, Enabled = true };
+
+            // Targets: both Follow and LookAt point at the player's CameraTarget.
+            vcam.Follow = camTarget;
+            vcam.LookAt = camTarget;
+
+            // Position component: OrbitalFollow (replaces CinemachineFollow per
+            // M2-A substitution — OrbitalFollow exposes the input axes that
+            // CinemachineInputAxisController drives).
+            var orbital = vcamGO.AddComponent<CinemachineOrbitalFollow>();
+            orbital.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
+            orbital.Radius     = 4.0f;                        // matches D5's 4m behind
+            // CM 3.1.x OrbitalFollow has no Center field — orbit centers on
+            // the target directly. CameraTarget is already at local (0,1.6,0)
+            // which is chest height; the VerticalAxis Value=15° initial gives
+            // the slight downward look that D5's "+2 up" would have provided.
+
+            // Yaw axis (D7: 360° wrap). Read-modify-write to preserve any
+            // CM-shipped defaults for fields we don't explicitly override.
+            var hAxis = orbital.HorizontalAxis;
+            hAxis.Value  = 0f;
+            hAxis.Range  = new Vector2(-180f, 180f);
+            hAxis.Wrap   = true;
+            hAxis.Center = 0f;
+            orbital.HorizontalAxis = hAxis;
+
+            // Pitch axis (D6: -10° to 70°)
+            var vAxis = orbital.VerticalAxis;
+            vAxis.Value  = 15f;                            // slight downward look at start
+            vAxis.Range  = new Vector2(-10f, 70f);
+            vAxis.Wrap   = false;
+            vAxis.Center = 15f;
+            orbital.VerticalAxis = vAxis;
+
+            // Aim component: RotationComposer points the camera at LookAt
+            // every frame. OrbitalFollow runs at the Body stage (position
+            // only) and does NOT set RawOrientation — without an Aim stage
+            // component the camera orbits correctly on input but never turns
+            // to face the target. Originally removed in 08-A on a wrong
+            // diagnosis ("RotationComposer overrides input"); restored
+            // 08-A-2 after empirical confirmation that input was reaching
+            // OrbitalFollow's axes (HorizontalAxis.Value varied with mouse)
+            // but rotation never updated. CM 3.x convention is Body+Aim
+            // staged separately — they're complementary, not conflicting.
+            vcamGO.AddComponent<CinemachineRotationComposer>();
+
+            // Collision avoidance: Deoccluder per D9
+            var deocc = vcamGO.AddComponent<CinemachineDeoccluder>();
+            deocc.MinimumDistanceFromTarget = 1.0f;
+            // CollideAgainst layer mask stays at default (everything-but-IgnoreRaycast).
+
+            // Input wiring: scan auto-populates Controllers list from OrbitalFollow's axes
+            var inputCtrl = vcamGO.AddComponent<CinemachineInputAxisController>();
+            // The base class scans IInputAxisOwners in OnEnable; force a synchronize
+            // here so Controllers is populated immediately (not after a frame).
+            inputCtrl.SynchronizeControllers();
+
+            int wiredAxes = 0;
+            // Diagnostic: list all controller names + categorization.
+            var axisDiag = new System.Text.StringBuilder();
+            axisDiag.AppendLine($"[CM Setup] Controllers found ({inputCtrl.Controllers.Count}):");
+
+            // The Reader's field for the InputActionReference is named "Input"
+            // in some CM 3.x versions and "InputAction" in others — discover
+            // it via reflection so we don't crash on a name change.
+            System.Reflection.FieldInfo readerActionField = null;
+            System.Reflection.FieldInfo readerGainField   = null;
+
+            foreach (var c in inputCtrl.Controllers)
+            {
+                // Explicit exclusion: OrbitalFollow's third axis (RadialAxis)
+                // controls zoom, not look. Match only yaw + pitch.
+                string n = c.Name ?? "";
+                bool isRadial = n.Contains("Radial") || n.Contains("Scale") || n.Contains("Zoom");
+                bool isXAxis = !isRadial && (n.Contains(" X")
+                                             || n.EndsWith("X")
+                                             || n.Contains("Horizontal"));
+                bool isYAxis = !isRadial && (n.Contains(" Y")
+                                             || n.EndsWith("Y")
+                                             || n.Contains("Vertical"));
+                bool wireThis = isXAxis || isYAxis;
+                bool isYish = isYAxis;
+
+                axisDiag.AppendLine($"  '{n}' → {(isRadial ? "SKIP (radial/zoom)" : wireThis ? (isYish ? "wire as Y (inverted)" : "wire as X") : "SKIP (no match)")}");
+
+                if (!wireThis) continue;
+
+                c.Enabled = true;
+
+                if (readerActionField == null && c.Input != null)
+                {
+                    var rt = c.Input.GetType();
+                    readerActionField = rt.GetField("Input")
+                                       ?? rt.GetField("InputAction");
+                    readerGainField = rt.GetField("Gain");
+                    if (readerActionField == null)
+                    {
+                        Debug.LogWarning($"[CM Setup] Reader on '{c.Name}' has neither 'Input' nor 'InputAction' field. CM API may have changed; wire by hand.");
+                        break;
+                    }
+                }
+                if (readerActionField != null && c.Input != null)
+                {
+                    readerActionField.SetValue(c.Input, lookRef);
+                    if (readerGainField != null)
+                        readerGainField.SetValue(c.Input, isYish ? -1.0f : 1.0f);  // D8: Y inverted; bumped from ±0.2 → ±1.0 (08-A-2-tune: 0.2 was too slow against featureless test scene)
+                    wiredAxes++;
+                }
+            }
+
+            // Also: defensively NULL any reader on radial/zoom-style axes in
+            // case a previous run wired them. Prevents Look-input from
+            // accidentally driving camera zoom.
+            int unwiredRadial = 0;
+            foreach (var c in inputCtrl.Controllers)
+            {
+                string n = c.Name ?? "";
+                if (!(n.Contains("Radial") || n.Contains("Scale") || n.Contains("Zoom"))) continue;
+                if (c.Input == null) continue;
+                if (readerActionField == null) continue;
+                var current = readerActionField.GetValue(c.Input) as InputActionReference;
+                if (current != null)
+                {
+                    readerActionField.SetValue(c.Input, null);
+                    unwiredRadial++;
+                }
+            }
+            if (unwiredRadial > 0)
+                axisDiag.AppendLine($"  Defensively cleared {unwiredRadial} pre-wired radial axis Reader.Input reference(s).");
+
+            Debug.Log(axisDiag.ToString());
+
+            if (wiredAxes != 2)
+                Debug.LogWarning($"[CM Setup] Expected to wire 2 Look axes (yaw + pitch), wired {wiredAxes}. " +
+                                 "Inspect CinemachineInputAxisController.Controllers list and wire any unset axes manually.");
+
+            // ── Save the scene ──────────────────────────────────────────────
+            EditorSceneManager.MarkSceneDirty(activeScene);
+            EditorSceneManager.SaveScene(activeScene);
+
+            // ── Reload + verify ─────────────────────────────────────────────
+            var reopened = EditorSceneManager.OpenScene(activeScene.path, OpenSceneMode.Single);
+            var brainCheck = Object.FindAnyObjectByType<CinemachineBrain>();
+            var vcamCheck  = Object.FindAnyObjectByType<CinemachineCamera>();
+
+            string followName  = vcamCheck != null && vcamCheck.Follow != null ? vcamCheck.Follow.name : "(null)";
+            string lookAtName  = vcamCheck != null && vcamCheck.LookAt != null ? vcamCheck.LookAt.name : "(null)";
+
+            int wiredAfterReload = 0;
+            if (vcamCheck != null)
+            {
+                var ic = vcamCheck.GetComponent<CinemachineInputAxisController>();
+                if (ic != null)
+                {
+                    foreach (var c in ic.Controllers)
+                    {
+                        if (c.Input == null) continue;
+                        // Detect either 'Input' or 'InputAction' field, count as wired if non-null
+                        var rt = c.Input.GetType();
+                        var f = rt.GetField("Input") ?? rt.GetField("InputAction");
+                        if (f != null && f.GetValue(c.Input) is InputActionReference iar && iar != null)
+                            wiredAfterReload++;
+                    }
+                }
+            }
+
+            Debug.Log(
+                $"[CM Setup] Cinemachine follow camera installed in '{reopened.name}'.\n" +
+                $"  CinemachineBrain: {(brainCheck != null ? "✓" : "✗")}\n" +
+                $"  CinemachineCamera: {(vcamCheck != null ? "✓" : "✗")}\n" +
+                $"  Follow:  {followName} (expected: CameraTarget)\n" +
+                $"  LookAt:  {lookAtName} (expected: CameraTarget)\n" +
+                $"  OrbitalFollow:        Sphere, Radius=4, VerticalAxis range=(-10,70) initial=15, HorizontalAxis range=(-180,180,wrap)\n" +
+                $"  Deoccluder:           MinDistance=1.0\n" +
+                $"  InputAxisController:  {wiredAfterReload}/2 axes wired to Player/Look (gain ±1.0, Y inverted)\n" +
+                $"  Press Play in this scene to verify M2-A acceptance items C1–C5."
+            );
+        }
+
+        /// <summary>
+        /// Walks the .inputactions asset's sub-assets to find the
+        /// InputActionReference for the given map / action name.
+        /// Returns null if not found (most likely cause: the asset
+        /// hasn't been opened in the editor since import, so its
+        /// auto-generated sub-asset references haven't been written).
+        /// </summary>
+        private static InputActionReference FindInputActionReference(string mapName, string actionName)
+        {
+            var subAssets = AssetDatabase.LoadAllAssetsAtPath(ActionsAssetPath);
+            foreach (var sub in subAssets)
+            {
+                if (sub is InputActionReference iar
+                    && iar.action != null
+                    && iar.action.name == actionName
+                    && iar.action.actionMap != null
+                    && iar.action.actionMap.name == mapName)
+                {
+                    return iar;
+                }
+            }
+            return null;
         }
     }
 }

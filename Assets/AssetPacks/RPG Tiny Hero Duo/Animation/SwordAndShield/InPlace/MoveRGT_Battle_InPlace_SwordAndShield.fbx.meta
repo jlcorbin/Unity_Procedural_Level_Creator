@@ -1,11 +1,15 @@
 fileFormatVersion: 2
 guid: f531fd2d5a6a8a440b5d450e029c4041
+AssetOrigin:
+  serializedVersion: 1
+  productId: 225148
+  packageName: RPG Tiny Hero Duo PBR Polyart
+  packageVersion: 2.0
+  assetPath: Assets/RPG Tiny Hero Duo/Animation/SwordAndShield/InPlace/MoveRGT_Battle_InPlace_SwordAndShield.fbx
+  uploadId: 521528
 ModelImporter:
-  serializedVersion: 19301
-  internalIDToNameTable:
-  - first:
-      74: 1827226128182048838
-    second: MoveRGT_Battle_InPlace_SwordAndShield
+  serializedVersion: 24200
+  internalIDToNameTable: []
   externalObjects: {}
   materials:
     materialImportMode: 0
@@ -17,16 +21,15 @@ ModelImporter:
     bakeSimulation: 0
     resampleCurves: 1
     optimizeGameObjects: 0
+    removeConstantScaleCurves: 0
     motionNodeName: 
-    rigImportErrors: 
-    rigImportWarnings: 
     animationImportErrors: 
     animationImportWarnings: 
     animationRetargetingWarnings: 
     animationDoRetargetingWarnings: 0
     importAnimatedCustomProperties: 0
     importConstraints: 0
-    animationCompression: 3
+    animationCompression: 1
     animationRotationError: 0.5
     animationPositionError: 0.5
     animationScaleError: 0.5
@@ -169,27 +172,38 @@ ModelImporter:
     addColliders: 0
     useSRGBMaterialColor: 1
     sortHierarchyByName: 1
+    importPhysicalCameras: 1
     importVisibility: 1
     importBlendShapes: 1
     importCameras: 1
     importLights: 1
+    nodeNameCollisionStrategy: 1
     fileIdsGeneration: 2
     swapUVChannels: 0
     generateSecondaryUV: 0
     useFileUnits: 1
     keepQuads: 0
     weldVertices: 1
+    bakeAxisConversion: 0
     preserveHierarchy: 0
     skinWeightsMode: 0
     maxBonesPerVertex: 4
     minBoneWeight: 0.001
+    optimizeBones: 1
+    generateMeshLods: 0
+    meshLodGenerationFlags: 0
+    maximumMeshLod: -1
     meshOptimizationFlags: -1
     indexFormat: 0
     secondaryUVAngleDistortion: 8
     secondaryUVAreaDistortion: 15.000001
     secondaryUVHardAngle: 88
+    secondaryUVMarginMethod: 0
+    secondaryUVMinLightmapResolution: 40
+    secondaryUVMinObjectScale: 1
     secondaryUVPackMargin: 4
     useFileScale: 1
+    strictVertexDataChecks: 0
   tangentSpace:
     normalSmoothAngle: 60
     normalImportMode: 0
@@ -738,20 +752,15 @@ ModelImporter:
     hasTranslationDoF: 1
     hasExtraRoot: 1
     skeletonHasParents: 1
-  lastHumanDescriptionAvatarSource: {fileID: 9000000, guid: 0308cf4e83cf517488b60af58b290fe0,
-    type: 3}
+  lastHumanDescriptionAvatarSource: {fileID: 9000000, guid: 0308cf4e83cf517488b60af58b290fe0, type: 3}
   autoGenerateAvatarMappingIfUnspecified: 1
   animationType: 3
   humanoidOversampling: 1
   avatarSetup: 2
+  addHumanoidExtraRootOnlyWhenUsingAvatar: 1
+  importBlendShapeDeformPercent: 1
+  remapMaterialsIfMaterialImportModeIsNone: 0
   additionalBone: 0
   userData: 
   assetBundleName: 
   assetBundleVariant: 
-AssetOrigin:
-  serializedVersion: 1
-  productId: 225148
-  packageName: RPG Tiny Hero Duo PBR Polyart
-  packageVersion: 2.0
-  assetPath: Assets/RPG Tiny Hero Duo/Animation/SwordAndShield/InPlace/MoveRGT_Battle_InPlace_SwordAndShield.fbx
-  uploadId: 521528

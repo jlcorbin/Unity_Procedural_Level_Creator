@@ -1,13 +1,15 @@
 // PlayerController.cs
 // Per-frame movement pipeline. Reads input intent from PlayerInputReader,
 // builds a camera-relative move vector, applies sticky-grounded gravity,
-// drives the CharacterController, rotates the body to face the move
-// direction, and forwards (MoveX=0, MoveZ=Speed) to PlayerAnimator.
+// drives the CharacterController, snaps body yaw to camera yaw, and
+// forwards (input.x, input.y) to PlayerAnimator so the 4-corner blend
+// tree exercises FWD / BWD / LFT / RGT clips.
 //
-// In M1 the body rotates to face the move direction, so the Animator's
-// MoveX is always 0 and MoveZ always equals input magnitude — the
-// Locomotion blend tree only ever evaluates at (0, +Speed). The remaining
-// directional clips stay authored for a M2 strafe-mode swap.
+// Locomotion model: STRAFE with snap body alignment (RE4-Remake feel).
+// Body yaw is locked to camera yaw every frame — strafing input maps
+// cleanly to the body-relative LFT/RGT walk clips. Switched from M1's
+// rotate-to-face on 2026-04-27; see "Design Course Correction" section
+// in Documentation/Player_Animator_Design_2026-04-26.md.
 
 using UnityEngine;
 
@@ -15,8 +17,9 @@ namespace LevelGen.Player
 {
     /// <summary>
     /// Converts input intent into <see cref="CharacterController.Move"/> calls
-    /// each frame, rotates the body to face the camera-relative move
-    /// direction, and forwards locomotion intent to <see cref="PlayerAnimator"/>.
+    /// each frame, snaps the body's yaw to the camera's yaw (strafe model),
+    /// and forwards body-relative locomotion intent to
+    /// <see cref="PlayerAnimator"/>.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     [RequireComponent(typeof(PlayerInputReader))]
@@ -93,14 +96,19 @@ namespace LevelGen.Player
             // 6) Move.
             _cc.Move(motion * Time.deltaTime);
 
-            // 7) Rotate towards move direction (skip if effectively zero).
-            if (moveDirXZ.sqrMagnitude > minMoveSqr)
-                RotateTowardsMoveDir(moveDirXZ);
+            // 7) Align body yaw to camera yaw. Snap (no smoothing) per design
+            //    decision (α). The body's "forward" is whatever the camera is
+            //    looking along on the XZ plane, so strafing input maps cleanly:
+            //    A on the stick = move left relative to body = LFT walk clip.
+            SnapBodyToCameraYaw();
 
-            // 8) Push animator parameters. With rotate-to-face, MoveX is always 0
-            //    and MoveZ equals the input magnitude (the "Speed" the blend
-            //    tree's state-speed-multiplier picks up).
-            _anim.SetMove(0f, input.magnitude);
+            // 8) Push animator parameters. Body yaw is locked to camera yaw, so
+            //    the input vector IS the body-relative move direction:
+            //      input.x  → MoveX → strafe direction (positive = right)
+            //      input.y  → MoveZ → forward/back direction (positive = forward)
+            //    The 4-corner blend tree picks the right walk clip; magnitude
+            //    drives Speed (computed inside SetMove).
+            _anim.SetMove(input.x, input.y);
 
             // 9) Push sprint bool to animator. Read by the
             //    Locomotion → Sprint and Sprint → Locomotion transitions.
@@ -109,7 +117,12 @@ namespace LevelGen.Player
 
         // ── Private helpers ─────────────────────────────────────────────────
 
-        /// <summary>Project camera forward and right onto the XZ plane and combine with input.</summary>
+        /// <summary>
+        /// Project camera forward and right onto the XZ plane and combine with
+        /// input to produce a world-space move direction. Drives the
+        /// CharacterController's translation (step 6). Body rotation is
+        /// handled separately by <see cref="SnapBodyToCameraYaw"/> in step 7.
+        /// </summary>
         private Vector3 BuildCameraRelativeMove(Vector2 input)
         {
             if (cameraTransform == null)
@@ -134,11 +147,24 @@ namespace LevelGen.Player
             motion.y = _verticalVelocity;
         }
 
-        /// <summary>Slerp body yaw toward move direction at <see cref="rotationSpeed"/> deg/sec.</summary>
-        private void RotateTowardsMoveDir(Vector3 moveDirXZ)
+        /// <summary>
+        /// Snap the player's yaw to match the camera's yaw on the XZ plane.
+        /// Pitch and roll stay at zero. Per design decision (α): snap is
+        /// intentional — no smoothing, no delay. Tight strafe-style feel
+        /// (RE4 Remake / FF7 Remake convention).
+        /// </summary>
+        private void SnapBodyToCameraYaw()
         {
-            Quaternion target = Quaternion.LookRotation(moveDirXZ, Vector3.up);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, target, rotationSpeed * Time.deltaTime);
+            if (cameraTransform == null) return;
+
+            Vector3 camForward = cameraTransform.forward;
+            camForward.y = 0f;
+            // Edge case: camera looking straight up or down → near-zero XZ
+            // vector after y-zero. Skip rotation this frame.
+            if (camForward.sqrMagnitude < minMoveSqr) return;
+            camForward.Normalize();
+
+            transform.rotation = Quaternion.LookRotation(camForward, Vector3.up);
         }
     }
 }
