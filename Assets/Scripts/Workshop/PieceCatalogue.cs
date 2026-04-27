@@ -15,11 +15,40 @@ namespace LevelGen
     {
         // ── Enums ─────────────────────────────────────────────────────────────
 
-        /// <summary>Visual theme this catalogue represents.</summary>
-        public enum Theme
+        /// <summary>Visual style tag for this catalogue. Used to match against the Theme name resolved from a LevelGenSettings asset.</summary>
+        public enum VisualTheme
         {
             Dungeon,
             // Additional themes can be added here for future expansion.
+        }
+
+        // ── Theme (prefab bundle) ─────────────────────────────────────────────
+
+        /// <summary>
+        /// A named bundle that pairs one prefab to each category.
+        /// Assign to a RoomBuilder (via <see cref="PieceCatalogue.GetTheme"/>) so its
+        /// Build pass pulls prefabs from the bundle instead of the direct inspector slots.
+        /// </summary>
+        [Serializable]
+        public class Theme
+        {
+            [Tooltip("Display name used to select this theme from a RoomBuilder.")]
+            public string name = "Untitled";
+
+            [Tooltip("Floor prefab for this theme.")]
+            public GameObject floor;
+
+            [Tooltip("Straight wall prefab for this theme.")]
+            public GameObject wall;
+
+            [Tooltip("Doorway prefab. Reserved for future use — OK to leave null.")]
+            public GameObject doorway;
+
+            [Tooltip("Outward corner prefab for this theme.")]
+            public GameObject corner;
+
+            [Tooltip("Freestanding column prefab for this theme.")]
+            public GameObject column;
         }
 
         /// <summary>Structural role of a modular piece.</summary>
@@ -73,32 +102,18 @@ namespace LevelGen
 
         // ── Inspector fields ──────────────────────────────────────────────────
 
-        [Tooltip("Visual theme for this catalogue — used for matching with RoomPreset.")]
-        public Theme theme = Theme.Dungeon;
+        [Tooltip("Visual style tag for this catalogue. Used to match against the Theme name resolved from a LevelGenSettings asset.")]
+        public VisualTheme theme = VisualTheme.Dungeon;
 
         [Tooltip("All modular pieces available for room construction. " +
                  "Add Floor, Wall, Doorway, Corner, Ceiling, Column and Stair prefabs here. " +
                  "Pieces with PieceType.None are in the Skipped staging slot — not used by the generator.")]
         public List<PieceEntry> pieces = new List<PieceEntry>();
 
-        // ── Public API ────────────────────────────────────────────────────────
+        [Tooltip("Named prefab bundles. Pick one by name from a RoomBuilder to override its direct prefab slots.")]
+        public List<Theme> themes = new List<Theme>();
 
-        /// <summary>
-        /// Returns a uniformly-random prefab of the given type, or null if none available.
-        /// </summary>
-        /// <param name="type">Structural role to filter by.</param>
-        /// <param name="rng">Seeded RNG for deterministic results.</param>
-        public GameObject GetRandom(PieceType type, System.Random rng)
-        {
-            var candidates = new List<GameObject>();
-            foreach (var e in pieces)
-            {
-                if (e.pieceType == type && e.prefab != null)
-                    candidates.Add(e.prefab);
-            }
-            if (candidates.Count == 0) return null;
-            return candidates[rng.Next(candidates.Count)];
-        }
+        // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>
         /// Returns the number of valid (non-null prefab) entries for the given type.
@@ -109,6 +124,27 @@ namespace LevelGen
             foreach (var e in pieces)
                 if (e.pieceType == type && e.prefab != null) n++;
             return n;
+        }
+
+        /// <summary>
+        /// Returns the <see cref="Theme"/> whose name matches <paramref name="themeName"/>,
+        /// or null if none found.
+        /// </summary>
+        public Theme GetTheme(string themeName)
+        {
+            return themes.Find(t => t != null && t.name == themeName);
+        }
+
+        /// <summary>
+        /// Returns an array of all theme names in list order.
+        /// Returns an empty array when no themes are defined.
+        /// </summary>
+        public string[] GetThemeNames()
+        {
+            var arr = new string[themes.Count];
+            for (int i = 0; i < themes.Count; i++)
+                arr[i] = themes[i]?.name ?? "(null)";
+            return arr;
         }
     }
 }

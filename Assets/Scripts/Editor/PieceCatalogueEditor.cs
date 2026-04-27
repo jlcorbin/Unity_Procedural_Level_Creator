@@ -355,9 +355,18 @@ namespace LevelGen
         {
             var cat = (PieceCatalogue)target;
 
-            // ── Theme ─────────────────────────────────────────────────────────
+            // ── Visual theme ──────────────────────────────────────────────────
             serializedObject.UpdateIfRequiredOrScript();
             EditorGUILayout.PropertyField(serializedObject.FindProperty("theme"));
+            serializedObject.ApplyModifiedProperties();
+            EditorGUILayout.Space(4);
+
+            // ── V2 Themes (prefab bundles) ─────────────────────────────────────
+            serializedObject.UpdateIfRequiredOrScript();
+            EditorGUILayout.PropertyField(
+                serializedObject.FindProperty("themes"),
+                new GUIContent("V2 Themes", "Named prefab bundles. Pick one by name from a RoomBuilder."),
+                includeChildren: true);
             serializedObject.ApplyModifiedProperties();
             EditorGUILayout.Space(4);
 
