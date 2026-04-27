@@ -27,6 +27,9 @@ namespace LevelGen.Player
         [Tooltip("Walk speed in m/s. Tuned for milestone 1.")]
         [SerializeField] private float walkSpeed = 2.0f;
 
+        [Tooltip("Sprint speed multiplier applied to walkSpeed when IsSprinting && MoveZ > 0.7. Default 1.75 (3.5 m/s at 2.0 walk).")]
+        [SerializeField] private float sprintMultiplier = 1.75f;
+
         [Tooltip("Rotation rate in degrees/sec when re-aligning body to move direction.")]
         [SerializeField] private float rotationSpeed = 900f;
 
@@ -76,8 +79,13 @@ namespace LevelGen.Player
             // 3) Build camera-relative world-space move direction (XZ plane only).
             Vector3 moveDirXZ = BuildCameraRelativeMove(input);
 
-            // 4) Compose horizontal motion.
-            Vector3 motion = moveDirXZ * walkSpeed;
+            // 4) Compose horizontal motion. Sprint multiplier kicks in when:
+            //    - the player is holding Sprint, AND
+            //    - input is mostly forward (matches Animator gate of MoveZ > 0.7)
+            float currentSpeed = walkSpeed;
+            if (_input.IsSprinting && input.y > 0.7f)
+                currentSpeed *= sprintMultiplier;
+            Vector3 motion = moveDirXZ * currentSpeed;
 
             // 5) Apply gravity (sticky-grounded).
             ApplyGravity(ref motion);
@@ -93,6 +101,10 @@ namespace LevelGen.Player
             //    and MoveZ equals the input magnitude (the "Speed" the blend
             //    tree's state-speed-multiplier picks up).
             _anim.SetMove(0f, input.magnitude);
+
+            // 9) Push sprint bool to animator. Read by the
+            //    Locomotion → Sprint and Sprint → Locomotion transitions.
+            _anim.SetSprinting(_input.IsSprinting);
         }
 
         // ── Private helpers ─────────────────────────────────────────────────

@@ -20,15 +20,17 @@ namespace LevelGen.Player
     public class PlayerAnimator : MonoBehaviour
     {
         // ── Parameter name constants (single source of truth) ───────────────
-        private const string ParamMoveX = "MoveX";
-        private const string ParamMoveZ = "MoveZ";
-        private const string ParamSpeed = "Speed";
+        private const string ParamMoveX       = "MoveX";
+        private const string ParamMoveZ       = "MoveZ";
+        private const string ParamSpeed       = "Speed";
+        private const string ParamIsSprinting = "IsSprinting";
 
         // ── Cached state ────────────────────────────────────────────────────
         private Animator _animator;
         private int _hashMoveX;
         private int _hashMoveZ;
         private int _hashSpeed;
+        private int _hashIsSprinting;
         private bool _ready;
 
         // ── Public API ──────────────────────────────────────────────────────
@@ -55,6 +57,19 @@ namespace LevelGen.Player
             _animator.SetFloat(_hashSpeed, speed);
         }
 
+        /// <summary>
+        /// Writes the IsSprinting bool to the Animator. Read by the
+        /// Locomotion → Sprint and Sprint → Locomotion transitions.
+        /// Safe to call before Awake — silently dropped if the Animator
+        /// is not yet resolved.
+        /// </summary>
+        /// <param name="value">True while the player is holding sprint.</param>
+        public void SetSprinting(bool value)
+        {
+            if (!_ready) return;
+            _animator.SetBool(_hashIsSprinting, value);
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -66,9 +81,10 @@ namespace LevelGen.Player
                 return;
             }
 
-            _hashMoveX = Animator.StringToHash(ParamMoveX);
-            _hashMoveZ = Animator.StringToHash(ParamMoveZ);
-            _hashSpeed = Animator.StringToHash(ParamSpeed);
+            _hashMoveX       = Animator.StringToHash(ParamMoveX);
+            _hashMoveZ       = Animator.StringToHash(ParamMoveZ);
+            _hashSpeed       = Animator.StringToHash(ParamSpeed);
+            _hashIsSprinting = Animator.StringToHash(ParamIsSprinting);
             _ready = true;
         }
     }

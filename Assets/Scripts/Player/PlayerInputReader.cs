@@ -36,6 +36,9 @@ namespace LevelGen.Player
         /// <summary>Last Look action value. Vector2 (camera-relative deltas).</summary>
         public Vector2 LookInput { get; private set; }
 
+        /// <summary>True while the Sprint action is held. Read by PlayerController each frame.</summary>
+        public bool IsSprinting { get; private set; }
+
         // ── UnityEvent endpoints ─────────────────────────────────────────────
         // Wired in the inspector to UnityEngine.InputSystem.PlayerInput's
         // per-action UnityEvents. Value-type actions (Move, Look) read every
@@ -78,10 +81,14 @@ namespace LevelGen.Player
             if (ctx.performed) Debug.Log("[PlayerInputReader] Jump");
         }
 
-        /// <summary>Sprint stub. M1: log on press only.</summary>
+        /// <summary>
+        /// Sprint is hold-to-activate. Updates <see cref="IsSprinting"/> from
+        /// the action's button state on every callback phase so we correctly
+        /// track press, hold, and release.
+        /// </summary>
         public void OnSprint(InputAction.CallbackContext ctx)
         {
-            if (ctx.performed) Debug.Log("[PlayerInputReader] Sprint");
+            IsSprinting = ctx.ReadValueAsButton();
         }
 
         /// <summary>Previous stub. M1: log on press only.</summary>

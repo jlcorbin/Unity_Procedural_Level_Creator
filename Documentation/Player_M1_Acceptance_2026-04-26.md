@@ -119,3 +119,45 @@ M1 ships when **all ten boxes** check off in
 
 M1 is done. Update [CLAUDE.md](../CLAUDE.md)'s `Player (M1 — COMPLETE)` block
 if any item differs from the spec, and proceed to M2 planning.
+
+---
+
+## M2-C Sprint Acceptance (added 2026-04-27)
+
+Verified after CC Prompt 06 ran. Test in `Player_M1_Test.unity`.
+
+- [ ] **S1** Hold LeftShift (or gamepad L3) while pressing W: character
+      visibly speeds up and switches to a faster leg cycle.
+      *If fails:* check Console for `IsSprinting` parameter writes;
+      open Animator window with player selected at runtime and verify
+      Sprint state activates.
+
+- [ ] **S2** Release LeftShift: character smoothly returns to walk pace
+      within ~0.15s.
+      *If fails:* check the three Sprint→Locomotion transitions exist
+      and `IsSprinting==false` is one of them.
+
+- [ ] **S3** While sprinting forward, swing the stick 90° to strafe-left:
+      character drops to walk pace and plays the strafe-left walk clip,
+      not sprint.
+      *If fails:* the `MoveZ < 0.7` Sprint→Locomotion transition isn't
+      firing. Check the threshold in the controller.
+
+- [ ] **S4** While sprinting, release the stick entirely: character
+      stops, returns to Idle. (Sprint→Locomotion→Idle chain.)
+      *If fails:* the `Speed < 0.1` transition isn't firing on the
+      Sprint state. Verify it exists, separate from the IsSprinting
+      transition.
+
+- [ ] **S5** Press LeftShift while standing still (no W): nothing
+      visible happens. Character stays in Idle. (Sprint requires
+      Speed > 0.1 to enter.)
+      *If fails:* the Locomotion→Sprint transition's `Speed > 0.1`
+      condition isn't being respected. Note: this is the *entry*
+      condition — Sprint can't be entered from Idle directly; it
+      requires Locomotion as a stepping stone, which itself requires
+      Speed > 0.1.
+
+- [ ] **S6** Console clean. No errors during sprint engage/release.
+
+If S1-S6 pass, M2-C ships.

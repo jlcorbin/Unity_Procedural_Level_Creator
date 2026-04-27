@@ -435,20 +435,24 @@ Experimental/:
   ShapeStamp_Shapes.cs (Diamond + Circle, #if FALSE)
   README.md
 
-Player (M1 — COMPLETE, see Documentation/Player_Animator_Design_2026-04-26.md):
-  Folders: Assets/Scripts/Player/, Assets/Scripts/Player/Editor/,
-           Assets/Animators/Player/, Assets/Prefabs/Player/ ✓
-  PlayerBaseController.controller ✓
-  PlayerOverride_MaleHero.overrideController ✓
-  PlayerInputReader.cs ✓
-  PlayerController.cs ✓
-  PlayerAnimator.cs ✓
-  PlayerSpawner.cs ✓
-  Player_MaleHero.prefab ✓
-  Test scene: Assets/Scenes/Test/Player_M1_Test.unity ✓
-  Acceptance: see Documentation/Player_M1_Acceptance_2026-04-26.md
-  Builder: Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs
-           (LevelGen ▶ Player ▶ Build Player_MaleHero Prefab / Create M1 Test Scene)
+Player (M1 + M2-C COMPLETE — see Documentation/Player_Animator_Design_2026-04-26.md):
+  M1 (idle + walk locomotion): all assets shipped & verified
+    PlayerBaseController.controller ✓ (4 params, 3 states, 6 transitions post-Sprint)
+    PlayerOverride_MaleHero.overrideController ✓ (6 slots post-Sprint)
+    PlayerInputReader.cs, PlayerController.cs, PlayerAnimator.cs, PlayerSpawner.cs ✓
+    Player_MaleHero.prefab ✓ (9 persistent UnityEvent listeners)
+    Test scene: Assets/Scenes/Test/Player_M1_Test.unity ✓
+    Acceptance: Documentation/Player_M1_Acceptance_2026-04-26.md
+    Builder: Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs
+             (LevelGen ▶ Player ▶ Build Player_MaleHero Prefab / Create M1 Test Scene)
+  M2-C (sprint state): Animator state added, scripts extended ✓ (visual verification pending in Player_M1_Test.unity)
+    IsSprinting Bool parameter, Sprint state with SprintFWD_Battle_InPlace clip
+    Locomotion → Sprint when (IsSprinting && MoveZ>0.7 && Speed>0.1), 0.10s blend
+    Three Sprint → Locomotion transitions (IsSprinting==false / MoveZ<0.7 / Speed<0.1), 0.15s blend
+    sprintMultiplier=1.75 in PlayerController (3.5 m/s effective at default 2.0 walk)
+    Hold-to-sprint (ctx.ReadValueAsButton), state-speed-bound to Speed parameter
+  M2-A (camera follow): pending — next prompt
+  M2-D (level integration): pending
 
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
@@ -485,8 +489,8 @@ Returning to Room Workshop next session — items below in priority order:
      Room Workshop focus)
   2. Tier stacking
   3. Room connection logic — door geometry vs. open passages
-  4. Player integration — M1 COMPLETE (idle + locomotion). M2 pending:
-     sprint state, jump, attack, camera follow, hit reactions.
+  4. Player integration — M1 + M2-C COMPLETE (idle + walk + sprint).
+     M2 remaining: camera follow, jump, attack, hit reactions, level integration.
   5. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
   6. Implement Dress step (PropCatalogue / SpawnPoints)
   7. Whitebox `PieceCatalogue` wiring + `LVL_Configurator` end-to-end
