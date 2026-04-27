@@ -17,7 +17,7 @@ namespace LevelEditor
         [MenuItem("Tools/V2 Tests/Theme: Build with Selected Theme")]
         private static void RunThemeTest()
         {
-            var builder = Object.FindFirstObjectByType<RoomBuilder>();
+            var builder = Object.FindAnyObjectByType<RoomBuilder>();
             if (builder == null)
             {
                 Debug.LogWarning("[V2_ThemeTest] No RoomBuilder found in the active scene. " +
@@ -75,7 +75,7 @@ namespace LevelEditor
         [MenuItem("Tools/V2 Tests/Save: Categorized RoomPiece Roundtrip")]
         private static void RunSaveRoundtripTest()
         {
-            var builder = Object.FindFirstObjectByType<RoomBuilder>();
+            var builder = Object.FindAnyObjectByType<RoomBuilder>();
             if (builder == null)
             {
                 Debug.LogWarning("[SaveRoundtrip] No RoomBuilder in the active scene.");
