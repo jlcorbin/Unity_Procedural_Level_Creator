@@ -435,6 +435,18 @@ Experimental/:
   ShapeStamp_Shapes.cs (Diamond + Circle, #if FALSE)
   README.md
 
+Player (M1 — in progress, see Documentation/Player_Animator_Design_2026-04-26.md):
+  Folders: Assets/Scripts/Player/, Assets/Scripts/Player/Editor/,
+           Assets/Animators/Player/, Assets/Prefabs/Player/ ✓
+  PlayerBaseController.controller ✓
+  PlayerOverride_MaleHero.overrideController ✓
+  PlayerInputReader.cs (pending — prompt 04)
+  PlayerController.cs (pending — prompt 04)
+  PlayerAnimator.cs (pending — prompt 04)
+  PlayerSpawner.cs (pending — prompt 04)
+  Player_MaleHero.prefab (pending — prompt 05)
+  Test scene (pending — prompt 05)
+
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
 PropEntry, PropCatalogue, SpawnPoint, RoomContentGenerator, RoomPreset,
