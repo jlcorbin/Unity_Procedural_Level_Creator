@@ -435,17 +435,20 @@ Experimental/:
   ShapeStamp_Shapes.cs (Diamond + Circle, #if FALSE)
   README.md
 
-Player (M1 — in progress, see Documentation/Player_Animator_Design_2026-04-26.md):
+Player (M1 — COMPLETE, see Documentation/Player_Animator_Design_2026-04-26.md):
   Folders: Assets/Scripts/Player/, Assets/Scripts/Player/Editor/,
            Assets/Animators/Player/, Assets/Prefabs/Player/ ✓
   PlayerBaseController.controller ✓
   PlayerOverride_MaleHero.overrideController ✓
-  PlayerInputReader.cs (pending — prompt 04)
-  PlayerController.cs (pending — prompt 04)
-  PlayerAnimator.cs (pending — prompt 04)
-  PlayerSpawner.cs (pending — prompt 04)
-  Player_MaleHero.prefab (pending — prompt 05)
-  Test scene (pending — prompt 05)
+  PlayerInputReader.cs ✓
+  PlayerController.cs ✓
+  PlayerAnimator.cs ✓
+  PlayerSpawner.cs ✓
+  Player_MaleHero.prefab ✓
+  Test scene: Assets/Scenes/Test/Player_M1_Test.unity ✓
+  Acceptance: see Documentation/Player_M1_Acceptance_2026-04-26.md
+  Builder: Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs
+           (LevelGen ▶ Player ▶ Build Player_MaleHero Prefab / Create M1 Test Scene)
 
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
@@ -482,7 +485,8 @@ Returning to Room Workshop next session — items below in priority order:
      Room Workshop focus)
   2. Tier stacking
   3. Room connection logic — door geometry vs. open passages
-  4. Player integration (`LevelGen.Player` namespace)
+  4. Player integration — M1 COMPLETE (idle + locomotion). M2 pending:
+     sprint state, jump, attack, camera follow, hit reactions.
   5. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
   6. Implement Dress step (PropCatalogue / SpawnPoints)
   7. Whitebox `PieceCatalogue` wiring + `LVL_Configurator` end-to-end
