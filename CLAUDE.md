@@ -1,5 +1,10 @@
 # LevelGen — Claude Code Project Brief
 
+## Version
+V2 is the canonical and only active architecture. V1 was retired on 2026-04-26
+via the cleanup tracked in `Documentation/V1_CLEANUP_AUDIT.md`. The pre-cleanup
+state is recoverable from git history (HEAD a929e1d on branch v2).
+
 ## What this is
 A Unity 6.4 mobile game project using URP and pure C#.
 No Blueprints, no visual scripting.
@@ -7,29 +12,34 @@ Renderer: URP (Universal Render Pipeline).
 Target platforms: Android (IL2CPP, ARM64) and iOS.
 
 ## Level generator overview
-The generator places 3D room and hall prefabs connected via exit sockets.
+The V2 generator places saved RoomPiece + Hall prefabs into a `GeneratedLevel`
+root in the active scene, then optionally saves the result to a user-chosen
+`.unity` file with a sibling manifest. EditorWindow: `LevelGen → V2 Level
+Generator`.
 
 Key rules:
 - Each prefab has a RoomPiece component and child ExitPoint components
 - ExitPoints have a direction (North/South/East/West/Up/Down)
-- Two exits connect only if their directions are opposite
-- Before placing a piece, BoundsChecker verifies no overlap (AABB, no physics)
-- Generation uses seeded System.Random — same seed = identical level
+- Two exits connect only if their directions are opposite (after rotation)
+- Collision is an AABB check via `RoomPiece.GetWorldBounds()` plus a
+  rotation-aware X/Z swap on 90°/270° turns (the bounds field itself is
+  not rotation-aware — see V2_LevelGenerator_DesignSpec.md)
+- Generation uses seeded `System.Random` — same seed = identical level
+- After every `PrefabUtility.InstantiatePrefab`, `RoomPiece.RefreshExits()`
+  is called to populate the cached exit list (Awake doesn't fire in edit mode)
 
-Generation behaviour (LevelGenerator.cs):
-- No separate start room field. The generator picks a random prefab from
-  roomPrefabs, places it at origin, and counts it as room #1.
-- roomCount (int, Min=1, default=5) — total rooms to place including room #1.
-- maxHalls = roomCount — halls can never exceed roomCount.
-- At each open exit: if both types available, 70 % chance room / 30 % hall.
-  If one type is exhausted, the other is used exclusively.
-- If no placement succeeds after maxRetriesPerExit attempts, the exit is sealed
-  and generation continues from the next queued exit.
-- When roomCount is reached the loop stops. Remaining open exits stay open —
-  no dead-end caps are placed.
-- Log on completion: [LevelGenerator] Done. seed=X rooms=Y/Z halls=W/Z
-- LevelSequence ScriptableObject still exists for storing SeedData records
-  but is not auto-loaded by LevelGenerator at runtime.
+Generation flow:
+1. Place Starter at world origin
+2. Build a linear spine of rooms drawn at random from a single combined
+   `Small + Medium + Large + Special` pool, weighted by remaining counts
+3. Append Boss
+4. Attach branches to random rooms with unused exits (including earlier
+   branches), drawing from the same pool. Branch failures degrade
+   gracefully — the slot is skipped with a warning, generation continues
+5. Backtracking cap = 50 spine attempts; branches don't count
+6. **Save Generated Level** button (separate from Generate) opens a
+   save-as dialog; the chosen path determines where the `.unity` and
+   `_manifest.txt` are written (all-or-nothing)
 
 ## Whitebox pack
 
@@ -111,52 +121,55 @@ been added to any whitebox prefab. PieceCatalogue integration not yet wired.
 ## Folder structure
 Assets/
 ├── Scripts/
+│   ├── Editor/
+│   │   ├── LVL_Configurator.cs        (complete — do not touch)
+│   │   ├── PieceCatalogueEditor.cs
+│   │   └── WhiteboxPackFactory.cs     (pipeline complete)
+│   ├── Experimental/                  (#if FALSE — dormant)
+│   │   ├── README.md
+│   │   └── ShapeStamp_Shapes.cs       (Diamond + Circle)
 │   ├── Generation/
 │   │   ├── ExitPoint.cs
-│   │   ├── RoomPiece.cs
-│   │   ├── BoundsChecker.cs
-│   │   └── LevelGenerator.cs
-│   ├── Data/
-│   │   ├── SeedData.cs
-│   │   └── LevelSequence.cs
-│   ├── Workshop/
-│   │   ├── PieceCatalogue.cs
-│   │   ├── RoomDefinition.cs
-│   │   ├── RoomBuilder.cs
-│   │   ├── PropEntry.cs
-│   │   ├── PropCatalogue.cs
-│   │   ├── SpawnPoint.cs
-│   │   ├── RoomContentGenerator.cs
-│   │   ├── RoomPreset.cs
-│   │   └── RoomPresetLibrary.cs
-│   └── Editor/
-│       ├── LevelGeneratorEditor.cs
-│       ├── RoomWorkshopWindow.cs
-│       ├── PieceCatalogueEditor.cs
-│       ├── PlaceholderPrefabFactory.cs
-│       ├── LevelGenSetup.cs
-│       └── LVL_Configurator.cs
+│   │   └── RoomPiece.cs               (rotation-aware gizmo via Gizmos.matrix)
+│   ├── LevelEditor/
+│   │   ├── CellMap.cs                 (HasWallOnEdge + AddDoorway)
+│   │   ├── EdgeSolver.cs
+│   │   ├── EdgeSolverGizmoPreview.cs  (V2 diagnostic)
+│   │   ├── RoomBuilder.cs             (V2 cell-map RoomBuilder)
+│   │   ├── RoomPieceClassification.cs
+│   │   ├── ShapeStamp.cs              (Rectangle only)
+│   │   ├── TileType.cs
+│   │   └── Editor/
+│   │       └── (Doorway_Test, EdgeSolver_Test, RoomBuilderEditor,
+│   │            RoomPiece_Test, ShapeStamp_Test, V2_SampleThemeBuilder)
+│   ├── LevelGen/V2/
+│   │   ├── LevelGenSettings.cs
+│   │   └── Editor/
+│   │       ├── V2LevelGeneratorWindow.cs
+│   │       ├── V2LevelGenerator.cs
+│   │       └── V2PrefabSource.cs
+│   └── Workshop/
+│       └── PieceCatalogue.cs
 ├── Prefabs/
-│   ├── Rooms/
-│   ├── Halls/
-│   └── Curated/
-├── PropCatalogues/
-├── RoomPresets/
-├── LevelSequences/
+│   ├── Rooms/         (Starter / Boss / Small / Medium / Large / Special / Curated)
+│   └── Halls/         (Small / Medium / Large / Special)
+├── Levels/
+│   └── Generated/     (V2-saved .unity scenes + manifests)
 └── Scenes/
-    ├── SampleScene (current working scene)
-    ├── RoomWorkshop.unity (to be created)
-    └── LevelGenerator.unity (to be created)
+    ├── SampleScene.unity
+    ├── RoomWorkshop.unity     (empty placeholder; populate next session)
+    └── LevelGenerator.unity   (empty placeholder; populate next session)
 
 ## Namespace
 All scripts use namespace LevelGen.
 
 ## Key design decisions
-- System.Random (not UnityEngine.Random) for deterministic seeds
+- `System.Random` (not `UnityEngine.Random`) for deterministic seeds
 - Bounds overlap uses AABB list check (not physics)
-- BoundsChecker is static — no MonoBehaviour
-- LevelSequence is a ScriptableObject
-- Editor inspector works in Edit mode for preview
+- All wall-emission decisions flow through a single `CellMap.HasWallOnEdge(x, z, edge)` method — **no per-side branching anywhere in placement code** (architectural invariant)
+- Categories, rotations, and exits are iterated by table/loop, never per-side if/else chains
+- Editor windows work in Edit mode (no Play mode required for V2 generator)
+- V2 placement is editor-time only via `PrefabUtility.InstantiatePrefab`
 
 ## Coding conventions
 - XML doc comments on all public members
@@ -166,9 +179,9 @@ All scripts use namespace LevelGen.
 - No magic numbers — named constants or inspector fields
 
 ## Three-scene pipeline
-1. RoomWorkshop.unity — build and curate individual rooms
-2. LevelGenerator.unity — assemble levels from room prefabs
-3. Level_XX.unity — baked gameplay scenes
+1. `RoomWorkshop.unity` — build and curate individual rooms (placeholder, not yet populated)
+2. `LevelGenerator.unity` — assemble levels from room prefabs (placeholder, not yet populated)
+3. Level_XX.unity — baked gameplay scenes generated by the V2 Level Generator into `Assets/Levels/Generated/`
 
 ## Ground truth — VERIFIED from demoscene_dungeon_level_1_dungeon
 
@@ -345,262 +358,6 @@ Subfolder → PieceType mapping:
   contains "PivotEdge"       → PieceType.None  (staged)
   (no match)                 → PieceType.None  (staged)
 
-## Room Workshop System
-Workshop is an EditorWindow (LevelGen → Room Workshop).
-Builds CUSTOM rooms from COMP_ pieces only.
-Standard rooms use LVL_ modules via LVL_Configurator.
-
-Seven-step workflow:
-⓪ Seed: optional foldout — int seed field + "Generate Room" button
-  Deterministic room generation: clears room, randomises size/walls/corners/openings
-  Uses System.Random(seed) — same seed = same room every time
-  Disabled if no PieceCatalogue assigned
-① Define: size preset (Small/Medium/Large/Custom)
-  Custom: Width slider + Depth slider (multiples of 12) + Height slider (multiples of 6, 6–18 max 3 tiers)
-② Catalogue: assign PieceCatalogue asset
-  (should contain COMP_ pieces, not Parts)
-③ Build: per-wall/corner size selectors + Build Room button
-  Each of N/S/E/W walls and NW/NE/SW/SE corners has its own
-  WallSize dropdown (Large / Med / Small / None).
-  None = skip that wall or corner entirely (open side / open corner).
-  Multi-tier rooms stack wall geometry vertically (WallTier = 6 units per tier).
-  Buttons: Build Room, Rebuild Floor, Rebuild Walls, Clear Room.
-④ Entry / Exit: wall side dropdown + Double Door checkbox + Opening Tier dropdown + Add Opening button
-  isExit toggle: true = generator exit (ExitPoint stamped), false = decorative (no ExitPoint).
-  Wall slot: randomly selected from eligible Wall_{side}_N pieces (not first/last).
-  Doorway prefab: randomly selected from catalogue entries matching isExit value.
-  Small (12×12) room fallback: ignores first/last exclusion when all slots are corner-adjacent.
-  ExitPoint stamped on MOD root immediately when isExit = true — no separate step needed.
-  Double Door: disabled for Small preset; three logic paths (see Double Door section).
-  Opening Tier: dropdown shown only when tiers > 1; selects which wall tier receives the opening.
-    Tier 0 pieces: named Wall_N_0 (no suffix)
-    Tier 1 pieces: named Wall_N_0_t1
-    Tier 2 pieces: named Wall_N_0_t2
-⑤ Components: Apply Bounds button (was Apply Components).
-  Stamps RoomPiece + bounds only (pieceType, boundsSize, boundsOffset).
-  ExitPoints are NOT touched — they are created automatically by Add Opening
-  at door-add time, at each door's exact local position.
-  Rebuild Exits from Doors: separate button that clears all ExitPoints and
-  re-stamps one per child in doors/ group using direction inference.
-  Use after manually editing the doors/ hierarchy.
-  Direction inference per door:
-    XZ-nearest-wall for wall doors (N/S/E/W).
-    Y-based for ceiling/floor doors (Up/Down) — detected when door is
-    interior in XZ (>2 units from every wall face) AND near ceiling or floor.
-  ExitPoint Y snapped to nearest WallTier boundary.
-  Up exits forced to Y = FullHeight; Down exits forced to Y = 0.
-⑥ Save: Type dropdown (Room / Hall) + name field + Save Prefab + Preset button
-  Room → Assets/Prefabs/Rooms/Curated/{name}.prefab
-  Hall  → Assets/Prefabs/Halls/{name}.prefab
-  RoomPreset always → Assets/RoomPresets/{name}.asset
-  Path preview label updates live as Type or Name changes.
-
-Size presets — multiples of 12 (LCM of FloorStep=4 and WallStep=6):
-  Small  = 12×12   (1 tier, fixed height)
-  Medium = 24×24   (1 tier, fixed height)
-  Large  = 36×36   (1 tier, fixed height)
-  Custom = any multiple of 12, height = multiple of 6 (1–3 tiers)
-
-WallSize enum: Large / Med / Small / None
-  Used for both wall runs and corner pieces.
-  None skips placement entirely for that side or corner.
-
-Wall tier stacking — VERIFIED WORKING:
-  WallTier = 6f constant (one wall piece height)
-  tiers = Mathf.RoundToInt(FullHeight / WallTier)  (1, 2, or 3)
-  BuildWalls loops over tiers; yOffset = tier * WallTier for each tier
-  PlaceWallRun and PlaceCorners both accept yOffset and tier parameters
-  TierName helper: tier 0 → baseName unchanged; tier N → "{baseName}_t{N}"
-  ExitPoint Y carries the tier offset (not forced to 0)
-
-## Corner floor tile placement — VERIFIED WORKING
-
-When a corner is angle, concave, or convex, the floor tile at that corner uses a
-special prefab and requires both a rotation and a position offset to stay
-in place (the _O_ corner-pivot tile swings its geometry when rotated).
-
-  corner piece name → floor tile selected:
-    angle_[size]   (straight, no _2)  → P_MOD_Floor_01_O_angle_med   (base, must NOT be _3)
-    angle_[size]_2 (name ends "_2")   → COMP_Floor_01_O_angle_med_3 (pivot-corrected _3 variant)
-    concave_[size] (straight, no _2)  → P_MOD_Floor_01_O_convex_med  (base, must NOT be _3)
-    concave_[size]_2 (name ends "_2") → COMP_Floor_01_O_convex_med_3 (pivot-corrected _3 variant)
-    convex_[size]  (straight, no _2)  → P_MOD_Floor_01_O_concave_med (base, must NOT be _3)
-    convex_[size]_2 (name ends "_2")  → concaveTiles with _3 suffix (pivot-corrected variant)
-
-  Selection logic (CornerTile in RoomWorkshopWindow):
-    Straight variants → explicitly find first catalogue entry NOT ending in "_3"
-    _2 variants       → explicitly find first catalogue entry ending in "_3"
-    Both fall back to index 0 if no match found in catalogue
-
-  Rotation matches the corner piece rotation:
-    SW → Y=-90°    SE → Y=180°    NW → Y=0°    NE → Y=90°
-
-  Position offset (applied on top of grid position):
-    SW: (0, 0, +4)      SE: (-4, 0, +4)
-    NW: none            NE: (-4, 0, 0)
-
-  Pivot convention — ALL _O_ floor tiles must have their pivot at the standard
-  corner position so the tileOff values above apply correctly. The _3 suffix
-  variants (COMP_Floor_01_O_convex_med_3, COMP_Floor_01_O_angle_med_3) had
-  non-standard pivots and were fixed in the prefabs — do not revert those changes.
-
-  Grid positions (36×36 room example):
-    SW (ix=0,       iz=0      ): pivot (-14, 0, -18) + offset → (-14, 0, -14)
-    SE (ix=countX-1,iz=0      ): pivot ( 18, 0, -18) + offset → ( 14, 0, -14)
-    NW (ix=0,       iz=countZ-1): pivot (-14, 0,  14) + offset → (-14, 0,  14)
-    NE (ix=countX-1,iz=countZ-1): pivot ( 18, 0,  14) + offset → ( 14, 0,  14)
-
-## RoomBuilder — VERIFIED placement math
-
-Constants:
-  FloorStep = 4f   (floor tile snap, _med _O_ tile)
-  WallStep  = 6f   (wall piece snap, large COMP_)
-
-Floor grid (_O_ corner-pivot tile, extends -X and +Z):
-  startX = -HalfWidth + FloorStep   ← offset so tiles cover to +HalfWidth
-  startZ = -HalfDepth
-  step   = FloorStep
-  countX = Mathf.RoundToInt(FullWidth / FloorStep)
-  countZ = Mathf.RoundToInt(FullDepth / FloorStep)
-
-  Tile pools (BuildFloors):
-    baseTiles    — Floor entries with "straight" in name  → fills the grid
-    bonepiles    — Floor entries with "bonepile" in name  → 15 % random swap
-    angleTiles   — Floor entries with "angle"             → corner positions only
-    concaveTiles — Floor entries with "concave"           → corner positions only
-    convexTiles  — Floor entries with "convex"            → corner positions only
-  nonCornerTiles = all Floor entries without angle/convex/concave in name.
-  Fallback baseTile (no "straight" found): uses nonCornerTiles[0], never a corner tile.
-  angle / concave / convex tiles NEVER placed in the main floor fill grid.
-
-Wall runs (edge-pivot pieces — extend one FloorStep in rotation direction):
-  count per side = Mathf.RoundToInt(FullWidth / FloorStep) - 1
-    (excludes the two corner slots)
-  fixed coords (no inset):
-    northZ = +HalfDepth   southZ = -HalfDepth
-    eastX  = +HalfWidth   westX  = -HalfWidth
-  start varies per wall due to edge-pivot direction:
-    North (Y=0°):   startX = -HalfWidth + FloorStep * 1.5f
-    South (Y=180°): startX = -HalfWidth + FloorStep * 0.5f
-    East  (Y=90°):  startZ = -HalfDepth + FloorStep * 0.5f
-    West  (Y=-90°): startZ = -HalfDepth + FloorStep * 1.5f
-  step in PlaceWallRun = FloorStep
-
-Wall rotations (face inward):
-  North → Quaternion.identity        (Y=0°)
-  South → Quaternion.Euler(0,180,0)
-  East  → Quaternion.Euler(0, 90,0)
-  West  → Quaternion.Euler(0,-90,0)
-
-Corner pieces — Wall type, never Column:
-  Each corner has its own WallSize setting (NW/NE/SW/SE).
-  None = skip that corner.
-  Prefab filter: name contains "corner" + size string, not "column".
-  Prefer _2 suffix (solid corner variant).
-  cx = HalfWidth, cz = HalfDepth
-  SW (-cx,-cz): Y=90°   SE (+cx,-cz): Y=0°
-  NE (+cx,+cz): Y=-90°  NW (-cx,+cz): Y=180°
-
-Wall prefab filter helpers:
-  GetStraightWallPrefabs(WallSize) → Wall entries with "straight" + size string
-  GetHalfWallPrefabs(WallSize)     → Wall entries with "straight" + size string + "half"
-  GetCornerPrefabs(WallSize)       → Wall entries with "corner" + size string
-  WallSizeString(WallSize)         → "large" / "med" / "small" / ""
-
-Half-wall logic for angle/concave/convex corners — VERIFIED WORKING:
-  When a corner type is angle, concave, or convex (but NOT a _2 variant),
-  the two adjacent wall pieces use a half-length variant:
-    COMP_Wall_01_M_straight_large_half_R
-  The _R suffix means geometry is always on local +X (right) side of piece.
-
-  _2 suffix corners (e.g. angle_large_2) are solid-corner pieces that close
-  their own gap — they always use full-length adjacent walls. CornerNeedsHalfWall
-  returns false immediately for any corner whose name ends in "_2".
-
-  Half flags (computed in BuildWalls before PlaceWallRun calls):
-    nwHalf = cornerNW != None && CornerNeedsHalfWall(NW)
-    neHalf = cornerNE != None && CornerNeedsHalfWall(NE)
-    swHalf = cornerSW != None && CornerNeedsHalfWall(SW)
-    seHalf = cornerSE != None && CornerNeedsHalfWall(SE)
-  CornerNeedsHalfWall: name ends "_2" → false; else name contains
-    "angle" OR "concave" OR "convex" → true.
-
-  PlaceWallRun has 4 optional override parameters:
-    startOverride / endOverride     — alternate prefab list for first/last slot
-    flipStartRotation / flipEndRotation — adds 180° Y to rotation
-    shiftStartToward / shiftEndToward   — moves pivot one FloorStep inward
-
-  Per-wall half-piece rules (wall Y rotation → local +X direction):
-    Y=0°  (North): +X = East  → geometry faces East
-    Y=90° (East):  +X = South → geometry faces South
-    Y=180°(South): +X = West  → geometry faces West
-    Y=-90°(West):  +X = North → geometry faces North
-
-  Eight affected slots and their correction:
-    N_0  (NW corner): +X already faces away → no flip, no shift
-    N_last(NE corner): +X faces INTO corner → flip + shiftEndToward
-    S_0  (SW corner): +X faces INTO corner → flip + shiftStartToward
-    S_last(SE corner): +X already faces away → no flip, no shift
-    E_0  (SE corner): +X faces INTO corner → flip + shiftStartToward
-    E_last(NE corner): +X already faces away → no flip, no shift
-    W_0  (SW corner): +X already faces away → no flip, no shift
-    W_last(NW corner): +X faces INTO corner → flip + shiftEndToward
-
-Door placement:
-  Add Opening picks a random Wall_{side}_N child from walls/ group,
-  destroys it, and stamps an ExitPoint child on MOD root at the wall
-  slot's local position (Y = tier * WallTier — already tier-snapped).
-  ExitPoint direction maps directly from the WallSide enum.
-  Named "Exit_{dir}_{n}" where n = count of same-direction ExitPoints
-  already on MOD root. Multiple doors on same side produce Exit_N_0,
-  Exit_N_1, etc.
-  RoomPiece is auto-added to MOD root if not already present.
-
-  Apply Bounds only updates boundsSize / boundsOffset on RoomPiece.
-  Rebuild Exits from Doors re-stamps exits from the doors/ hierarchy
-  using DetectExitDirection (XZ-nearest-wall + Up/Down interior check).
-  ExitPoint Y snapped to nearest WallTier boundary.
-  Vertical exits forced to Y=FullHeight (Up) or Y=0 (Down).
-
-Bounds:
-  boundsSize   = (HalfWidth, HalfHeight, HalfDepth)
-  boundsOffset = (0, HalfHeight, 0)
-
-## Double Door logic — VERIFIED WORKING
-
-Disabled for Small (12×12) preset.
-Dispatch based on candidates.Count and CornerNeedsHalfWall:
-
-  candidates = wall run pieces on the chosen side (excludes corners)
-  candidates.Count == 3 → Medium-like span (24-unit wall = 3 non-corner slots)
-    CornerNeedsHalfWall returns false (_corner_ corners):
-      DoDoubleDoorMediumStandard — destroys all 3 candidates
-        flanks replaced with half walls (COMP_Wall_01_M_straight_large_half_R)
-        flipped flank shifts FloorStep toward its corner along run axis:
-          North flank hi (NE side): flip + shift (-FloorStep on X)
-          South flank lo (SW side): flip + shift (+FloorStep on X)
-          East  flank lo (SE side): flip + shift (+FloorStep on Z)
-          West  flank hi (NW side): flip + shift (-FloorStep on Z)
-        un-flipped flank stays at candidate position
-    CornerNeedsHalfWall returns true (angle/concave/convex corners):
-      DoDoubleDoorMediumSpecial — destroys all wall run pieces
-        re-places full walls at corner-adjacent grid positions
-        each replacement shifts 2 units toward 0 on the RUN axis:
-          N/S walls (run axis = X): posFirst +2 X, posLast -2 X
-          E/W walls (run axis = Z): posFirst +2 Z, posLast -2 Z
-
-  candidates.Count > 3 → Large+ span
-    span ≤ 60 units: removes 2 adjacent centre slots, ExitPoint at midpoint
-    span > 60 units: two double openings at 1/3 and 2/3 of candidates
-
-CornerNeedsHalfWall: returns false if name ends "_2"; otherwise true if
-  name contains "angle", "concave", or "convex".
-
-Half-wall _R suffix rule:
-  Geometry always on local +X of piece.
-  The flank whose +X points INTO the opening needs flip (180° Y) + pivot shift.
-  The flank whose +X points AWAY from the opening needs no correction.
-
 ## LVL_Configurator
 EditorWindow: LevelGen → LVL Configurator
 Processes LVL_ prefabs into generator-ready prefabs.
@@ -642,56 +399,51 @@ Save paths:
 Batch button: process entire folder at once.
 Skip prefabs that already have RoomPiece component.
 
-## Scripts status
+## Scripts status (post V1-cleanup, 2026-04-26)
+
 Generation/:
   ExitPoint.cs ✓
-  RoomPiece.cs ✓
-  BoundsChecker.cs ✓
-  LevelGenerator.cs ✓ (simplified: roomCount, 70/30 room/hall, no start room, no dead-end caps)
-
-Data/:
-  SeedData.cs ✓
-  LevelSequence.cs ✓
+  RoomPiece.cs ✓ (gizmo rotation-aware via Gizmos.matrix)
 
 Workshop/:
-  PieceCatalogue.cs ✓
-  RoomDefinition.cs ✓
-  RoomBuilder.cs ⚠ (needs rebuild at COMP_ level)
-  PropEntry.cs ✓
-  PropCatalogue.cs ✓
-  SpawnPoint.cs ✓
-  RoomContentGenerator.cs ✓
-  RoomPreset.cs ✓
-  RoomPresetLibrary.cs ✓
+  PieceCatalogue.cs ✓ (PieceType.None = 99 staging slot)
+
+LevelEditor/:
+  CellMap.cs ✓ (V2 cell-grid with HasWallOnEdge + AddDoorway)
+  TileType.cs ✓ (TileType + TileTypeInfo lookup)
+  ShapeStamp.cs ✓ (Rectangle only; Diamond/Circle moved to Experimental)
+  EdgeSolver.cs ✓
+  EdgeSolverGizmoPreview.cs ✓ (V2 diagnostic, JC confirmed KEEP)
+  RoomBuilder.cs ✓ (V2 cell-map RoomBuilder)
+  RoomPieceClassification.cs ✓ (PieceType / RoomCategory / HallCategory enums)
+
+LevelEditor/Editor/:
+  Doorway_Test.cs, EdgeSolver_Test.cs, RoomBuilderEditor.cs,
+  RoomPiece_Test.cs, ShapeStamp_Test.cs, V2_SampleThemeBuilder.cs ✓
+
+LevelGen/V2/:
+  LevelGenSettings.cs ✓
+LevelGen/V2/Editor/:
+  V2LevelGeneratorWindow.cs, V2LevelGenerator.cs, V2PrefabSource.cs ✓
 
 Editor/:
-  LevelGeneratorEditor.cs ✓
-  RoomWorkshopWindow.cs ✓ (redesigned for actual pack workflow)
   PieceCatalogueEditor.cs ✓
-  PlaceholderPrefabFactory.cs ✓
-  LevelGenSetup.cs ✓
-  LVL_Configurator.cs ✓
+  WhiteboxPackFactory.cs ✓ (pipeline complete; menu under [Complete] submenu)
+  LVL_Configurator.cs ✓ (complete — do not touch)
+
+Experimental/:
+  ShapeStamp_Shapes.cs (Diamond + Circle, #if FALSE)
+  README.md
+
+V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
+LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
+PropEntry, PropCatalogue, SpawnPoint, RoomContentGenerator, RoomPreset,
+RoomPresetLibrary, LevelGeneratorEditor, RoomWorkshopWindow,
+PlaceholderPrefabFactory, LevelGenSetup. All recoverable from git
+history pre-cleanup.
 
 ## Next CC task (run this when resuming)
 Read CLAUDE.md fully.
-RoomWorkshopWindow is verified and working through step ⑤. ALL features below confirmed working:
-  - Floor grid, wall runs (per-wall WallSize), corners (per-corner WallSize) ✓
-  - Door replacement: random wall slot, random doorway prefab, isExit toggle ✓
-  - ExitPoint stamping (isExit=true) and decorative door (isExit=false) ✓
-  - Half-wall logic for angle/concave/convex corners (not _2 variants) ✓
-  - _2 suffix corners always use full-length adjacent walls ✓
-  - Corner floor tiles (angle/concave/convex) with correct rotation and position offset ✓
-  - Convex corners use concaveTiles pool; _2 variant uses _3-suffix concaveTile ✓
-  - angle/concave/convex tiles excluded from main floor fill; fallback never picks corner tile ✓
-  - Small (12×12) room door fallback (ignores first/last exclusion) ✓
-  - Column is its own PieceType (freestanding decorative, never used as corners) ✓
-  - Double Door — all four logic paths (Medium Standard, Medium Special, Large, Large>60) ✓
-  - Custom Height / Wall Tiers — 1–3 tiers (multiples of 6), geometry stacks vertically ✓
-  - Per-tier Opening Tier dropdown — shown only when tiers > 1 ✓
-  - Seed Generator (⓪ step) — deterministic room generation from int seed ✓
-  - Step ⑥ Save: Type dropdown (Room/Hall) routes prefab to correct folder ✓
-    Not yet tested end-to-end in Unity.
-  - Dress step (PropCatalogue / SpawnPoints) not yet implemented.
 
 PieceCatalogueEditor is verified working (per-section ReorderableList architecture):
   - One foldout + ReorderableList per PieceType (Floor → Stair) ✓
@@ -836,83 +588,6 @@ V2 Level Generator (2026-04-25):
          Assets/Scripts/LevelGen/V2/Editor/V2PrefabSource.cs
          Assets/Scripts/LevelGen/V2/Editor/V2LevelGenerator.cs
 
-## Boss room analysis — VERIFIED ground truth
-
-Source: demoscene_dungeon_level_5_bossroom
-
-Room structure (MOD parent, no components):
-  MOD/
-  ├── ceiling/   P_MOD_WallCover_ pieces
-  ├── columns/   COMP_Column_ pieces  
-  ├── doors/     COMP_Door_01_large ← EXITS live here
-  ├── floors/    P_MOD_Floor_01_O_straight_med pieces
-  ├── railings/  P_MOD_Stairs_01_E_straight pieces
-  ├── stairs/    LVL_01_O_stairs_ modules
-  └── walls/     COMP_Wall_01_O_straight + P_MOD_Wall_
-
-Floor piece confirmed: P_MOD_Floor_01_O_straight_med
-  _O_ corner pivot
-  Snap unit = 4 units (med size)
-
-Wall pieces: COMP_Wall_01_O_straight_med/_large
-  _O_ edge pivot
-
-Exit piece: COMP_Door_01_large
-  Position X=4, Y=3, Z=-26
-  Y=3 = half wall height (doors at mid-height)
-  THIS is where ExitPoints should be placed
-
-Stairs: LVL_01_O_stairs_angle_HOLE_5
-  LVL_ modules used ONLY for stair sections
-  Not used for main room walls/floors
-
-KEY INSIGHT:
-  Doors/Gateways define exits, NOT wall sections
-  ExitPoint position = COMP_Door_ world position
-  ExitPoint direction = away from room center
-
-OneSided (O) folder = wall sections and fills
-  Used for room perimeters
-  Edge pivot
-
-PivotMiddle (M) folder = same pieces, center pivot
-  Better for our generator placement math
-
-## Revised Room Workshop approach — VERIFIED WORKING
-
-Step 1: Define room size (multiples of 12)
-  Room Workshop size presets: Small=12, Medium=24, Large=36
-
-Step 2: Build Room — auto-fills:
-  a) Floor grid   (P_MOD_Floor_01_O_straight_med, _O_ corner pivot)
-     startX = -HalfWidth + FloorStep  startZ = -HalfDepth  step=4
-  b) Wall perimeter — each side (N/S/E/W) has its own WallSize dropdown
-     straight + size filter, edge pivot, per-wall start positions,
-     step=FloorStep=4, no inset; None = skip that side entirely
-  c) Corner pieces — each corner (NW/NE/SW/SE) has its own WallSize dropdown
-     corner + size filter, Wall type; None = skip that corner
-
-Step 3: Add Door — "Add Door" button on chosen WallSide:
-  Randomly replaces one Wall_{side}_N piece with Doorway piece
-  ExitPoint stamped on MOD root immediately (no separate step)
-
-Step 4: Apply Components (optional refresh)
-  Rebuilds RoomPiece + all ExitPoints from doors/ group
-
-Step 5: Save MOD as prefab
-  Select Type (Room / Hall) → saves to Rooms/Curated/ or Halls/ accordingly
-
-## LVL_ modules — revised understanding
-OneSided folder = wall/railing/stair sections
-  Used to build room perimeters piece by piece
-  NOT complete rooms
-
-PivotMiddle folder = same, center pivot variants
-  Better for generator — use these for halls
-
-Complete rooms are ASSEMBLED from parts/comps
-NOT selected as single pre-built pieces
-
 ## Cell-map room model — Phase 1 foundation
 
 Three files in Assets/Scripts/LevelEditor/ form the Phase 1 foundation:
@@ -924,8 +599,12 @@ Three files in Assets/Scripts/LevelEditor/ form the Phase 1 foundation:
                   old FloorStep). ToAscii() for debug dumps.
   ShapeStamp.cs — Static utility that stamps pre-populated CellMaps for common
                   geometric shapes. Floor cells only — no wall, corner, or
-                  prefab logic. Contains Rectangle(), Diamond(), and Circle()
-                  methods; Diamond/Circle are scaffolding for future work.
+                  prefab logic. Contains Rectangle() in the live tree;
+                  Diamond() and Circle() were moved to
+                  Assets/Scripts/Experimental/ShapeStamp_Shapes.cs behind
+                  #if FALSE on 2026-04-26 (V1 cleanup). Live class is now
+                  declared `partial` so the experimental partial folds back
+                  in cleanly when revived.
 
 ### ShapeStamp methods
 
@@ -936,38 +615,18 @@ Invalid inputs are clamped (not thrown) and logged via Debug.LogWarning.
     Fills every cell with TileType.Square. Grid is exactly width × depth.
     Clamps: width and depth to min 1.
 
-  Diamond(int size)
-    size × size grid. Cells with Manhattan distance ≤ (size-1)/2 from center
-    become Square. Diagonal-edge border cells (off the cardinal axes, at exactly
-    the radius boundary) use Triangle tiles — hypotenuse faces outward:
-      NE-facing cut → TriangleSW   NW-facing cut → TriangleSE
-      SE-facing cut → TriangleNW   SW-facing cut → TriangleNE
-    Even sizes: float center at X.5 — no cells land exactly on the boundary,
-    so no Triangle tiles are produced (pure Square diamond).
-    Clamps: size to min 3.
-
-  Circle(int radius)
-    (2*radius+1) × (2*radius+1) grid, center at (radius, radius).
-    Boundary ring = cells within 0.5 cell-units of the exact radius:
-      dist ≤ radius-0.5 → Square (inner)
-      radius-0.5 < dist ≤ radius+0.5 → Quarter tile (off-axis) or Square (on-axis)
-      dist > radius+0.5 → Empty
-    Quarter tile orientation (curve faces center):
-      NE quadrant → QuarterSW   NW quadrant → QuarterSE
-      SE quadrant → QuarterNW   SW quadrant → QuarterNE
-    On-axis cells (dx==0 or dz==0) are always Square regardless of ring.
-    Hot path uses squared-distance comparison — no sqrt.
-    Clamps: radius to min 1.
+  Diamond(int size) and Circle(int radius)
+    DORMANT — moved to Assets/Scripts/Experimental/ShapeStamp_Shapes.cs
+    behind #if FALSE on 2026-04-26 (V1 cleanup). Reviving requires also
+    extending EdgeSolver and RoomBuilder to handle Triangle / Quarter tile
+    types in their wall and corner passes, which they do not today.
 
 ### LevelEditor/Tests menu item
 
   LevelEditor → Tests → Dump Shape Stamps to Console
   Source: Assets/Scripts/LevelEditor/Editor/ShapeStamp_Test.cs
-  Generates Rectangle(5,3), Diamond(5), and Circle(3), calls ToAscii() on each,
-  and logs them. Smoke test only — confirms all three methods run without
-  exception and produce plausible ASCII output.
-
-LVL_ modules only used as-is for STAIRS
+  Generates Rectangle(5,3), calls ToAscii() on it, and logs the result.
+  Smoke test only — confirms the active V2 shape runs without exception.
 
 ## Cell-map room model — Phase 2: EdgeSolver
 
