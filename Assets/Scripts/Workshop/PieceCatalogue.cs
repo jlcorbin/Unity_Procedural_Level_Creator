@@ -15,7 +15,7 @@ namespace LevelGen
     {
         // ── Enums ─────────────────────────────────────────────────────────────
 
-        /// <summary>Visual style tag for this catalogue — used for RoomPreset matching.</summary>
+        /// <summary>Visual style tag for this catalogue. Used to match against the Theme name resolved from a LevelGenSettings asset.</summary>
         public enum VisualTheme
         {
             Dungeon,
@@ -102,7 +102,7 @@ namespace LevelGen
 
         // ── Inspector fields ──────────────────────────────────────────────────
 
-        [Tooltip("Visual style tag for this catalogue — used for matching with RoomPreset.")]
+        [Tooltip("Visual style tag for this catalogue. Used to match against the Theme name resolved from a LevelGenSettings asset.")]
         public VisualTheme theme = VisualTheme.Dungeon;
 
         [Tooltip("All modular pieces available for room construction. " +
