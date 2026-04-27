@@ -715,7 +715,7 @@ namespace LevelGen.Player.Editor
                 {
                     readerActionField.SetValue(c.Input, lookRef);
                     if (readerGainField != null)
-                        readerGainField.SetValue(c.Input, isYish ? -1.0f : 1.0f);  // D8: Y inverted; bumped from ±0.2 → ±1.0 (08-A-2-tune: 0.2 was too slow against featureless test scene)
+                        readerGainField.SetValue(c.Input, isYish ? -10.0f : 10.0f);  // D8: Y inverted; final tune ±10.0 per Jason's playtest preference (0.2 → 1.0 → 10 progression)
                     wiredAxes++;
                 }
             }
@@ -784,7 +784,7 @@ namespace LevelGen.Player.Editor
                 $"  LookAt:  {lookAtName} (expected: CameraTarget)\n" +
                 $"  OrbitalFollow:        Sphere, Radius=4, VerticalAxis range=(-10,70) initial=15, HorizontalAxis range=(-180,180,wrap)\n" +
                 $"  Deoccluder:           MinDistance=1.0\n" +
-                $"  InputAxisController:  {wiredAfterReload}/2 axes wired to Player/Look (gain ±1.0, Y inverted)\n" +
+                $"  InputAxisController:  {wiredAfterReload}/2 axes wired to Player/Look (gain ±10, Y inverted)\n" +
                 $"  Press Play in this scene to verify M2-A acceptance items C1–C5."
             );
         }

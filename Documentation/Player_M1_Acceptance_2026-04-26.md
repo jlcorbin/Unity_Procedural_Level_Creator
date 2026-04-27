@@ -264,18 +264,19 @@ combo for behind-the-back follow with input-driven orbit:
 
 Body and Aim are complementary in CM 3.x — they don't conflict.
 
-**Tune note (08-A-2 sensitivity bump)**
+**Tune note (08-A-2 → final sensitivity)**
 
 After restoration, C3 was technically working (Brain transform was
 updating with input) but visually subtle in the featureless test scene.
-Bumped Reader Gain from `0.2 / -0.2` to `1.0 / -1.0`. 5 pixels of mouse
-motion now produces 5° of camera rotation instead of 1°.
-PlayerPrefabBuilder.cs's defaults updated to `1.0 / -1.0` so future
-re-runs ship with responsive sensitivity.
+Iterated up: `0.2 / -0.2` → `1.0 / -1.0` → **`10 / -10`** (final, per
+Jason's playtest preference). At ±10, mouse / right-stick movement
+produces snappy responsive camera orbit suitable for combat-pace
+strafe traversal.
 
-Re-test C3, C4 in `Player_M1_Test.unity`. If the orbit still feels off,
-tune the Gain values in the Inspector — there's no canonical "right"
-value, only feel.
+Final values written into both `Player_M1_Test.unity` (vcam
+`CinemachineInputAxisController.Look Orbit X.Input.Gain = 10`,
+`Look Orbit Y.Input.Gain = -10`) and `PlayerPrefabBuilder.cs`'s camera
+setup menu so future re-runs ship with the same feel.
 
 ---
 

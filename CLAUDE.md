@@ -470,9 +470,10 @@ Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2
                      08-A-2 restored it after empirical evidence that
                      OrbitalFollow runs Body-stage only and needs an Aim-stage
                      component for rotation. Body+Aim are complementary in CM 3.x.
-                     Reader Gain also bumped from ±0.2 → ±1.0 (the 0.2 spec value
-                     was visually too subtle in the featureless test scene; tune
-                     in Inspector if needed).
+                     Reader Gain final tune: ±10 (per Jason's playtest preference;
+                     iterated 0.2 → 1.0 → 10). At ±10, mouse / right-stick movement
+                     produces snappy responsive camera orbit. Locked into both the
+                     test scene's vcam and PlayerPrefabBuilder.cs camera setup.
   M2 strafe locomotion (2026-04-27): switched from rotate-to-face to strafe with
     snap body alignment. Body yaw locked to camera yaw every frame. SetMove now
     writes (input.x, input.y) so blend tree exercises all 4 corners. Sprint still
