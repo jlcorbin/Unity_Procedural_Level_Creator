@@ -45,6 +45,10 @@ namespace LevelGen.Player
         [Tooltip("Squared-magnitude threshold below which we don't bother rotating (avoids jitter at deadzone).")]
         [SerializeField] private float minMoveSqr = 0.0001f;
 
+        [Header("Jump")]
+        [Tooltip("Jump height in meters at the peak of the arc. Fixed-height jump; gravity completes the arc. Air-time ≈ 2 * sqrt(2h/|g|) ≈ 0.99s at default 1.2m / -9.81 gravity.")]
+        [SerializeField] private float jumpHeight = 1.2f;
+
         [Header("References")]
         [Tooltip("Camera the input is interpreted relative to. Auto-resolves to Camera.main if null at Awake.")]
         [SerializeField] private Transform cameraTransform;
@@ -53,7 +57,22 @@ namespace LevelGen.Player
         private CharacterController _cc;
         private PlayerInputReader _input;
         private PlayerAnimator _anim;
+        private PlayerCombat _combat;        // optional — null tolerated (gate disabled)
         private float _verticalVelocity;
+
+        // ── Jump / grounded state ───────────────────────────────────────────
+        // Resolved lazily — sibling Awake order is non-deterministic, so
+        // _anim.Animator may be null when our Awake runs. PlayerCombat hit
+        // this exact trap in Step 3 and adopted the same pattern.
+        private Animator AnimatorComponent => _anim != null ? _anim.Animator : null;
+
+        private static readonly int AttackStateHash  = Animator.StringToHash("Attack");
+        private static readonly int HitStateHash     = Animator.StringToHash("Hit");
+        private static readonly int JumpEndStateHash = Animator.StringToHash("JumpEnd");
+
+        private bool _isGrounded;
+        private bool _wasGrounded;
+        private bool _groundedDirty = true;  // forces SetGrounded write on frame 0
 
         // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -62,6 +81,7 @@ namespace LevelGen.Player
             _cc = GetComponent<CharacterController>();
             _input = GetComponent<PlayerInputReader>();
             _anim = GetComponent<PlayerAnimator>();
+            _combat = GetComponent<PlayerCombat>();   // optional — null tolerated
 
             if (cameraTransform == null)
             {
@@ -71,10 +91,48 @@ namespace LevelGen.Player
             }
         }
 
+        private void OnEnable()
+        {
+            if (_input != null) _input.JumpPressed += OnJumpPressed;
+        }
+
+        private void OnDisable()
+        {
+            if (_input != null) _input.JumpPressed -= OnJumpPressed;
+        }
+
+        // ── Input event handlers ────────────────────────────────────────────
+
+        /// <summary>
+        /// Subscribed to <see cref="PlayerInputReader.JumpPressed"/>. Routes
+        /// the press through the gameplay-side gate before firing the Jump
+        /// trigger. Drops the press during Attack / Hit (action lock), while
+        /// airborne (no double-jump), or during JumpEnd (landing recovery).
+        /// </summary>
+        private void OnJumpPressed()
+        {
+            if (IsActionLocked())  return;  // Attack / Hit blocks jump
+            if (!_isGrounded)       return;  // no air-jump, no double-jump
+            if (IsInJumpEndState()) return;  // wait for landing recovery
+
+            // Kinematic jump: v = sqrt(2 * h * |g|). Apply to the same
+            // _verticalVelocity channel ApplyGravity uses — gravity then
+            // decelerates the rise, peaks at jumpHeight, and accelerates
+            // the fall until _cc.isGrounded re-fires.
+            _verticalVelocity = Mathf.Sqrt(2f * jumpHeight * -gravity);
+            _anim.SetJumpTrigger();
+        }
+
         private void Update()
         {
             // 1) Read input.
             Vector2 input = _input.MoveInput;
+
+            // 1.5) Cache grounded state. Used by step 7.5's edge-detected
+            //      SetGrounded write and by OnJumpPressed's airborne gate.
+            //      ApplyGravity (step 5) still reads _cc.isGrounded directly
+            //      to keep itself self-contained — duplicate read is cheap.
+            _isGrounded = _cc.isGrounded;
 
             // 2) Clamp magnitude to 1 (Q-5: WASD diagonal would be ~1.414 raw).
             if (input.sqrMagnitude > 1f) input.Normalize();
@@ -90,6 +148,13 @@ namespace LevelGen.Player
                 currentSpeed *= sprintMultiplier;
             Vector3 motion = moveDirXZ * currentSpeed;
 
+            // 4.5) Root in place during Attack / Hit. Animator MoveX/MoveZ
+            //      writes (step 8) keep firing so the locomotion blend tree
+            //      stays primed; only the CharacterController translation is
+            //      gated. Gravity still applies so the player doesn't float.
+            if (_combat != null && _combat.IsActionLocked)
+                motion = Vector3.zero;
+
             // 5) Apply gravity (sticky-grounded).
             ApplyGravity(ref motion);
 
@@ -101,6 +166,19 @@ namespace LevelGen.Player
             //    looking along on the XZ plane, so strafing input maps cleanly:
             //    A on the stick = move left relative to body = LFT walk clip.
             SnapBodyToCameraYaw();
+
+            // 7.5) Push grounded state to Animator on change. Drives N10
+            //      (JumpStart → JumpAir on !IsGrounded) and N12
+            //      (JumpAir → JumpEnd on IsGrounded). Edge-detected to avoid
+            //      per-frame SetBool spam. _groundedDirty=true on construction
+            //      forces the first SetGrounded call so the Animator's default
+            //      (true) matches reality even if the player spawns airborne.
+            if (_groundedDirty || _isGrounded != _wasGrounded)
+            {
+                _anim.SetGrounded(_isGrounded);
+                _wasGrounded   = _isGrounded;
+                _groundedDirty = false;
+            }
 
             // 8) Push animator parameters. Body yaw is locked to camera yaw, so
             //    the input vector IS the body-relative move direction:
@@ -116,6 +194,43 @@ namespace LevelGen.Player
         }
 
         // ── Private helpers ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// True when the Animator's current state is Attack or Hit, AND the
+        /// Animator is not in the middle of a transition. The transition
+        /// passthrough is intentional — it allows the player to jump during
+        /// the Attack→Idle blend (the swing is functionally over) without
+        /// waiting through the 0.10s blend window. The independent
+        /// <see cref="PlayerCombat.IsActionLocked"/> property uses similar
+        /// logic for locomotion gating but checks the next state during
+        /// transitions; the two are intentionally not shared because the
+        /// jump check wants permissive transition behavior and the
+        /// locomotion gate does not.
+        /// </summary>
+        private bool IsActionLocked()
+        {
+            var anim = AnimatorComponent;
+            if (anim == null) return false;
+            if (anim.IsInTransition(0)) return false;
+            var info = anim.GetCurrentAnimatorStateInfo(0);
+            return info.shortNameHash == AttackStateHash
+                || info.shortNameHash == HitStateHash;
+        }
+
+        /// <summary>
+        /// True when the Animator's current state is JumpEnd. JumpStart and
+        /// JumpAir are covered by the <c>!_isGrounded</c> check in
+        /// <see cref="OnJumpPressed"/> — only JumpEnd needs an explicit
+        /// state-name check because the player IS grounded during landing
+        /// recovery.
+        /// </summary>
+        private bool IsInJumpEndState()
+        {
+            var anim = AnimatorComponent;
+            if (anim == null) return false;
+            var info = anim.GetCurrentAnimatorStateInfo(0);
+            return info.shortNameHash == JumpEndStateHash;
+        }
 
         /// <summary>
         /// Project camera forward and right onto the XZ plane and combine with
@@ -134,13 +249,19 @@ namespace LevelGen.Player
         }
 
         /// <summary>
-        /// Sticky-grounded gravity. While grounded, vertical velocity is clamped
-        /// to a small constant negative value so isGrounded stays true frame-over-
-        /// frame even on minor terrain bumps. While airborne, accumulate normally.
+        /// Sticky-grounded gravity. While grounded AND not currently rising,
+        /// vertical velocity is clamped to a small constant negative value so
+        /// isGrounded stays true frame-over-frame even on minor terrain bumps.
+        /// The <c>_verticalVelocity &lt; 0</c> guard is critical for jump:
+        /// without it, the same frame OnJumpPressed sets a positive velocity,
+        /// this clamp would overwrite it back to <see cref="stickyGroundVelocity"/>
+        /// and the player would never leave the ground. While airborne, or
+        /// while grounded and rising (the takeoff frame), accumulate gravity
+        /// normally.
         /// </summary>
         private void ApplyGravity(ref Vector3 motion)
         {
-            if (_cc.isGrounded)
+            if (_cc.isGrounded && _verticalVelocity < 0f)
                 _verticalVelocity = stickyGroundVelocity;
             else
                 _verticalVelocity += gravity * Time.deltaTime;

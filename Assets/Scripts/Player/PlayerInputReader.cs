@@ -39,6 +39,18 @@ namespace LevelGen.Player
         /// <summary>True while the Sprint action is held. Read by PlayerController each frame.</summary>
         public bool IsSprinting { get; private set; }
 
+        /// <summary>
+        /// Raised once per Attack button press (button-down edge). Subscribed
+        /// to by PlayerCombat. Not raised on hold or release.
+        /// </summary>
+        public event System.Action AttackPressed;
+
+        /// <summary>
+        /// Raised once per Jump button press (button-down edge). Subscribed
+        /// to by PlayerController. Not raised on hold or release.
+        /// </summary>
+        public event System.Action JumpPressed;
+
         // ── UnityEvent endpoints ─────────────────────────────────────────────
         // Wired in the inspector to UnityEngine.InputSystem.PlayerInput's
         // per-action UnityEvents. Value-type actions (Move, Look) read every
@@ -57,10 +69,13 @@ namespace LevelGen.Player
             LookInput = ctx.ReadValue<Vector2>();
         }
 
-        /// <summary>Attack stub. M1: log on press only.</summary>
+        /// <summary>
+        /// Attack action endpoint. Raises <see cref="AttackPressed"/> on the
+        /// performed phase (button-down). Consumed by PlayerCombat.
+        /// </summary>
         public void OnAttack(InputAction.CallbackContext ctx)
         {
-            if (ctx.performed) Debug.Log("[PlayerInputReader] Attack");
+            if (ctx.performed) AttackPressed?.Invoke();
         }
 
         /// <summary>Interact stub. M1: log on press only.</summary>
@@ -75,10 +90,13 @@ namespace LevelGen.Player
             if (ctx.performed) Debug.Log("[PlayerInputReader] Crouch");
         }
 
-        /// <summary>Jump stub. M1: log on press only.</summary>
+        /// <summary>
+        /// Jump action endpoint. Raises <see cref="JumpPressed"/> on the
+        /// performed phase (button-down). Consumed by PlayerController.
+        /// </summary>
         public void OnJump(InputAction.CallbackContext ctx)
         {
-            if (ctx.performed) Debug.Log("[PlayerInputReader] Jump");
+            if (ctx.performed) JumpPressed?.Invoke();
         }
 
         /// <summary>

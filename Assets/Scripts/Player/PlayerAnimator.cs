@@ -24,6 +24,10 @@ namespace LevelGen.Player
         private const string ParamMoveZ       = "MoveZ";
         private const string ParamSpeed       = "Speed";
         private const string ParamIsSprinting = "IsSprinting";
+        private const string ParamAttack      = "Attack";
+        private const string ParamHit         = "Hit";
+        private const string ParamJump        = "Jump";
+        private const string ParamIsGrounded  = "IsGrounded";
 
         // ── Cached state ────────────────────────────────────────────────────
         private Animator _animator;
@@ -31,6 +35,10 @@ namespace LevelGen.Player
         private int _hashMoveZ;
         private int _hashSpeed;
         private int _hashIsSprinting;
+        private int _hashAttack;
+        private int _hashHit;
+        private int _hashJump;
+        private int _hashIsGrounded;
         private bool _ready;
 
         // ── Public API ──────────────────────────────────────────────────────
@@ -70,6 +78,64 @@ namespace LevelGen.Player
             _animator.SetBool(_hashIsSprinting, value);
         }
 
+        /// <summary>
+        /// Fires the Attack trigger. The Animator transitions from
+        /// Idle / Locomotion / Sprint to the Attack state and plays Attack01
+        /// once. Auto-cleared by the Animator if no transition consumes it
+        /// within one update. Safe to call before Awake — silently dropped
+        /// if the Animator is not yet resolved.
+        /// </summary>
+        public void SetAttackTrigger()
+        {
+            if (!_ready) return;
+            _animator.SetTrigger(_hashAttack);
+        }
+
+        /// <summary>
+        /// Fires the Hit trigger. The Animator transitions from Any State
+        /// to the Hit state and plays GetHit01 once, interrupting whatever
+        /// state is currently active (including Attack). canTransitionToSelf
+        /// is true on the Hit transition, so consecutive calls restart the
+        /// reaction. Safe to call before Awake — silently dropped if the
+        /// Animator is not yet resolved.
+        /// </summary>
+        public void SetHitTrigger()
+        {
+            if (!_ready) return;
+            _animator.SetTrigger(_hashHit);
+        }
+
+        /// <summary>
+        /// Fires the Jump trigger. The Animator transitions from
+        /// Idle / Locomotion / Sprint to JumpStart via N7/N8/N9 if
+        /// <c>IsGrounded</c> is true. Auto-cleared by the Animator if no
+        /// transition consumes it within one update — so a press during
+        /// JumpStart / JumpAir / JumpEnd / Attack / Hit produces no state
+        /// change and no leaked queued trigger. Safe to call before Awake —
+        /// silently dropped if the Animator is not yet resolved.
+        /// </summary>
+        public void SetJumpTrigger()
+        {
+            if (!_ready) return;
+            _animator.SetTrigger(_hashJump);
+        }
+
+        /// <summary>
+        /// Writes the IsGrounded bool to the Animator. PlayerController calls
+        /// this with the current <c>CharacterController.isGrounded</c>
+        /// reading, edge-detected on the caller side to avoid per-frame
+        /// SetBool spam. Drives N10 (JumpStart→JumpAir on
+        /// <c>!IsGrounded</c>) and N12 (JumpAir→JumpEnd on
+        /// <c>IsGrounded</c>). Safe to call before Awake — silently dropped
+        /// if the Animator is not yet resolved.
+        /// </summary>
+        /// <param name="grounded">True while CharacterController.isGrounded is true.</param>
+        public void SetGrounded(bool grounded)
+        {
+            if (!_ready) return;
+            _animator.SetBool(_hashIsGrounded, grounded);
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -85,6 +151,10 @@ namespace LevelGen.Player
             _hashMoveZ       = Animator.StringToHash(ParamMoveZ);
             _hashSpeed       = Animator.StringToHash(ParamSpeed);
             _hashIsSprinting = Animator.StringToHash(ParamIsSprinting);
+            _hashAttack      = Animator.StringToHash(ParamAttack);
+            _hashHit         = Animator.StringToHash(ParamHit);
+            _hashJump        = Animator.StringToHash(ParamJump);
+            _hashIsGrounded  = Animator.StringToHash(ParamIsGrounded);
             _ready = true;
         }
     }
