@@ -519,7 +519,247 @@ Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2
     which PlayerController.BuildCameraRelativeMove already projects from.
   M2-D (level integration): pending — refactor to Player_RuntimeRig composite prefab
         during this milestone
-  M2-B (combat: jump, attack, hit): pending
+  M2-B Step 1 (clip survey, 2026-04-27): COMPLETE.
+    Read-only inventory of Attack and Hit/Reaction/Death clips on the
+    SwordAndShield pack. 10 candidates surveyed; all Humanoid rig, all
+    loadable, all in-range length. No FAIL. WARN on 8/10 for loopTime=1
+    (handled at Animator state level). Survey: Assets/Documentation/
+    M2B_01_clip_survey_report.md. Locked picks: Attack01_SwordAndShiled
+    (Option α) and GetHit01_SwordAndShield. Pack-name correction surfaced:
+    the user-facing "MaleCharacterPBR" is a prefab name; the actual asset
+    pack is "RPG Tiny Hero Duo PBR Polyart" with animations under
+    Assets/AssetPacks/RPG Tiny Hero Duo/Animation/SwordAndShield/.
+    FBX naming inconsistency: Attack/Idle clips use _SwordAndShiled
+    (typo); Hit/Die/Move clips use _SwordAndShield. Match exact filenames
+    when wiring overrides.
+  M2-B Step 2 (Animator wiring, 2026-04-27): COMPLETE.
+    Behavior table reviewed and approved at Assets/Documentation/
+    M2B_02_animator_behavior_table.md. All Section 5 defaults accepted.
+    PlayerBaseController.controller: 6 params (added Attack, Hit triggers
+    with type=9), 5 states (added Attack at fileID 1100000000000000001
+    motion=Attack01_SwordAndShiled, Hit at fileID 1100000000000000002
+    motion=GetHit01_SwordAndShield), 11 state-to-state transitions
+    + 1 anyStateTransition (N5: AnyState → Hit, canTransitionToSelf=true).
+    Both new states: Loop=off (state-level), ApplyRootMotion=off,
+    writeDefaultValues=1, m_Speed=1.0. The clip-side loopTime=1 import
+    flag is left untouched — Animator state behavior governs looping.
+    Attack root motion off makes Attack01's keepOriginalPositionY=0 a
+    non-issue (no FBX import edits needed).
+    PlayerOverride_MaleHero.overrideController: 8 self-mapped slots
+    (added Attack01 + GetHit01).
+    Transitions wired:
+      N1: Idle → Attack          (Trigger Attack, dur 0.10, instant)
+      N2: Locomotion → Attack    (Trigger Attack, dur 0.10, instant)
+      N3: Sprint → Attack        (Trigger Attack, dur 0.10, instant)
+      N4: Attack → Idle          (no cond, exitTime 0.90, dur 0.10)
+      N5: AnyState → Hit         (Trigger Hit, dur 0.05,
+                                  canTransitionToSelf=ON)
+      N6: Hit → Idle             (no cond, exitTime 0.85, dur 0.10)
+    YAML-edit fileIDs allocated in the 1100000000000000xxx range to
+    avoid collision with existing hash-style fileIDs.
+    Validator: Assets/Scripts/Player/Editor/PlayerCombatAnimatorValidator.cs
+      (LevelGen ▶ Player ▶ Validate Combat Animator (M2-B Step 2)) —
+      runs the six checks specified in the prompt, reads back via
+      AnimatorController API, GUID-free clip lookup. Read-only.
+    PlayerCombat.cs not yet written — that's M2-B Step 3 (will add
+    SetAttackTrigger / SetHitTrigger methods on PlayerAnimator and
+    wire the OnAttack input endpoint). PlayerInputReader.cs,
+    PlayerController.cs, PlayerAnimator.cs unchanged this step.
+  M2-B Step 3 (combat script + buffered combo, 2026-04-27): COMPLETE.
+    Behavior table reviewed at Assets/Documentation/M2B_03_combat_behavior_table.md;
+    all Section 5 defaults accepted.
+    PlayerAnimator.cs: SetAttackTrigger() and SetHitTrigger() public methods,
+      cached _hashAttack and _hashHit alongside existing param hashes; _ready
+      gating preserved (silent no-op pre-Awake, matches SetMove/SetSprinting).
+    PlayerInputReader.cs: public C# event AttackPressed (System.Action). OnAttack
+      now raises it on ctx.performed; the M1 Debug.Log was removed (real consumer
+      replaces stub log). M1-stub logs preserved on OnInteract/OnCrouch/OnJump/
+      OnPrevious/OnNext.
+    PlayerCombat.cs (NEW): namespace LevelGen.Player. RequireComponent
+      PlayerInputReader + PlayerAnimator. Subscribes to AttackPressed in
+      OnEnable, unsubscribes in OnDisable (event-based wiring; no UnityEvent
+      inspector setup). Buffered-combo state machine — OnAttackPressed routes
+      based on current Animator state: fires immediately from Idle/Locomotion/
+      Sprint, sets _attackBuffered within combo window during Attack, drops
+      input during Hit / outside window / mid-transition. Update polls
+      GetCurrentAnimatorStateInfo each frame; consumes the buffered press by
+      re-firing Attack trigger when Attack normalizedTime ≥ bufferConsumeAt.
+      Public TakeHit() — parameterless, [ContextMenu("Take Hit")] for
+      paused-game inspector testing. Clears _attackBuffered to prevent
+      orphan combo input leaking past stagger.
+    Combo window defaults (inspector-tunable, Range[0,1]):
+      comboWindowOpen   = 0.40   (buffer-eligible from 40% into Attack clip)
+      comboWindowClose  = 0.80   (buffer window closes at 80%; recovery after)
+      bufferConsumeAt   = 0.85   (re-fire next-attack trigger at 85%; before
+                                  the controller's 0.90 Attack→Idle exit time)
+    Player_MaleHero.prefab: PlayerCombat added to root via
+      LevelGen ▶ Player ▶ Add PlayerCombat to Player_MaleHero Prefab
+      (Assets/Scripts/Player/Editor/PlayerCombatPrefabAdder.cs). Idempotent —
+      no-op if PlayerCombat is already present. Inspector defaults from
+      SerializeField are sufficient; no per-field wiring needed.
+    Validator: Assets/Scripts/Player/Editor/PlayerCombatValidator.cs
+      (LevelGen ▶ Player ▶ Validate PlayerCombat Wiring (M2-B Step 3)) —
+      reflection checks on PlayerAnimator/InputReader/Combat API surface +
+      prefab component-presence sanity. Read-only.
+    Smoke test: Assets/Documentation/M2B_03_smoke_test.md — 10 manual checks
+      covering Attack from Idle/Locomotion/Sprint, buffer fire, drop-early,
+      drop-late, TakeHit interrupts Attack, TakeHit from Idle, re-hit during
+      Hit (canTransitionToSelf), Hit blocks Attack input.
+    Architecture: single-direction dependency preserved.
+      PlayerInputReader → (C# event) → PlayerCombat → (public API) →
+      PlayerAnimator → Animator. PlayerCombat never calls Animator.SetTrigger
+      directly; only PlayerAnimator writes parameters.
+    PlayerController.cs unchanged this step (locomotion locked).
+    No FBX, controller, or override-controller modifications this step.
+    M2-B "single attack + hit reaction" target: COMPLETE.
+  M2-B Step 4 (jump animator wiring, 2026-04-27): COMPLETE.
+    Three-state Jump arc wired into the Animator graph: JumpStart → JumpAir
+    → JumpEnd. Survey + behavior table reviewed at
+    Assets/Documentation/M2B_04_jump_clip_survey.md and
+    Assets/Documentation/M2B_04_jump_animator_behavior_table.md;
+    all Section 5 defaults accepted. Survey was clean — no FAIL, no WARN.
+    Every jump clip is Humanoid + InPlace + 1/1/1 root-motion-locked at the
+    FBX level; JumpAir already has loopTime=1 and the start/end clips
+    already have loopTime=0, so no FBX repairs were needed.
+    Locked clip picks (all from
+      Assets/AssetPacks/RPG Tiny Hero Duo/Animation/SwordAndShield/InPlace/):
+      JumpStart_Normal_InPlace_SwordAndShield (~0.267 s, 9 frames)
+      JumpAir_Normal_InPlace_SwordAndShield   (~0.500 s, 16 frames, loops)
+      JumpEnd_Normal_InPlace_SwordAndShield   (~0.400 s, 13 frames)
+    PlayerBaseController.controller: 8 params (added Jump trigger,
+      IsGrounded bool with default true), 8 states (added JumpStart at
+      fileID 1100000000000000003, JumpAir at 1100000000000000004,
+      JumpEnd at 1100000000000000005), 18 state-to-state transitions
+      + 1 anyStateTransition (unchanged from Step 2 — jump is structurally
+      blocked during Attack/Hit because no Attack→JumpStart or
+      Hit→JumpStart transitions exist).
+    Transitions wired:
+      N7:  Idle → JumpStart       (Jump AND IsGrounded==true,    dur 0.05)
+      N8:  Locomotion → JumpStart (Jump AND IsGrounded==true,    dur 0.05)
+      N9:  Sprint → JumpStart     (Jump AND IsGrounded==true,    dur 0.05)
+      N10: JumpStart → JumpAir    (IsGrounded==false,            dur 0.10)
+      N11: JumpStart → JumpAir    (fallback, exitTime 0.95,      dur 0.10)
+      N12: JumpAir → JumpEnd      (IsGrounded==true,             dur 0.05)
+      N13: JumpEnd → Idle         (no cond, exitTime 0.85,       dur 0.10)
+    All three jump states: WriteDefaults=1, m_Speed=1.0, IKOnFeet=0.
+    Apply Root Motion is a global Animator-component setting in Unity,
+    not a per-state YAML field; the prefab's existing Animator already has
+    it off, and the InPlace clips lock all three root-motion axes anyway,
+    so vertical motion will come exclusively from script in Step 5
+    (CharacterController.Move + jumpVelocity + gravity).
+    YAML-edit fileIDs allocated in the 1100000000000000xxx range
+    continuing from Step 2: states 003/004/005 + transitions 107-113.
+    PlayerOverride_MaleHero.overrideController: 11 self-mapped slots
+    (added 3 jump clips alongside the 8 from Steps M1/M2-C/Step 2).
+    Validator: Assets/Scripts/Player/Editor/PlayerJumpAnimatorValidator.cs
+      (LevelGen ▶ Player ▶ Validate Jump Animator (M2-B Step 4)) —
+      seven checks per the Step 4 prompt: param presence + IsGrounded
+      default-true, state presence, motion-resolves (M2 strafe lesson),
+      override resolution (GUID-free name lookup), transition counts
+      (18 + 1), specific N7-N13 condition/exit-time checks, JumpAir
+      clip.isLooping (PASS or WARN with FBX path on false). Read-only.
+    Architecture: jump is Animator-side only this step. PlayerController.cs,
+    PlayerInputReader.cs, PlayerAnimator.cs, PlayerCombat.cs all unchanged.
+    Step 5 will add SetJumpTrigger() / SetGrounded(bool) on PlayerAnimator,
+    raise a JumpPressed event from PlayerInputReader, and add jump physics
+    + IsGrounded polling + airborne-gravity-during-Hit handling to
+    PlayerController.
+    Mid-air-hit caveat (flagged for Step 5): N5 (AnyState → Hit) covers
+    JumpStart/JumpAir/JumpEnd, so a hit while airborne plays GetHit01 in
+    place. PlayerController must continue applying gravity during the
+    Hit state so the player still falls; otherwise they'd stick to the
+    air-pose Y until the stagger ended.
+  M2-B Step 5 (jump physics + IsGrounded polling + input wiring,
+    2026-04-27): COMPLETE.
+    Behavior table reviewed at
+      Assets/Documentation/M2B_05_jump_runtime_behavior_table.md;
+      all Section 6 defaults accepted (Q4 yes / allow during transitions,
+      Q5 Option A / block during JumpEnd, Q6 lazy AnimatorComponent
+      property, Q7 verify in smoke test, Q8 add OnEnable/OnDisable).
+      Field-name reconciliation per Section 0: prompt's nominal
+      _velocityY / _characterController / _playerAnimator map to
+      actual _verticalVelocity / _cc / _anim.
+    PlayerAnimator.cs: added SetJumpTrigger() and SetGrounded(bool)
+      public methods; cached _hashJump and _hashIsGrounded alongside
+      existing param hashes; _ready gating preserved (silent no-op
+      pre-Awake, matches SetMove / SetSprinting / SetAttackTrigger /
+      SetHitTrigger).
+    PlayerInputReader.cs: public C# event JumpPressed (System.Action).
+      OnJump now raises it on ctx.performed; the M1 Debug.Log was
+      removed (real consumer replaces stub log; matches OnAttack
+      precedent from Step 3). M1-stub logs preserved on OnInteract /
+      OnCrouch / OnPrevious / OnNext.
+    PlayerController.cs: significant additive changes (no refactor).
+      - [Header("Jump")] jumpHeight = 1.2f SerializeField. Air-time
+        ≈ 0.99s at default 1.2m / -9.81 gravity.
+      - Lazy AnimatorComponent property (mirrors PlayerCombat Step 3
+        fix — sibling Awake order is non-deterministic).
+      - Static state hashes: AttackStateHash, HitStateHash,
+        JumpEndStateHash. Jump START / AIR are not polled — the
+        airborne path is covered by !_isGrounded.
+      - Grounded edge-detect state: _isGrounded, _wasGrounded,
+        _groundedDirty=true (forces frame-0 SetGrounded write so the
+        Animator default true matches reality even on airborne spawn).
+      - OnEnable / OnDisable subscribes / unsubscribes
+        _input.JumpPressed → OnJumpPressed.
+      - OnJumpPressed handler: drops press during IsActionLocked()
+        (Attack/Hit, but NOT during transitions per Q4),
+        !_isGrounded (no air-jump), or IsInJumpEndState() (landing
+        recovery). Otherwise applies kinematic jump velocity
+        v = sqrt(2*h*|g|) to _verticalVelocity and fires SetJumpTrigger.
+      - IsActionLocked() / IsInJumpEndState() private helpers; both
+        read through the lazy AnimatorComponent property.
+      - Update pipeline modified additively (no refactor):
+          step 1.5 — _isGrounded = _cc.isGrounded
+          step 7.5 — edge-detected SetGrounded write between
+                     SnapBodyToCameraYaw and SetMove
+        Existing 1–9 numbering preserved, 1.5 / 7.5 inserted.
+      - **ApplyGravity bug fix:** the existing sticky-ground clamp
+        was unguarded — `if (_cc.isGrounded) _verticalVelocity =
+        stickyGroundVelocity;`. This would clobber the positive jump
+        velocity in OnJumpPressed before it ever applied (jump pressed
+        on frame N; Update runs same frame; ApplyGravity overwrites
+        +4.85 → -2; Move propagates -2 → no rise). Fixed to gate on
+        `_cc.isGrounded && _verticalVelocity < 0f` so the clamp only
+        fires when grounded AND not currently rising. M1 never exposed
+        this bug because there was no jump.
+    Player_MaleHero.prefab: NO component changes. Jump piggybacks on
+      existing PlayerController.
+    Architecture: single-direction dependency preserved.
+      PlayerInputReader → (C# event JumpPressed) → PlayerController →
+      (public API SetJumpTrigger / SetGrounded) → PlayerAnimator →
+      Animator. PlayerController never calls Animator.SetTrigger /
+      SetBool directly; only PlayerAnimator writes parameters.
+    Air control: full (locked decision). Existing camera-relative
+      move-vector build does not gate on grounded state, so horizontal
+      motion runs every frame regardless of airborne state.
+    Gravity-during-Hit: correct by existing code structure.
+      ApplyGravity sets motion.y AFTER step 4.5's horizontal-motion
+      zero clears — vertical motion is preserved during action lock.
+      Mid-air hit therefore continues to fall (validates Step 4's
+      airborne-hit caveat).
+    Coyote time / jump buffering / variable jump height: deferred.
+      None in M2-B. Add separately if play-test requests.
+    JumpStart visible portion ≈ 0.05–0.1s in practice — pack-authored
+      0.267s clip plus 1–2 frame IsGrounded flip means N10
+      (JumpStart→JumpAir on !IsGrounded) fires almost immediately.
+      Accepted as-is per Section 5.4.
+    Validator: Assets/Scripts/Player/Editor/PlayerJumpRuntimeValidator.cs
+      (LevelGen ▶ Player ▶ Validate Jump Runtime (M2-B Step 5)) —
+      reflection checks on PlayerAnimator/InputReader/Controller API
+      surface + prefab component-presence sanity. Read-only.
+    Smoke test: Assets/Documentation/M2B_05_jump_smoke_test.md —
+      10 manual checks covering jump from Idle/Locomotion/Sprint,
+      air control, action-lock blocking, JumpEnd-recovery blocking,
+      no-double-jump, mid-air-hit gravity continuity (CRITICAL), and
+      jump-press-does-not-consume-attack-combo-buffer.
+    M2-B "combat: jump, attack, hit" target: COMPLETE.
+  M2-B (remaining work): Attack02+ combos (the buffer mechanism in
+    PlayerCombat is already in place; extension requires adding
+    Animator states + override slots + routing buffered-press consume
+    to fire the next state in the combo, which currently re-fires
+    Attack01) and a Death state. Both can ship after M2-D level
+    integration since neither is on the critical path.
 
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),

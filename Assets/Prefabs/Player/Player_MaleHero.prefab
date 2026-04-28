@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 2347528454861255932}
   - component: {fileID: 6126163631391124566}
   - component: {fileID: 7795133820500307461}
+  - component: {fileID: 6314172883275923437}
   m_Layer: 0
   m_Name: Player_MaleHero
   m_TagString: Player
@@ -280,6 +281,21 @@ MonoBehaviour:
   stickyGroundVelocity: -2
   minMoveSqr: 0.0001
   cameraTransform: {fileID: 0}
+--- !u!114 &6314172883275923437
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1707633233060712764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f9b05604b1a58294f92fff6ba4a79a46, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerCombat
+  comboWindowOpen: 0.4
+  comboWindowClose: 0.8
+  bufferConsumeAt: 0.85
 --- !u!1 &7525707203240452561
 GameObject:
   m_ObjectHideFlags: 0
