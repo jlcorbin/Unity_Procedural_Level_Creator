@@ -479,7 +479,9 @@ Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2
     writes (input.x, input.y) so blend tree exercises all 4 corners. Sprint still
     gated to forward-mostly input (MoveZ > 0.7). PlayerController.cs steps 7+8
     rewritten; RotateTowardsMoveDir → SnapBodyToCameraYaw. rotationSpeed inspector
-    field unused under snap model — kept to avoid prefab churn, removable in cleanup.
+    field removed 2026-04-29 (was orphaned post-strafe-redesign; CS0414 warning fix).
+    Player_MaleHero.prefab YAML still has the serialized value but Unity ignores
+    fields with no matching script-side declaration on next save.
     Documentation/Player_Animator_Design_2026-04-26.md gained "Design Course
     Correction — 2026-04-27" section.
     Verification: L1–L8 in Documentation/Player_M1_Acceptance_2026-04-26.md.
@@ -754,12 +756,150 @@ Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2
       no-double-jump, mid-air-hit gravity continuity (CRITICAL), and
       jump-press-does-not-consume-attack-combo-buffer.
     M2-B "combat: jump, attack, hit" target: COMPLETE.
-  M2-B (remaining work): Attack02+ combos (the buffer mechanism in
-    PlayerCombat is already in place; extension requires adding
-    Animator states + override slots + routing buffered-press consume
-    to fire the next state in the combo, which currently re-fires
-    Attack01) and a Death state. Both can ship after M2-D level
-    integration since neither is on the critical path.
+  M2-B Step 6 (combo Animator wiring, 2026-04-29): COMPLETE.
+    Behavior table reviewed at Assets/Documentation/
+      M2B_06_combo_animator_behavior_table.md; all Section 7 defaults
+      accepted (including YAML fileID allocation per Q8). Animator-only
+      step — no PlayerCombat / PlayerController / PlayerInputReader /
+      PlayerAnimator / FBX / prefab modifications. Step 7 will route
+      buffered presses to the new ComboNext trigger.
+    PlayerBaseController.controller: 9 params (added ComboNext Trigger
+      with type=9), 10 states (added Attack02 at fileID
+      1100000000000000006 motion=Attack02_SwordAndShiled, Attack03 at
+      fileID 1100000000000000007 motion=Attack03_SwordAndShiled), 22
+      state-to-state transitions + 1 anyStateTransition.
+    PlayerOverride_MaleHero.overrideController: 13 self-mapped slots
+      (added Attack02 + Attack03 from RPG Tiny Hero Duo).
+    Transitions added (continuing 1100000000000000xxx convention from
+    Steps 2 and 4):
+      N14 (fileID 114): Attack → Attack02
+                        condition ComboNext (If), exitTime 0.85, dur 0.10
+                        — listed BEFORE N4 in Attack.m_Transitions
+      N15 (fileID 115): Attack02 → Attack03
+                        condition ComboNext (If), exitTime 0.85, dur 0.10
+                        — listed BEFORE N16 in Attack02.m_Transitions
+      N16 (fileID 116): Attack02 → Idle
+                        no conditions, exitTime 0.90, dur 0.10 (fallback)
+      N17 (fileID 117): Attack03 → Idle
+                        no conditions, exitTime 0.90, dur 0.10 (always)
+    Combo routing: at Attack/Attack02 exit-time 0.85 the Animator first
+      checks the ComboNext-conditioned transition; if the trigger is
+      set, combo wins. Otherwise the no-condition fallback at 0.90 fires
+      and routes to Idle. Existing N4 (Attack → Idle) is preserved as
+      the Attack-state fallback alongside N14.
+    Attack03 → Idle (N17) is the only outgoing transition from Attack03;
+      no further combo wiring (3-hit combo locked — Attack04 reserved
+      for future finisher / heavy attack but unwired).
+    All four new transitions: m_HasFixedDuration=1, m_InterruptionSource=0,
+      m_OrderedInterruption=1, m_CanTransitionToSelf=0, m_Solo=0, m_Mute=0.
+    Attack02/Attack03 state YAML matches existing Attack: m_Speed=1,
+      m_IKOnFeet=0, m_WriteDefaultValues=1, m_Mirror=0,
+      m_SpeedParameterActive=0, m_TimeParameterActive=0. Apply Root Motion
+      remains a global Animator-component setting (off on prefab from
+      Step 4); FBX-side root motion locked 1/1/1 on both new clips per
+      Step 1 Section C.
+    ComboNext is a Trigger (not Bool): auto-clears if unconsumed within
+      one Animator update. Hit-cancels-combo handled for free via N5
+      (Any State → Hit) — pending ComboNext is discarded. Avoids the
+      need for explicit clearing in TakeHit() or a StateMachineBehaviour.
+    Existing Attack state name preserved (NOT renamed to Attack01) for
+      PlayerCombat hash stability (AttackStateHash =
+      Animator.StringToHash("Attack")).
+    Validator: Assets/Scripts/Player/Editor/PlayerComboAnimatorValidator.cs
+      (LevelGen ▶ Player ▶ Validate Combo Animator (M2-B Step 6)) — nine
+      checks: param presence, state presence, motion-resolves (M2 strafe
+      lesson), override resolution (GUID-free name lookup), transition
+      counts (22 + 1), per-state transition counts (Attack=2, Attack02=2,
+      Attack03=1), per-state transition order (combo before fallback on
+      Attack and Attack02), exit-time spot checks (N14/N15=0.85,
+      N16/N17=0.90). Read-only.
+  M2-B Step 7 (combo runtime wiring, 2026-04-29): COMPLETE.
+    Behavior table reviewed at Assets/Documentation/
+      M2B_07_combo_runtime_behavior_table.md; all Section 6 defaults
+      accepted (recommendations 1–8). Section 0 reconciled the prompt's
+      pseudocode names to the live code (`AnimatorComponent` property +
+      local `anim` / `n`).
+    PlayerAnimator.cs: SetComboNext() public method added; cached
+      _hashComboNext alongside existing 8 param hashes; ParamComboNext
+      const "ComboNext"; hash assignment in Awake. _ready gating
+      preserved (silent no-op pre-Awake, matches all sibling trigger
+      setters).
+    PlayerCombat.cs:
+      - Added Attack02StateHash and Attack03StateHash static readonly
+        ints alongside existing AttackStateHash + HitStateHash.
+      - Update() consume-site state gate: `hash != AttackStateHash &&
+        hash != Attack02StateHash` (Attack03 falls through to early-
+        return — combo cap, nothing to consume into).
+      - Update() consume-site call: SetAttackTrigger → SetComboNext.
+      - OnAttackPressed: explicit `if (hash == Attack03StateHash)
+        return;` early-drop after the Hit check (combo cap; defensive
+        against future Animator graph changes that might add an
+        Attack-trigger transition out of Attack03).
+      - OnAttackPressed: `inActiveAttack` boolean now covers both
+        Attack and Attack02 (was Attack-only); window-buffer logic
+        unchanged.
+      - Class XML doc updated to describe the 3-hit combo (was "single
+        Attack state, mechanism in place for future Attack02+").
+    Player_MaleHero.prefab: NO component changes. Combo runs on the
+      existing Step 3 PlayerCombat.
+    Architecture: single-direction dependency preserved.
+      PlayerInputReader → (C# event AttackPressed) → PlayerCombat →
+      (public API SetAttackTrigger / SetComboNext / SetHitTrigger) →
+      PlayerAnimator → Animator. PlayerCombat never calls
+      Animator.SetTrigger directly; only PlayerAnimator writes
+      parameters.
+    Combo cap enforcement is belt-and-suspenders:
+      1. Explicit Attack03 early-return in OnAttackPressed (this step).
+      2. Implicit: Animator graph has no outgoing ComboNext or Attack
+         transition from Attack03 (Step 6).
+      Both paths drop a 4th press; the explicit drop is cheaper and
+      makes design intent visible in script.
+    Movement-during-combo intentionally unrestricted: PlayerCombat
+      .IsActionLocked still gates only on Attack/Hit state hashes
+      (line 83). Attack02 and Attack03 do NOT lock horizontal motion,
+      so the player can micro-position between hits. Step 7 Section 5.5
+      called this out as Q7 with explicit defer recommendation —
+      tuning concern, not a Step 7 deliverable.
+    Validator: Assets/Scripts/Player/Editor/PlayerComboRuntimeValidator.cs
+      (LevelGen ▶ Player ▶ Validate Combo Runtime (M2-B Step 7)) —
+      eight checks: SetComboNext public/void, _hashComboNext field,
+      Attack02StateHash + Attack03StateHash static-readonly fields,
+      hash values match StringToHash output, source-scan for exactly 1
+      SetAttackTrigger call + 1 SetComboNext call in PlayerCombat.cs,
+      compile-clean by transitivity. Read-only.
+    Smoke test: Assets/Documentation/M2B_07_combo_smoke_test.md —
+      5 manual checks covering full 3-hit combo, drop-if-unbuffered,
+      cap-at-Attack03, hit-cancels-combo-mid-chain, jump-during-combo-
+      doesn't-corrupt-buffer (regression of Step 5 single-direction
+      architecture).
+    M2-B "combat: jump, attack, hit + 3-hit combo" target: COMPLETE.
+  M2-B (remaining work): Attack04 / heavy-attack / finisher (clip is
+    validated in Step 1 survey but unwired). Death state (Die01 clip
+    is in the pack but not yet wired into the Animator graph). Both
+    can ship after M2-D level integration since neither is on the
+    critical path.
+  M2-B Step 6/7 design correction (2026-04-29, post-runtime-test):
+    During Step 7 smoke testing, the combo chained Attack→Attack02
+    every time without requiring a buffered press during the combo
+    window. Diagnostic logging in PlayerCombat.Update and
+    PlayerAnimator.SetComboNext confirmed the trigger was never being
+    set before the state transition fired. Root cause: Unity 6.4's
+    Animator transition evaluation for "Has Exit Time = true + Trigger
+    condition" empirically auto-fires at the exit time regardless of
+    whether the trigger is set, contrary to the documented AND
+    semantics. Both N14 (Attack→Attack02) and N15 (Attack02→Attack03)
+    were affected. Fix: removed Has Exit Time from N14 and N15 (now
+    condition-only on ComboNext). Effective timing unchanged because
+    PlayerCombat.Update only calls SetComboNext at n >= bufferConsumeAt
+    (0.85) — the gate moves from Animator exit-time to script-side.
+    N16 (Attack02→Idle) and N17 (Attack03→Idle) keep Has Exit Time =
+    true because they have no conditions (auto-fire is the desired
+    semantics). PlayerComboAnimatorValidator Check 9 updated to expect
+    hasExitTime=false on N14/N15. Lesson logged in
+    M2B_06_combo_animator_behavior_table.md "Design Correction"
+    section: don't combine Has Exit Time with a Trigger condition in
+    Unity 6.4 — use one or the other (or gate the condition-set call
+    in script, which is what PlayerCombat does).
 
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),

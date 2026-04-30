@@ -28,6 +28,7 @@ namespace LevelGen.Player
         private const string ParamHit         = "Hit";
         private const string ParamJump        = "Jump";
         private const string ParamIsGrounded  = "IsGrounded";
+        private const string ParamComboNext   = "ComboNext";
 
         // ── Cached state ────────────────────────────────────────────────────
         private Animator _animator;
@@ -39,6 +40,7 @@ namespace LevelGen.Player
         private int _hashHit;
         private int _hashJump;
         private int _hashIsGrounded;
+        private int _hashComboNext;
         private bool _ready;
 
         // ── Public API ──────────────────────────────────────────────────────
@@ -136,6 +138,23 @@ namespace LevelGen.Player
             _animator.SetBool(_hashIsGrounded, grounded);
         }
 
+        /// <summary>
+        /// Fires the ComboNext trigger. The Animator routes this via N14
+        /// (Attack → Attack02) or N15 (Attack02 → Attack03) at the next
+        /// exit-time evaluation if the current state's normalizedTime has
+        /// reached 0.85. Auto-clears within one Animator update if not
+        /// consumed — discarding stale combo intent if the state changes
+        /// (e.g., interrupted by Hit). Called only by PlayerCombat.Update
+        /// at the buffer-consume threshold; never from input handlers or
+        /// TakeHit. Safe to call before Awake — silently dropped if the
+        /// Animator is not yet resolved.
+        /// </summary>
+        public void SetComboNext()
+        {
+            if (!_ready) return;
+            _animator.SetTrigger(_hashComboNext);
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -155,6 +174,7 @@ namespace LevelGen.Player
             _hashHit         = Animator.StringToHash(ParamHit);
             _hashJump        = Animator.StringToHash(ParamJump);
             _hashIsGrounded  = Animator.StringToHash(ParamIsGrounded);
+            _hashComboNext   = Animator.StringToHash(ParamComboNext);
             _ready = true;
         }
     }

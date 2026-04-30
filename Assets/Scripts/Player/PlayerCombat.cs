@@ -13,12 +13,12 @@ namespace LevelGen.Player
 {
     /// <summary>
     /// Translates combat input intent into Animator trigger writes. Implements
-    /// a window-gated buffered combo (M2-B Step 3 foundation): a press during
-    /// the swing's middle is held until the next-attack consume threshold and
-    /// re-fired then; presses outside the window are dropped. With only one
-    /// Attack state in the Animator, a buffered press re-fires Attack01 — the
-    /// mechanism is in place for future Attack02+ states to consume the same
-    /// flag.
+    /// a window-gated 3-hit buffered combo: a press during a swing's combo
+    /// window is buffered and consumed near the swing's end via the
+    /// <c>ComboNext</c> trigger, routing Attack → Attack02 → Attack03 in the
+    /// Animator graph. Presses outside the window or during Hit are dropped.
+    /// Attack03 is the finisher — presses during Attack03 are explicitly
+    /// dropped to enforce the combo cap.
     /// </summary>
     [RequireComponent(typeof(PlayerInputReader))]
     [RequireComponent(typeof(PlayerAnimator))]
@@ -46,8 +46,10 @@ namespace LevelGen.Player
         private PlayerAnimator    _animator;
         private bool              _attackBuffered;
 
-        private static readonly int AttackStateHash = Animator.StringToHash("Attack");
-        private static readonly int HitStateHash    = Animator.StringToHash("Hit");
+        private static readonly int AttackStateHash   = Animator.StringToHash("Attack");
+        private static readonly int Attack02StateHash = Animator.StringToHash("Attack02");
+        private static readonly int Attack03StateHash = Animator.StringToHash("Attack03");
+        private static readonly int HitStateHash      = Animator.StringToHash("Hit");
 
         // Resolved lazily — PlayerAnimator.Awake may run after ours since
         // sibling-Awake order is non-deterministic. Access via this property
@@ -106,12 +108,13 @@ namespace LevelGen.Player
             if (anim.IsInTransition(0)) return;
 
             var info = anim.GetCurrentAnimatorStateInfo(0);
-            if (info.shortNameHash != AttackStateHash) return;
+            int hash = info.shortNameHash;
+            if (hash != AttackStateHash && hash != Attack02StateHash) return;
 
             float n = info.normalizedTime % 1.0f;
             if (n >= bufferConsumeAt)
             {
-                _animator.SetAttackTrigger();
+                _animator.SetComboNext();
                 _attackBuffered = false;
             }
         }
@@ -141,7 +144,14 @@ namespace LevelGen.Player
                 return;
             }
 
-            if (hash != AttackStateHash)
+            // Combo cap: Attack03 is the finisher. Drop deliberately rather
+            // than depending on the Animator graph having no outgoing
+            // Attack-trigger transition from Attack03.
+            if (hash == Attack03StateHash) return;
+
+            bool inActiveAttack = hash == AttackStateHash || hash == Attack02StateHash;
+
+            if (!inActiveAttack)
             {
                 // Idle / Locomotion / Sprint — fire immediately.
                 _animator.SetAttackTrigger();
@@ -149,7 +159,7 @@ namespace LevelGen.Player
                 return;
             }
 
-            // Currently in Attack. Decide based on combo window position.
+            // Currently in Attack01 or Attack02. Decide based on combo window position.
             float n = info.normalizedTime % 1.0f;
             if (n >= comboWindowOpen && n < comboWindowClose)
                 _attackBuffered = true;

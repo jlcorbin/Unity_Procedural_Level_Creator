@@ -33,9 +33,6 @@ namespace LevelGen.Player
         [Tooltip("Sprint speed multiplier applied to walkSpeed when IsSprinting && MoveZ > 0.7. Default 1.75 (3.5 m/s at 2.0 walk).")]
         [SerializeField] private float sprintMultiplier = 1.75f;
 
-        [Tooltip("Rotation rate in degrees/sec when re-aligning body to move direction.")]
-        [SerializeField] private float rotationSpeed = 900f;
-
         [Tooltip("Gravity acceleration in m/s². Negative.")]
         [SerializeField] private float gravity = -9.81f;
 
