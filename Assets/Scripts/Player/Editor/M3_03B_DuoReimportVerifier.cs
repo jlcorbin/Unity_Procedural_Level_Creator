@@ -27,7 +27,7 @@ namespace LevelGen.Player.EditorTools
     public static class M3_03B_DuoReimportVerifier
     {
         private const string DuoTargetRoot       = "Assets/AssetPacks/RPG Tiny Hero Duo";
-        private const string PlayerPrefabPath    = "Assets/Prefabs/Player/Player_MaleHero.prefab";
+        private const string PlayerPrefabPath    = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
         private const string MaleCharacterGuid   = "2dfbb63c9cdf7504faf4ff26b0581598";
         private const string FemaleCharacterGuid = "cc91c8ba8b9a34f4d99e70d721f60b64";
 

@@ -11,7 +11,7 @@ namespace LevelGen.V2
         // Output (set by the Save dialog at save time, not surfaced in the EditorWindow).
         // [NonSerialized] keeps these out of any serialized blob so they default cleanly each session.
         [NonSerialized] public string sceneName    = "";
-        [NonSerialized] public string outputFolder = "Assets/Levels/Generated";
+        [NonSerialized] public string outputFolder = "Assets/Scenes/Levels/Generated";
 
         // Source
         public PieceCatalogue catalogue;

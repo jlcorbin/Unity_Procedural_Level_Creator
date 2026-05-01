@@ -15,7 +15,7 @@ namespace LevelGen.Player.Editor
 {
     public static class PlayerCombatPrefabAdder
     {
-        private const string PrefabPath = "Assets/Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
 
         [MenuItem("LevelGen/Player/Add PlayerCombat to Player_MaleHero Prefab")]
         public static void Run()

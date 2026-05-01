@@ -26,7 +26,7 @@ namespace LevelGen.Player.EditorTools
 {
     public static class PlayerCombatValidator
     {
-        private const string PrefabPath = "Assets/Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
 
         [MenuItem("LevelGen/Player/Validate PlayerCombat Wiring (M2-B Step 3)")]
         public static void Run()

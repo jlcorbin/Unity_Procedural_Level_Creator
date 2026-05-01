@@ -33,7 +33,7 @@ namespace LevelGen.Player.EditorTools
     public static class M4_SampleSceneSetup
     {
         private const string ScenePath  = "Assets/Scenes/SampleScene.unity";
-        private const string PrefabPath = "Assets/Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
         private const string CmMenuPath = "LevelGen/Player/Add Cinemachine Follow Camera to Active Scene";
 
         private static readonly Vector3 PlayerSpawnPos = new Vector3(5f, 0f, -5f);

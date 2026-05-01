@@ -670,3 +670,104 @@ Prompt 04 (scripts + prefab):
 - [ ] Author a minimal test scene (floor plane + manually-positioned
       Main Camera + dropped `Player_MaleHero.prefab`) and walk through
       §7 test plan. All items must check.
+
+---
+
+# Addendum — M2 + M3 Updates (2026-04-30)
+
+The original document above describes the **Milestone 1** design
+(idle + walk locomotion, single base controller + override). The
+player has grown since:
+
+## M2-A — Cinemachine follow camera
+
+Added Cinemachine 3.x follow camera with right-stick orbit. The
+player prefab gained a `CameraTarget` child at local (0, 1.6, 0).
+PlayerSpawner now binds the CinemachineCamera's Tracking Target
+to the spawned player's CameraTarget at runtime.
+
+## M2-B — Combat (attack, hit, jump, 3-hit combo)
+
+PlayerBaseController grew from 4 params/3 states (M1) to 9
+params/10 states. New animator pieces:
+
+- Attack / Hit / Jump triggers; ComboNext trigger; IsGrounded bool.
+- Attack state with combo extension (Attack01 → Attack02 → Attack03)
+  via ComboNext trigger fired from PlayerCombat.Update at the
+  buffered-input window.
+- Hit state from AnyState (canTransitionToSelf=true).
+- Jump arc: JumpStart → JumpAir (looping) → JumpEnd.
+
+New scripts:
+
+- `PlayerCombat.cs` — buffered combo state machine; public TakeHit()
+  API; events from PlayerInputReader.
+- Jump physics in PlayerController (jumpHeight=1.2m, full air
+  control, action-locked during Attack/Hit/JumpEnd).
+
+Architectural invariant preserved: PlayerAnimator is the sole
+writer to Animator parameters.
+
+Design correction logged 2026-04-29: Unity 6.4's
+"Has Exit Time + Trigger condition" empirically auto-fires at exit
+time regardless of trigger state. Workaround: condition-only
+transitions, gated from script. See
+`Assets/Documentation/Archive/M2B_06_combo_animator_behavior_table.md`
+"Design Correction" section for details.
+
+## M2-C — Sprint
+
+Added Sprint state with SprintFWD_Battle_InPlace clip. IsSprinting
+Bool param + IsRunning trigger. Locomotion → Sprint when
+(IsSprinting && MoveZ>0.7 && Speed>0.1).
+
+## M3 — Pack swap (Duo → World Bundle)
+
+Retired the RPG Tiny Hero Duo pack; imported the World Bundle.
+Selectively re-imported 11 Duo character assets (Male/Female PBR
+prefabs + body mesh + 4 weapons + 4 weapon meshes) since their
+GUIDs auto-relink against the World Bundle's identical clip GUIDs.
+
+Pack now provides 8 weapon sets (vs Duo's 1):
+- BowAndArrow, DoubleSword, MagicWand, NoWeapon, SingleSword,
+  SwordAndShield (currently used), Spear, TwoHandSword.
+
+Foundation for runtime weapon-stance switching: existing override
+controller machinery handles this via `RuntimeAnimatorController`
+swap.
+
+## Current scripts (full list, post-M3)
+
+| Path | Role |
+|---|---|
+| `Assets/Scripts/Player/PlayerInputReader.cs` | Input layer |
+| `Assets/Scripts/Player/PlayerController.cs` | Locomotion + jump physics |
+| `Assets/Scripts/Player/PlayerCombat.cs` | Combo state machine |
+| `Assets/Scripts/Player/PlayerAnimator.cs` | Sole Animator-param writer |
+| `Assets/Scripts/Player/PlayerSpawner.cs` | Runtime spawn + CM target bind |
+| `Assets/Scripts/LevelGen/PlayerSpawnPoint.cs` | Room-side spawn marker |
+
+All under `LevelGen.Player` (except `PlayerSpawnPoint` under
+`LevelGen` — it's room-side metadata, not player-side).
+
+## Current paths (post-folder-reorg)
+
+| Asset | Path |
+|---|---|
+| Player prefab | `Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab` |
+| Base controller | `Assets/Animators/Player/PlayerBaseController.controller` |
+| Override controller | `Assets/Animators/Player/PlayerOverride_MaleHero.overrideController` |
+| Animation source | `Assets/AssetPacks/RPG Tiny Hero World Bundle/RPGTinyHeroWavePBR/Animation/SwordAndShield/` |
+
+## Validators
+
+Six M2-B validators verify Animator + script wiring:
+
+- LevelGen ▶ Player ▶ Validate Combat Animator (M2-B Step 2)
+- LevelGen ▶ Player ▶ Validate PlayerCombat Wiring (M2-B Step 3)
+- LevelGen ▶ Player ▶ Validate Jump Animator (M2-B Step 4)
+- LevelGen ▶ Player ▶ Validate Jump Runtime (M2-B Step 5)
+- LevelGen ▶ Player ▶ Validate Combo Animator (M2-B Step 6)
+- LevelGen ▶ Player ▶ Validate Combo Runtime (M2-B Step 7)
+
+All last passed in M3-03B closure (2026-04-30).

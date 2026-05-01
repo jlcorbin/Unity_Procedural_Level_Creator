@@ -842,12 +842,12 @@ namespace LevelEditor
 
         /// <summary>
         /// Returns the asset-relative folder path for the current Type + Category selection.
-        /// Example: "Assets/Prefabs/Rooms/Starter".
+        /// Example: "Assets/Prefabs/Level Prefabs/Rooms/Starter".
         /// </summary>
         public string ResolveSaveFolder()
         {
             string typeFolder = pieceType == PieceType.Room ? "Rooms" : "Halls";
-            return $"Assets/Prefabs/{typeFolder}/{ResolveCategoryName()}";
+            return $"Assets/Prefabs/Level Prefabs/{typeFolder}/{ResolveCategoryName()}";
         }
 
         /// <summary>Returns the display name of the currently selected category ("Starter", "Small", etc).</summary>

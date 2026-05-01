@@ -196,21 +196,21 @@ namespace LevelGen.V2
                 var branchHallPool = V2PrefabSource.GetHallPrefabs(settings.branchHallSize);
 
                 if (starterPool.Count == 0)
-                    return Fail(result, sw, "No prefabs in Assets/Prefabs/Rooms/Starter/ (folder missing or no RoomPiece prefabs).");
+                    return Fail(result, sw, "No prefabs in Assets/Prefabs/Level Prefabs/Rooms/Starter/ (folder missing or no RoomPiece prefabs).");
                 if (bossPool.Count == 0)
-                    return Fail(result, sw, "No prefabs in Assets/Prefabs/Rooms/Boss/ (folder missing or no RoomPiece prefabs).");
+                    return Fail(result, sw, "No prefabs in Assets/Prefabs/Level Prefabs/Rooms/Boss/ (folder missing or no RoomPiece prefabs).");
                 if (spineHallPool.Count == 0)
-                    return Fail(result, sw, $"No prefabs in Assets/Prefabs/Halls/{settings.spineHallSize}/ (folder missing or no RoomPiece prefabs).");
+                    return Fail(result, sw, $"No prefabs in Assets/Prefabs/Level Prefabs/Halls/{settings.spineHallSize}/ (folder missing or no RoomPiece prefabs).");
                 if (settings.smallCount > 0 && smallPool.Count == 0)
-                    return Fail(result, sw, $"smallCount={settings.smallCount} but Assets/Prefabs/Rooms/Small/ has no RoomPiece prefabs.");
+                    return Fail(result, sw, $"smallCount={settings.smallCount} but Assets/Prefabs/Level Prefabs/Rooms/Small/ has no RoomPiece prefabs.");
                 if (settings.mediumCount > 0 && mediumPool.Count == 0)
-                    return Fail(result, sw, $"mediumCount={settings.mediumCount} but Assets/Prefabs/Rooms/Medium/ has no RoomPiece prefabs.");
+                    return Fail(result, sw, $"mediumCount={settings.mediumCount} but Assets/Prefabs/Level Prefabs/Rooms/Medium/ has no RoomPiece prefabs.");
                 if (settings.largeCount > 0 && largePool.Count == 0)
-                    return Fail(result, sw, $"largeCount={settings.largeCount} but Assets/Prefabs/Rooms/Large/ has no RoomPiece prefabs.");
+                    return Fail(result, sw, $"largeCount={settings.largeCount} but Assets/Prefabs/Level Prefabs/Rooms/Large/ has no RoomPiece prefabs.");
                 if (settings.specialCount > 0 && specialPool.Count == 0)
-                    return Fail(result, sw, $"specialCount={settings.specialCount} but Assets/Prefabs/Rooms/Special/ has no RoomPiece prefabs.");
+                    return Fail(result, sw, $"specialCount={settings.specialCount} but Assets/Prefabs/Level Prefabs/Rooms/Special/ has no RoomPiece prefabs.");
                 if (settings.branchSlotCount > 0 && branchHallPool.Count == 0)
-                    return Fail(result, sw, $"branchSlotCount={settings.branchSlotCount} but Assets/Prefabs/Halls/{settings.branchHallSize}/ has no RoomPiece prefabs.");
+                    return Fail(result, sw, $"branchSlotCount={settings.branchSlotCount} but Assets/Prefabs/Level Prefabs/Halls/{settings.branchHallSize}/ has no RoomPiece prefabs.");
 
                 if (!string.IsNullOrEmpty(settings.themeName))
                     result.Log.Add($"Theme: {settings.themeName} (theme-aware selection deferred — pulling from raw folders)");

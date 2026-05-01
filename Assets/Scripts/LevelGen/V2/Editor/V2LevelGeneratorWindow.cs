@@ -271,7 +271,7 @@ namespace LevelGen.V2.Editor
 
         void OnSaveClicked()
         {
-            const string DefaultFolder = "Assets/Levels/Generated";
+            const string DefaultFolder = "Assets/Scenes/Levels/Generated";
             V2LevelGenerator.EnsureAssetFolder(DefaultFolder);
 
             string defaultName = _lastGenerationResult != null

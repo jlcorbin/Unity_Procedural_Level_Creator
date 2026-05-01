@@ -87,7 +87,7 @@ namespace LevelEditor
             builder.roomCategory = RoomCategory.Starter;
 
             string roomFolder = builder.ResolveSaveFolder();
-            const string expectedRoom = "Assets/Prefabs/Rooms/Starter";
+            const string expectedRoom = "Assets/Prefabs/Level Prefabs/Rooms/Starter";
             LogCheck(roomFolder == expectedRoom,
                 $"ResolveSaveFolder() = '{roomFolder}'  expected '{expectedRoom}'");
 
@@ -100,7 +100,7 @@ namespace LevelEditor
             builder.hallCategory = HallCategory.Special;
 
             string hallFolder = builder.ResolveSaveFolder();
-            const string expectedHall = "Assets/Prefabs/Halls/Special";
+            const string expectedHall = "Assets/Prefabs/Level Prefabs/Halls/Special";
             LogCheck(hallFolder == expectedHall,
                 $"ResolveSaveFolder() = '{hallFolder}'  expected '{expectedHall}'");
 

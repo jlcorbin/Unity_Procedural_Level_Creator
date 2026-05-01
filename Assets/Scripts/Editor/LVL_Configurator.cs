@@ -31,8 +31,8 @@ namespace LevelGen
         private const string DefaultStartFolder =
             "Assets/Fantastic Dungeon Pack/prefabs/MODULAR";
 
-        private const string RoomsFolder = "Assets/Prefabs/Rooms";
-        private const string HallsFolder = "Assets/Prefabs/Halls";
+        private const string RoomsFolder = "Assets/Prefabs/Level Prefabs/Rooms";
+        private const string HallsFolder = "Assets/Prefabs/Level Prefabs/Halls";
 
         // ── Window state ──────────────────────────────────────────────────────
 

@@ -27,7 +27,7 @@ namespace LevelGen.Player.EditorTools
 {
     public static class PlayerJumpRuntimeValidator
     {
-        private const string PrefabPath = "Assets/Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
 
         [MenuItem("LevelGen/Player/Validate Jump Runtime (M2-B Step 5)")]
         public static void Run()

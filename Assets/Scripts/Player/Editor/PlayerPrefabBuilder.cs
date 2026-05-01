@@ -41,7 +41,7 @@ namespace LevelGen.Player.Editor
     public static class PlayerPrefabBuilder
     {
         // ── Paths ────────────────────────────────────────────────────────────
-        private const string PrefabPath        = "Assets/Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath        = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
         private const string OverrideCtrlPath  = "Assets/Animators/Player/PlayerOverride_MaleHero.overrideController";
         private const string PackPrefabPath    = "Assets/AssetPacks/RPG Tiny Hero Duo/Prefab/MaleCharacterPBR.prefab";
         private const string ActionsAssetPath  = "Assets/InputSystem_Actions.inputactions";
@@ -95,7 +95,7 @@ namespace LevelGen.Player.Editor
             if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null)
                 AssetDatabase.DeleteAsset(PrefabPath);
 
-            EnsureFolder("Assets/Prefabs", "Player");
+            EnsureFolder("Assets/Prefabs/Character Prefabs", "Player");
 
             // ── Build the in-memory hierarchy ────────────────────────────────
             var root = new GameObject("Player_MaleHero");

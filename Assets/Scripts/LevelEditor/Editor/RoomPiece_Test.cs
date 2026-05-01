@@ -89,8 +89,8 @@ namespace LevelEditor
         [MenuItem("LevelEditor/Tests/Save: MOD_Room Save+Clear Roundtrip")]
         private static void RunSaveRoundtripTest()
         {
-            const string testFolder = "Assets/Prefabs/Rooms/Small";
-            const string testPath   = "Assets/Prefabs/Rooms/Small/__test_save_roundtrip.prefab";
+            const string testFolder = "Assets/Prefabs/Level Prefabs/Rooms/Small";
+            const string testPath   = "Assets/Prefabs/Level Prefabs/Rooms/Small/__test_save_roundtrip.prefab";
 
             // ── Setup ────────────────────────────────────────────────────────
             var go      = new GameObject("_SaveRoundtripTest_Temp");
