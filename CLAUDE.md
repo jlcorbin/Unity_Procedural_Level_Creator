@@ -961,6 +961,69 @@ Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2
     validator results).
     Smoke tests deferred to post-M3-02B (visual checks would fail on
     invisible-mesh state).
+  M3-01B (base rig discovery, 2026-04-30): read-only inventory of
+    World Bundle's Mesh/ folder. Identified AllBodiesCloaks.fbx
+    (GUID 075789f0f3fa9414f90d335ae163f413) as the sole Humanoid-rig
+    FBX in the new pack — same Avatar source GUID
+    (0308cf4e83cf517488b60af58b290fe0) as Duo's MaleCharacterPBR.
+    All 24 MC* prefabs reference it as their body mesh. Of 179 Mesh/
+    FBXes, exactly 1 is Humanoid; remaining 115 HeadParts + 62
+    Weapons + 1 Stage are Generic (parented props). No Polyart variant
+    in the new pack (Duo had both PBR + Polyart). Documentation:
+    M3_01B_base_rig_discovery.md.
+  M3-03A (Duo diff, 2026-04-30): read-only diff between Duo
+    .unitypackage (87 assets, SHA-256 7d0bf88b...155b9cd4, 19.6 MiB)
+    and the imported World Bundle. Result: 56 DUPLICATE GUIDs
+    (animations, textures, controllers, shared materials), 31 UNIQUE
+    GUIDs (character prefabs, body/weapon/shield meshes, demo scenes,
+    Polyart variants). Filtered to character-relevant items only:
+    M3-03B re-import set is 11 assets (2 char prefabs + 1 body mesh +
+    4 equipment prefabs + 4 equipment meshes). Excluded: 12 Polyart
+    variants (locked PBR target), 3 demo scenes, 2 example controllers,
+    1 mask, 3 demo materials. Dependency tracing confirmed character
+    prefabs come pre-equipped with sword + shield as nested
+    PrefabInstances — equipment must re-import too or characters load
+    Missing-Prefab. Shared PBR_Default.mat ↔ World Bundle's
+    DefaultPBR.mat (same GUID f323cced...8b67, just renamed by
+    publisher). Documentation: M3_03A_duo_diff.md.
+  M3-03B (selective Duo re-import, 2026-04-30): COMPLETE.
+    Re-imported 11 character-relevant assets from
+    RPG Tiny Hero Duo PBR Polyart.unitypackage to
+    Assets/AssetPacks/RPG Tiny Hero Duo/ (preserving Duo's prior pack
+    location). Method: bash extraction of .unitypackage to /tmp/, GUID
+    filter against the 11-allowed set, filesystem copy of asset+meta
+    pairs with assetPath rewrite from "Assets/RPG Tiny Hero Duo/" →
+    "Assets/AssetPacks/RPG Tiny Hero Duo/" in .meta files. Editor
+    script (Assets/Scripts/Player/Editor/M3_03B_DuoReimportVerifier.cs,
+    one-off scaffolding — can be deleted post-completion alongside
+    M3_02A_PackSwapExecutor.cs) verified post-import:
+      - 11/11 GUIDs resolve to expected target paths
+      - Player_MaleHero.prefab MaleCharacterPBR PrefabInstance
+        auto-relinked (source GUID matches, not flagged Missing)
+      - CameraTarget child preserved at (0, 1.6, 0)
+      - All 6 M2-B validators clean: Step 2 12/0, Step 3 10/0,
+        Step 4 22/0/0, Step 5 9/0, Step 6 20/0, Step 7 9/0
+      - The two FAILs that appeared in M3-02A's validator run (Step 2
+        and Step 4 stale count assertions) are now PASS thanks to the
+        floor-check patches applied at the end of M3-02A.
+    Re-imported assets:
+      Prefab/MaleCharacterPBR.prefab     guid 2dfbb63c...0581598
+      Prefab/FemaleCharacterPBR.prefab   guid cc91c8ba...60b64
+      Mesh/ModularCharacterPBR.fbx       guid 34b0895d...691859
+      Prefab/OHS03PBR.prefab + .fbx      Male's sword
+      Prefab/OHS06PBR.prefab + .fbx      Female's sword
+      Prefab/Shield05PBR.prefab + .fbx   Female's shield
+      Prefab/Shield08PBR.prefab + .fbx   Male's shield
+    Excluded from re-import: 76 other Duo assets (43 animation FBXes
+    DUPLICATE in WB, 12 Polyart variants, 3 demo scenes, 2 controllers,
+    1 mask, 3 demo materials, etc.).
+    M3-02B (rig swap) folded into M3-03B's verification — separate
+    rig-swap work not required because GUID auto-relink restored the
+    Duo's MaleCharacterPBR exactly. Player_MaleHero.prefab is now
+    visually whole again, same as pre-M3-02A.
+    Pack swap milestone (M3) effectively complete pending user
+    smoke tests in Play mode (M2B_03 + M2B_05 + M2B_07 — total ~25
+    manual checks, ~15 minutes).
 
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
