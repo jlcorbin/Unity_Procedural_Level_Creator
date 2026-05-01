@@ -1021,9 +1021,11 @@ Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2
     rig-swap work not required because GUID auto-relink restored the
     Duo's MaleCharacterPBR exactly. Player_MaleHero.prefab is now
     visually whole again, same as pre-M3-02A.
-    Pack swap milestone (M3) effectively complete pending user
-    smoke tests in Play mode (M2B_03 + M2B_05 + M2B_07 — total ~25
-    manual checks, ~15 minutes).
+    Pack swap milestone (M3) COMPLETE — all 25 manual smoke tests
+    passed in Player_M1_Test.unity on 2026-04-30: M2B_03 (10/10
+    single attack + buffer), M2B_05 (10/10 jump runtime), M2B_07
+    (5/5 combo extension). See Assets/Documentation/M3_closeout.md
+    for the milestone-closure record.
 
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
@@ -1034,6 +1036,11 @@ history pre-cleanup.
 
 ## Next CC task (run this when resuming)
 Read CLAUDE.md fully.
+
+M3 (pack swap Duo→World Bundle) closed 2026-04-30 with all
+smoke tests passing. Next direction has not yet been chosen —
+user will pick from the "Pending work (priority order)" list
+below at session start.
 
 PieceCatalogueEditor is verified working (per-section ReorderableList architecture):
   - One foldout + ReorderableList per PieceType (Floor → Stair) ✓
@@ -1060,8 +1067,9 @@ Returning to Room Workshop next session — items below in priority order:
      Room Workshop focus)
   2. Tier stacking
   3. Room connection logic — door geometry vs. open passages
-  4. Player integration — M1 + M2-C + M2-A COMPLETE.
-     M2 remaining: level integration (M2-D), combat (M2-B: jump, attack, hit).
+  4. Player integration — M1 + M2-A + M2-B + M2-C COMPLETE. M3
+     pack swap COMPLETE (Duo→World Bundle, 2026-04-30). M2-D
+     (level integration — Player_RuntimeRig refactor) remains.
   5. Test DoSave end-to-end (step ⑥) — both Room and Hall paths
   6. Implement Dress step (PropCatalogue / SpawnPoints)
   7. Whitebox `PieceCatalogue` wiring + `LVL_Configurator` end-to-end
