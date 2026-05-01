@@ -128,6 +128,19 @@ namespace LevelEditor
         [Tooltip("Hall sub-category. Only used when PieceType is Hall.")]
         public HallCategory hallCategory = HallCategory.Small;
 
+        // ── Collision constants ──────────────────────────────────────────────
+        //
+        // Cell size is reused from CellMap.CellSize (4 world units, the FDP
+        // _med_ snap unit). Wall height matches the FDP ground-truth in
+        // CLAUDE.md (6 units). Floor and wall thicknesses are picked thin
+        // enough to be invisible relative to the visual meshes but thick
+        // enough that the player capsule (radius 0.3, skinWidth 0.08) does
+        // not tunnel.
+        private const float WallHeight     = 6f;
+        private const float FloorThickness = 0.1f;
+        private const float WallThickness  = 0.2f;
+        private const float CornerSize     = 0.5f;
+
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -230,6 +243,9 @@ namespace LevelEditor
             Debug.Log($"[RoomBuilder] Built {result.floors.Count} floors, " +
                       $"{result.walls.Count} walls, {result.corners.Count} corners " +
                       $"under '{rootName}'.");
+
+            BuildCollision(result, map, root);
+            BuildPlayerSpawn(root);
 
             PopulateRoomPiece(map);
         }
@@ -552,6 +568,274 @@ namespace LevelEditor
             }
 
             piece.RefreshExits();
+        }
+
+        // ── Collision group ───────────────────────────────────────────────────
+        //
+        // Stamps a sibling 'Collision' subtree under MOD_Room with one floor
+        // BoxCollider, one BoxCollider per contiguous wall run on each edge,
+        // and four corner BoxColliders. Visual prefabs (FDP, Whitebox, etc.)
+        // are unaffected — collision lives only on this group.
+
+        // Per-edge axis spec for wall-run iteration. Built freshly per Build()
+        // because most fields depend on the current rectangleWidth / Depth.
+        // The spec is intentionally branch-free so EmitWallColliders' inner
+        // loop has no per-edge if/else (V2 architectural invariant).
+        private struct WallEdgeAxis
+        {
+            public CellEdge   edge;        // Which edge to query via HasWallOnEdge
+            public string     suffix;      // Name suffix in 'Wall_Collider_<suffix>_<runIdx>'
+            public int        sweepLength; // Number of cells along this edge
+            public int        cellStartX;  // First cell.x at sweep index 0
+            public int        cellStartZ;  // First cell.z at sweep index 0
+            public int        cellStepX;   // Δcell.x per sweep step
+            public int        cellStepZ;   // Δcell.z per sweep step
+            public Vector3    cornerStart; // Local-space corner of cell-0 along the edge (Y=0)
+            public Vector3    cornerStep;  // Local-space delta per cell along the sweep
+            public Quaternion rotation;    // Wall collider local rotation
+        }
+
+        private void BuildCollision(SolveResult result, CellMap map, GameObject roomRoot)
+        {
+            var group = new GameObject("Collision");
+            group.transform.SetParent(roomRoot.transform, false);
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+                Undo.RegisterCreatedObjectUndo(group, "Build Room");
+#endif
+
+            EmitFloorCollider(group.transform);
+            int wallRuns = EmitWallColliders(group.transform, map);
+            EmitCornerColliders(group.transform);
+
+            Debug.Log($"[RoomBuilder] Built collision: 1 floor, {wallRuns} wall runs, 4 corners.");
+        }
+
+        private void EmitFloorCollider(Transform group)
+        {
+            // CellMap places visible geometry centered on origin, so the
+            // collision floor is also centered. Y sits at -FloorThickness/2
+            // so its top surface lands on the floor mesh plane (Y=0).
+            float w = rectangleWidth * CellMap.CellSize;
+            float d = rectangleDepth * CellMap.CellSize;
+
+            var go = new GameObject("Floor_Collider");
+            go.transform.SetParent(group, false);
+            go.transform.localPosition = new Vector3(0f, -FloorThickness * 0.5f, 0f);
+            go.transform.localRotation = Quaternion.identity;
+
+            var box       = go.AddComponent<BoxCollider>();
+            box.center    = Vector3.zero;
+            box.size      = new Vector3(w, FloorThickness, d);
+            box.isTrigger = false;
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+                Undo.RegisterCreatedObjectUndo(go, "Build Room");
+#endif
+        }
+
+        private int EmitWallColliders(Transform group, CellMap map)
+        {
+            // CellMap-grid convention: grid z=0 is the SOUTH-most row, grid
+            // z=D-1 is the NORTH-most row (CellCenterWorld places z=0 at the
+            // most-negative world Z). The N/S table entries iterate the row
+            // whose queried edge faces OUTSIDE the grid, so HasWallOnEdge
+            // returns true on solid sections and false on doorways.
+            //
+            // Centered-extent math: visible geometry is centered on origin,
+            // so all corners and wall midlines are anchored at ±halfX / ±halfZ.
+            //
+            // Sweep direction is N→S for E/W (cellStepZ = -1) so runIndex 0
+            // is always the *northern-most* run — matches the prompt's wall
+            // position formula `+halfZ - (i + n/2) × CellSize`.
+            float halfX    = rectangleWidth  * CellMap.CellSize * 0.5f;
+            float halfZ    = rectangleDepth  * CellMap.CellSize * 0.5f;
+            float cellSize = CellMap.CellSize;
+
+            var axes = new[]
+            {
+                new WallEdgeAxis
+                {
+                    edge        = CellEdge.North, suffix = "N",
+                    sweepLength = rectangleWidth,
+                    cellStartX  = 0, cellStartZ = rectangleDepth - 1, cellStepX = 1, cellStepZ = 0,
+                    cornerStart = new Vector3(-halfX, 0f, halfZ),
+                    cornerStep  = new Vector3(cellSize, 0f, 0f),
+                    rotation    = Quaternion.identity,
+                },
+                new WallEdgeAxis
+                {
+                    edge        = CellEdge.South, suffix = "S",
+                    sweepLength = rectangleWidth,
+                    cellStartX  = 0, cellStartZ = 0, cellStepX = 1, cellStepZ = 0,
+                    cornerStart = new Vector3(-halfX, 0f, -halfZ),
+                    cornerStep  = new Vector3(cellSize, 0f, 0f),
+                    rotation    = Quaternion.identity,
+                },
+                new WallEdgeAxis
+                {
+                    edge        = CellEdge.East,  suffix = "E",
+                    sweepLength = rectangleDepth,
+                    cellStartX  = rectangleWidth - 1, cellStartZ = rectangleDepth - 1, cellStepX = 0, cellStepZ = -1,
+                    cornerStart = new Vector3(halfX, 0f, halfZ),
+                    cornerStep  = new Vector3(0f, 0f, -cellSize),
+                    rotation    = Quaternion.Euler(0f, 90f, 0f),
+                },
+                new WallEdgeAxis
+                {
+                    edge        = CellEdge.West,  suffix = "W",
+                    sweepLength = rectangleDepth,
+                    cellStartX  = 0, cellStartZ = rectangleDepth - 1, cellStepX = 0, cellStepZ = -1,
+                    cornerStart = new Vector3(-halfX, 0f, halfZ),
+                    cornerStep  = new Vector3(0f, 0f, -cellSize),
+                    rotation    = Quaternion.Euler(0f, 90f, 0f),
+                },
+            };
+
+            int totalRuns = 0;
+
+            foreach (var axis in axes)
+            {
+                int runIndex  = 0;
+                int runStart  = -1;
+                int runLength = 0;
+
+                // Permanent diagnostic: per-edge run summary. Cheap (one log
+                // line per edge per Build) and the truth-of-record next time
+                // doorway logic regresses. Leave in.
+                var ranges = new System.Collections.Generic.List<string>();
+
+                for (int i = 0; i < axis.sweepLength; i++)
+                {
+                    int cx = axis.cellStartX + i * axis.cellStepX;
+                    int cz = axis.cellStartZ + i * axis.cellStepZ;
+                    bool hasWall = map.HasWallOnEdge(cx, cz, axis.edge);
+
+                    if (hasWall && runStart < 0)
+                    {
+                        runStart  = i;
+                        runLength = 1;
+                    }
+                    else if (hasWall)
+                    {
+                        runLength++;
+                    }
+                    else if (runStart >= 0)
+                    {
+                        ranges.Add($"[{runStart}..{runStart + runLength - 1}]");
+                        EmitOneWallRun(group, axis, runStart, runLength, runIndex++);
+                        runStart  = -1;
+                        runLength = 0;
+                    }
+                }
+
+                if (runStart >= 0)
+                {
+                    ranges.Add($"[{runStart}..{runStart + runLength - 1}]");
+                    EmitOneWallRun(group, axis, runStart, runLength, runIndex++);
+                }
+
+                bool sweepIsX = axis.cellStepX != 0;
+                string sweepWord = sweepIsX ? "wide" : "deep";
+                string rangeStr  = ranges.Count == 0 ? "none" : string.Join(", ", ranges);
+                Debug.Log($"[RoomBuilder] {axis.suffix} edge: {ranges.Count} run(s) ({rangeStr}) on {axis.sweepLength}-{sweepWord} edge");
+
+                totalRuns += runIndex;
+            }
+
+            return totalRuns;
+        }
+
+        private void EmitOneWallRun(Transform group, WallEdgeAxis axis, int runStart, int runLength, int runIndex)
+        {
+            if (runLength <= 0)
+            {
+                Debug.LogWarning($"[RoomBuilder] Defensive: tried to emit '{axis.suffix}' wall collider with run length {runLength}; skipping.");
+                return;
+            }
+
+            float runMid = runStart + runLength * 0.5f;
+            Vector3 localPos = axis.cornerStart
+                             + axis.cornerStep * runMid
+                             + Vector3.up * (WallHeight * 0.5f);
+
+            var go = new GameObject($"Wall_Collider_{axis.suffix}_{runIndex}");
+            go.transform.SetParent(group, false);
+            go.transform.localPosition = localPos;
+            go.transform.localRotation = axis.rotation;
+
+            var box       = go.AddComponent<BoxCollider>();
+            box.center    = Vector3.zero;
+            box.size      = new Vector3(runLength * CellMap.CellSize, WallHeight, WallThickness);
+            box.isTrigger = false;
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+                Undo.RegisterCreatedObjectUndo(go, "Build Room");
+#endif
+        }
+
+        private void EmitCornerColliders(Transform group)
+        {
+            float halfX = rectangleWidth  * CellMap.CellSize * 0.5f;
+            float halfZ = rectangleDepth  * CellMap.CellSize * 0.5f;
+            float yMid  = WallHeight * 0.5f;
+
+            var corners = new (string suffix, Vector3 localPos)[]
+            {
+                ("NW", new Vector3(-halfX, yMid,  halfZ)),
+                ("NE", new Vector3( halfX, yMid,  halfZ)),
+                ("SW", new Vector3(-halfX, yMid, -halfZ)),
+                ("SE", new Vector3( halfX, yMid, -halfZ)),
+            };
+
+            foreach (var (suffix, localPos) in corners)
+            {
+                var go = new GameObject($"Corner_Collider_{suffix}");
+                go.transform.SetParent(group, false);
+                go.transform.localPosition = localPos;
+                go.transform.localRotation = Quaternion.identity;
+
+                var box       = go.AddComponent<BoxCollider>();
+                box.center    = Vector3.zero;
+                box.size      = new Vector3(CornerSize, WallHeight, CornerSize);
+                box.isTrigger = false;
+
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                    Undo.RegisterCreatedObjectUndo(go, "Build Room");
+#endif
+            }
+        }
+
+        // ── PlayerSpawn marker ────────────────────────────────────────────────
+        //
+        // Adds a 'PlayerSpawn' child with a PlayerSpawnPoint component when
+        // (and only when) this room is the Starter category. Position is the
+        // room's geometric center on Y=0 with identity rotation.
+
+        private void BuildPlayerSpawn(GameObject roomRoot)
+        {
+            if (pieceType != PieceType.Room || roomCategory != RoomCategory.Starter)
+                return;
+
+            // CellMap centers the visible room on origin, and MOD_Room sits
+            // at the RoomBuilder's local origin (= world origin in typical
+            // setups). Spawn-at-center is therefore just local zero.
+            var go = new GameObject("PlayerSpawn");
+            go.transform.SetParent(roomRoot.transform, false);
+            go.transform.localPosition = Vector3.zero;
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale    = Vector3.one;
+            go.AddComponent<PlayerSpawnPoint>();
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+                Undo.RegisterCreatedObjectUndo(go, "Build Room");
+#endif
+
+            Debug.Log("[RoomBuilder] Placed PlayerSpawnPoint at MOD_Room local origin (room center).");
         }
 
         // ── Save folder helpers ───────────────────────────────────────────────
