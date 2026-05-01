@@ -121,13 +121,17 @@ namespace LevelGen.Player.EditorTools
                 $"key-present={hitKeyPresent}, override={(hitOverride != null ? hitOverride.name : "null (fallback to original)")}");
 
             // ── Check 5: Transition counts ──────────────────────────────────
-            // Expected after Step 2:
-            //   - 6 existing state-to-state + 5 new state-to-state = 11 normal
-            //   - 1 anyStateTransition (N5: AnyState → Hit)
+            // Count progression across milestones:
+            //   - After Step 2 (Attack/Hit added): 11 state-to-state + 1 anyState
+            //   - After Step 4 (Jump added):       18 state-to-state + 1 anyState
+            //   - After Step 6 (Combo added):      22 state-to-state + 1 anyState  ← current
+            // The state-to-state count is the running total; this validator
+            // verifies the floor (Step 2's 11+) is still met. Use Step 6's
+            // dedicated validator for the exact 22 count assertion.
             int totalStateTransitions = rootSm.states.Sum(s => s.state.transitions.Length);
             int anyStateTransitions   = rootSm.anyStateTransitions.Length;
-            Check("5a State-to-state transitions == 11",
-                totalStateTransitions == 11,
+            Check("5a State-to-state transitions >= 11 (Step 2 floor)",
+                totalStateTransitions >= 11,
                 $"got {totalStateTransitions} (per-state: " +
                 string.Join(", ", rootSm.states.Select(s => $"{s.state.name}={s.state.transitions.Length}")) + ")");
             Check("5b AnyState transitions == 1",

@@ -900,6 +900,67 @@ Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2
     section: don't combine Has Exit Time with a Trigger condition in
     Unity 6.4 — use one or the other (or gate the condition-set call
     in script, which is what PlayerCombat does).
+  M3-02A (pack swap, 2026-04-30): Duo retired, World Bundle imported.
+    Driven by the inventory in Assets/Documentation/M3_01_pack_swap_inventory.md
+    (M3-01 confirmed all 13 currently-wired clip GUIDs were byte-
+    identical between Duo and World Bundle — Dungeon Mason convention).
+    Executed via three menu items (LevelGen ▶ Pack Swap ▶ ...) from
+    Assets/Scripts/Player/Editor/M3_02A_PackSwapExecutor.cs (one-off
+    scaffolding, can be deleted post-swap):
+      Step 1: AssetDatabase.DeleteAsset("Assets/AssetPacks/RPG Tiny Hero Duo")
+      Step 2: AssetDatabase.ImportPackage(unitypackage, interactive=false)
+              + delete embedded HDRP_BuiltIN/HDRP.unitypackage and
+              HDRP_BuiltIN/BuiltIn.unitypackage (alt-pipeline; URP-only
+              project) + AssetDatabase.MoveAsset to relocate from
+              publisher default Assets/RPGTinyHeroWorldBundlePBR/
+              to Assets/AssetPacks/RPG Tiny Hero World Bundle/
+      Step 3: GUID-resolution verification (13/13 PASS, 1 cosmetic
+              WARN) + ExecuteMenuItem chain over all 6 M2-B validators.
+    Pack details: SHA-256 81872f73...09b2f78509b, 339 MiB, 1607 assets.
+    Imported sub-packs: RPGTinyHeroWavePBR (1075 — characters,
+    animations, weapons; 8 weapon sets vs Duo's 1: SwordAndShield
+    [used], BowAndArrow, DoubleSword, MagicWand, NoWeapon, SingleSword,
+    Spear, TwoHandSword) and RPG Tiny Fantasy World 01 PBR (528
+    environment assets — usable for level mockups).
+    GUID-preserving auto-relink result: ALL 13 clips resolved to new
+    pack paths without any controller/override/script edits. The
+    publisher renamed only ONE clip-subasset internally
+    (Idle: typo'd "Shiled" → corrected "Shield"); FBX filename and
+    GUID identical, runtime resolves by GUID, so no runtime impact.
+    No edits needed in PlayerBaseController.controller,
+    PlayerOverride_MaleHero.overrideController,
+    PlayerCombat.cs, PlayerAnimator.cs, PlayerController.cs,
+    PlayerInputReader.cs, or Player_MaleHero.prefab structure.
+    Validator state immediately post-swap:
+      Step 2 validator: 11 PASS / 1 FAIL (5a stale count == 11,
+                        actual 22)
+      Step 3 validator: 10 PASS / 0 FAIL ✓
+      Step 4 validator: 21 PASS / 1 FAIL (5a stale count == 18,
+                        actual 22)
+      Step 5 validator: 9 PASS / 0 FAIL ✓
+      Step 6 validator: 20 PASS / 0 FAIL ✓
+      Step 7 validator: 9 PASS / 0 FAIL ✓
+    The two FAILs were pre-existing stale assertions, not swap-related.
+    Older validators hardcoded the transition count from the milestone
+    that authored them (Step 2 = 11, Step 4 = 18); subsequent
+    milestones added more transitions (Step 4 added 7, Step 6 added 4,
+    bringing current total to 22). Patched both validators to use
+    floor checks (`>= 11`, `>= 18`) so future additions don't
+    re-trigger the FAIL. Step 6's strict `== 22` assertion retained
+    as the current-truth count.
+    Player rig (MaleCharacterPBR child of Player_MaleHero.prefab) is
+    in a "Missing Nested Prefab" state post-swap — the Duo's
+    MaleCharacterPBR.prefab (GUID 2dfbb63c9cdf7504faf4ff26b0581598)
+    was deleted, and the new pack ships 24 modular character prefabs
+    (MC01-MC24) instead. M3-02B will pick a replacement and re-wire
+    the prefab. In the meantime, Play mode runs but with no visible
+    player mesh.
+    Documentation: M3_02A_preswap_baseline.md (controller + override
+    GUID snapshot), M3_02A_preswap_player_rig.md (prefab + Animator
+    settings), M3_02A_postswap_verification.md (auto-relink table +
+    validator results).
+    Smoke tests deferred to post-M3-02B (visual checks would fail on
+    invisible-mesh state).
 
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
