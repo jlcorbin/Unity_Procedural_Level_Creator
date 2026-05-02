@@ -1035,6 +1035,51 @@ Player (M1 + M2-C + M2-A COMPLETE — see Documentation/Player_Animator_Design_2
     (5/5 combo extension). See Assets/Documentation/M3_closeout.md
     for the milestone-closure record.
 
+## Dummy + CharacterStats foundation (2026-05-01)
+
+Combat data layer foundation shipped:
+
+- CharacterStats ScriptableObject (LevelGen.Combat) — duplicate-and-
+  tweak template for character HP/Stamina/displayName/description.
+  CreateAssetMenu under "LevelGen/Combat/Character Stats". OnValidate
+  clamps maxHP and maxStamina to >=1.
+- CharacterStatsRuntime MonoBehaviour — references one stats asset,
+  copies max values to currentHP/currentStamina at Awake. Public
+  read-only properties. Internal ApplyDamage / Heal methods exist
+  but are not called from anywhere yet (scaffolding for future
+  damage application).
+- Targetable marker component — empty identifier with optional
+  AimPoint child. Future hook for enemy AI / target lock /
+  damage application.
+- CharacterStats_Master.asset (100/100, the template) and
+  CharacterStats_Dummy.asset (999/100, sandbox crutch) shipped.
+- Dummy.prefab — MaleCharacterPBR model + CharacterStatsRuntime +
+  Targetable + Animator referencing PlayerBaseController. NO
+  player control scripts. Plays Idle on play. Stationary target.
+- DummyPrefabBuilder editor (Build Dummy Prefab + Place Dummy in
+  Active Scene menu items).
+- DummyAndStatsValidator editor — 12 read-only checks.
+
+Stamina is data-only for now: depletion gameplay and HP/Stamina UI
+deferred. PlayerCombat untouched in this milestone — TakeHit() still
+trigger-only, no damage routing yet.
+
+Files:
+- Assets/Scripts/Combat/CharacterStats.cs
+- Assets/Scripts/Combat/CharacterStatsRuntime.cs
+- Assets/Scripts/Combat/Targetable.cs
+- Assets/Scripts/Combat/Editor/DummyPrefabBuilder.cs
+- Assets/Scripts/Combat/Editor/DummyAndStatsValidator.cs
+- Assets/Data/CharacterStats/CharacterStats_Master.asset
+- Assets/Data/CharacterStats/CharacterStats_Dummy.asset
+- Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab
+
+Pending follow-up:
+- Damage application from PlayerCombat to Targetable + CharacterStatsRuntime
+- Death state / hit reactions on Dummy
+- HP/Stamina UI bars
+- Stamina gameplay (sprint cost, attack cost, regen)
+
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
 PropEntry, PropCatalogue, SpawnPoint, RoomContentGenerator, RoomPreset,
