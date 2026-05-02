@@ -71,5 +71,14 @@ namespace LevelGen.Combat
             currentHP = Mathf.Clamp(currentHP + amount, 0, MaxHP);
             Debug.Log($"[CharacterStatsRuntime] {DisplayName} HP {prev} -> {currentHP}");
         }
+
+        // TODO M-DamageRouting: remove these debug hooks once PlayerCombat
+        // routes real damage into ApplyDamage on hit. Inspector-only test
+        // surface for the HP/Stamina HUD milestone.
+        [ContextMenu("Debug: Apply 10 Damage")]
+        private void DebugApplyDamage10() { ApplyDamage(10); }
+
+        [ContextMenu("Debug: Heal 10")]
+        private void DebugHeal10() { Heal(10); }
     }
 }

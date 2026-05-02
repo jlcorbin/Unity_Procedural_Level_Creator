@@ -1080,6 +1080,61 @@ Pending follow-up:
 - HP/Stamina UI bars
 - Stamina gameplay (sprint cost, attack cost, regen)
 
+## Player HP / Stamina HUD (2026-05-01)
+
+UI foundation shipped: bottom-left HP / Stamina bars, snap-on-
+damage, lerp-on-heal, numeric labels.
+
+- PlayerHUD component (LevelGen.UI) — passive observer reading
+  CharacterStatsRuntime each frame. Tag-based player lookup
+  with retry coroutine for deferred-spawn scenarios.
+- PlayerHUD.prefab — Canvas root with Screen Space Overlay,
+  HP (red) over Stamina (yellow), TMP_Text labels.
+- CharacterStats_Player.asset (100/100) shipped.
+- Player_MaleHero prefab now carries CharacterStatsRuntime
+  pointing at CharacterStats_Player.
+- Two debug ContextMenu hooks on CharacterStatsRuntime
+  (Apply 10 Damage / Heal 10) for manual HUD verification —
+  marked TODO M-DamageRouting for removal once real damage
+  routing exists.
+- PlayerHUDBuilder editor: Build / Place / Add Stats menu
+  items.
+- PlayerHUDValidator: 11 read-only checks.
+
+HUD is bound and reactive but stats only change via the debug
+ContextMenu hooks for now. Damage routing (next milestone) will
+make stats change in real gameplay.
+
+Sprite-fix correction (post-test): the first build produced bars
+that didn't visually respond to fillAmount — labels updated but
+the red rect stayed full. Root cause: a programmatically-created
+Image with no sprite assigned cannot clip when type=Filled, so
+fillAmount has no visual effect. Unity's editor Add-Component
+flow auto-assigns UI/Skin/UISprite.psd; programmatic creation
+does not. Fix: PlayerHUDBuilder.CreateBar now assigns
+`AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd")`
+to every bar (background = Sliced, fill = Filled). Lesson: when
+authoring UI Images via code, always assign a sprite explicitly —
+the default-no-sprite path renders fine for flat color but breaks
+9-slice and Filled clipping.
+
+Files:
+- Assets/Scripts/UI/PlayerHUD.cs
+- Assets/Scripts/UI/Editor/PlayerHUDBuilder.cs
+- Assets/Scripts/UI/Editor/PlayerHUDValidator.cs
+- Assets/Data/CharacterStats/CharacterStats_Player.asset
+- Assets/Prefabs/UI/PlayerHUD.prefab
+- Assets/Scripts/Combat/CharacterStatsRuntime.cs (debug hooks added)
+- Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab
+  (CharacterStatsRuntime added)
+
+Pending follow-up:
+- Damage routing: PlayerCombat hitbox colliders → ApplyDamage
+  on Targetables in range
+- Hit reactions on Dummy
+- Stamina gameplay (sprint cost, attack cost, regen)
+- Death state
+
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
 PropEntry, PropCatalogue, SpawnPoint, RoomContentGenerator, RoomPreset,

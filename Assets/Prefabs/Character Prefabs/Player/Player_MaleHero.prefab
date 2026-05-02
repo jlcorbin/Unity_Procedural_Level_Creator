@@ -46,6 +46,7 @@ GameObject:
   - component: {fileID: 507400609693334692}
   - component: {fileID: 660862845469750593}
   - component: {fileID: 8222342893527027901}
+  - component: {fileID: 7928440748514757523}
   m_Layer: 0
   m_Name: Player_MaleHero
   m_TagString: Player
@@ -327,6 +328,21 @@ MonoBehaviour:
   comboWindowOpen: 0.4
   comboWindowClose: 0.8
   bufferConsumeAt: 0.85
+--- !u!114 &7928440748514757523
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6538583370653109147}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a8fc903da53112d4f9bc774f50101a92, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Combat.CharacterStatsRuntime
+  stats: {fileID: 11400000, guid: 8b436a0160601884b8c2d356d2267690, type: 2}
+  currentHP: 0
+  currentStamina: 0
 --- !u!1001 &6200006254089946178
 PrefabInstance:
   m_ObjectHideFlags: 0
