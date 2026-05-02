@@ -1135,6 +1135,99 @@ Pending follow-up:
 - Stamina gameplay (sprint cost, attack cost, regen)
 - Death state
 
+## Damage routing — hitbox colliders (2026-05-01)
+
+PlayerCombat now deals damage to Targetables via animation-event-
+driven hitbox colliders.
+
+- HitboxRelay component (LevelGen.Combat) — bridge from a child
+  trigger collider to PlayerCombat.NotifyHitboxTriggered. Reset()
+  auto-resolves the parent reference. No state, no Update.
+- AnimationEventForwarder component (LevelGen.Combat) — sits on
+  the Animator's GameObject (MaleCharacterPBR child) and forwards
+  OnHitboxOpen / OnHitboxClose to PlayerCombat on the parent.
+  Required because Unity dispatches AnimationEvents to the
+  Animator's own GameObject only — it does NOT walk the
+  hierarchy, so a method on PlayerCombat (parent of the Animator)
+  never fires from an AnimationEvent. Symptom of the missing
+  forwarder: console spam "'<animator-go-name>' AnimationEvent
+  'OnHitboxOpen' has no receiver! Are you missing a component?".
+- PlayerCombat extended with OnHitboxOpen / OnHitboxClose
+  (forwarder endpoints) and NotifyHitboxTriggered (called
+  from HitboxRelay.OnTriggerEnter). Per-attack HashSet<Targetable>
+  hit list cleared on OnHitboxOpen — prevents double-hits within
+  one swing while still allowing multi-target sweeps. Each combo
+  step starts with a fresh list, so Attack→Attack02→Attack03 can
+  each hit the same target once.
+- Hardcoded `attackDamage = 10` SerializeField — WeaponStats SO
+  deferred.
+- CharacterStatsRuntime.ApplyDamage / .Heal promoted from internal
+  to public (now have external callers).
+- Player_MaleHero prefab gained a WeaponHitbox child under
+  weapon_r — BoxCollider (size 0.15×0.15×0.8, center (0,0,0.4),
+  isTrigger=true, enabled=false default) + HitboxRelay with
+  combat ref pointed at the prefab root's PlayerCombat + a
+  kinematic Rigidbody (isKinematic=true, useGravity=false). The
+  PlayerCombat.hitbox SerializeField points back at the same
+  BoxCollider — both ends wired by the builder.
+  The kinematic Rigidbody is REQUIRED for OnTriggerEnter to fire
+  on a hitbox that moves via skeletal animation. CharacterController
+  on the prefab root does NOT promote deeply-nested child colliders
+  to "moving" status — Unity's physics treats them as static
+  colliders that happen to be teleporting, and trigger events
+  don't dispatch. Symptom: OnHitboxOpen logs fine (events fire,
+  hitbox enabled) but no "[PlayerCombat] Hit X for Y" lines ever
+  appear. Adding the kinematic Rigidbody to the WeaponHitbox fixed
+  it; verified empirically post-initial-build.
+- Dummy.prefab gained a CapsuleCollider on root (radius=0.4,
+  height=1.8, center=(0,0.9,0), isTrigger=false).
+- AnimationEvents added to Attack01-03 at clip.length * 0.35
+  (OnHitboxOpen) and clip.length * 0.65 (OnHitboxClose) via
+  ModelImporter.clipAnimations + SaveAndReimport. Survives FBX
+  reimport because events live in the .meta, not the FBX.
+- PlayerCombatHitboxBuilder editor (Assets/Scripts/Combat/Editor/):
+  3 menu items — Add Weapon Hitbox / Add Collider to Dummy /
+  Add Animation Events to Attack Clips. All idempotent.
+- DamageRoutingValidator: 12 read-only checks.
+
+Debug ContextMenu hooks on CharacterStatsRuntime (Apply 10 Damage,
+Heal 10) KEPT for now — the HUD's lerp-on-heal currently has no
+real heal source, and a self-contained Inspector path for damage
+is convenient when not playing. Comment retagged
+`// TODO removeMe-after-stamina-and-heal-sources-exist`.
+
+Trigger-event Rigidbody resolution: per Unity, OnTriggerEnter
+requires at least one of the colliding pair to have a non-static
+collider (Rigidbody, kinematic Rigidbody, or CharacterController).
+The CharacterController on the prefab root does NOT promote
+deeply-nested child colliders to non-static — the WeaponHitbox
+needs its own kinematic Rigidbody to be classified as "moving".
+This was the resolved cause of no-damage-events in the first
+playthrough; the builder now adds it automatically.
+
+Files:
+- Assets/Scripts/Combat/HitboxRelay.cs
+- Assets/Scripts/Combat/AnimationEventForwarder.cs
+- Assets/Scripts/Player/PlayerCombat.cs (extended — fields + 3 methods)
+- Assets/Scripts/Combat/CharacterStatsRuntime.cs (visibility)
+- Assets/Scripts/Combat/Editor/PlayerCombatHitboxBuilder.cs
+- Assets/Scripts/Combat/Editor/DamageRoutingValidator.cs
+- Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab
+  (WeaponHitbox child under weapon_r)
+- Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab (capsule)
+- Attack01-03 _SwordAndShiled.fbx clips (.meta updated with events)
+
+Pending follow-up:
+- Hit reactions on Dummy (Animator on Dummy already references
+  PlayerBaseController; just needs Hit-trigger fired from damage
+  event and combat-data routing on Targetable).
+- Death state when HP <= 0.
+- Stamina gameplay (sprint cost, attack cost, regen).
+- Damage numbers (floating combat text).
+- Player taking damage (Dummy fights back / enemy AI).
+- WeaponStats SO with per-weapon damage values.
+- PlayerHitbox layer + collision matrix tweaks (currently Default).
+
 V1 retired: BoundsChecker, V1 LevelGenerator (runtime), SeedData,
 LevelSequence, RoomDefinition, V1 RoomBuilder (COMP_-based),
 PropEntry, PropCatalogue, SpawnPoint, RoomContentGenerator, RoomPreset,

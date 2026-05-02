@@ -7,7 +7,9 @@
 // Single-direction dependency: subscribes to PlayerInputReader's
 // AttackPressed event and writes via PlayerAnimator's public API only.
 
+using System.Collections.Generic;
 using UnityEngine;
+using LevelGen.Combat;
 
 namespace LevelGen.Player
 {
@@ -40,11 +42,25 @@ namespace LevelGen.Player
                  "(0.90 in the controller).")]
         [SerializeField, Range(0f, 1f)] private float bufferConsumeAt = 0.85f;
 
+        [Header("Damage")]
+        [Tooltip("HP subtracted per successful hit. Hardcoded for now; " +
+                 "WeaponStats SO with per-weapon values is a follow-up.")]
+        [SerializeField] private int attackDamage = 10;
+
+        [Tooltip("Trigger collider on the weapon. Enabled during the active " +
+                 "frames of an attack via OnHitboxOpen / OnHitboxClose " +
+                 "AnimationEvents. Default disabled.")]
+        [SerializeField] private Collider hitbox;
+
         // ── Cached refs / state ─────────────────────────────────────────────
 
         private PlayerInputReader _input;
         private PlayerAnimator    _animator;
         private bool              _attackBuffered;
+
+        // Targets struck during the current swing — cleared on OnHitboxOpen.
+        // Prevents double-hits when the collider re-enters the same trigger.
+        private readonly HashSet<Targetable> _currentAttackHitList = new HashSet<Targetable>();
 
         private static readonly int AttackStateHash   = Animator.StringToHash("Attack");
         private static readonly int Attack02StateHash = Animator.StringToHash("Attack02");
@@ -180,6 +196,72 @@ namespace LevelGen.Player
             if (_animator == null) return;
             _animator.SetHitTrigger();
             _attackBuffered = false;
+        }
+
+        // ── AnimationEvent endpoints (called from Attack clips) ─────────────
+
+        /// <summary>
+        /// Animation-event callback. Clears the per-attack hit list and
+        /// enables the hitbox collider so subsequent OnTriggerEnter calls
+        /// can deal damage. Public because Unity's AnimationEvent system
+        /// only invokes public methods. Walks the hierarchy from the
+        /// Animator GameObject up to here.
+        /// </summary>
+        public void OnHitboxOpen()
+        {
+            if (hitbox == null)
+            {
+                Debug.LogError("[PlayerCombat] OnHitboxOpen fired but 'hitbox' is unassigned. " +
+                               "Run 'LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_MaleHero'.", this);
+                return;
+            }
+            _currentAttackHitList.Clear();
+            hitbox.enabled = true;
+        }
+
+        /// <summary>
+        /// Animation-event callback. Disables the hitbox collider — no more
+        /// damage frames for this swing. Silent no-op if hitbox is null
+        /// (the open-side already logged).
+        /// </summary>
+        public void OnHitboxClose()
+        {
+            if (hitbox == null) return;
+            hitbox.enabled = false;
+        }
+
+        // ── Hitbox routing (called from HitboxRelay.OnTriggerEnter) ────────
+
+        /// <summary>
+        /// Called by <see cref="HitboxRelay"/> when the weapon's trigger
+        /// collider enters another collider. Resolves the hit to a
+        /// <see cref="Targetable"/> + <see cref="CharacterStatsRuntime"/>
+        /// pair, applies <see cref="attackDamage"/> once per attack, and
+        /// records the target so the same swing can't double-hit.
+        /// </summary>
+        public void NotifyHitboxTriggered(Collider other)
+        {
+            var targetable = other.GetComponentInParent<Targetable>();
+            if (targetable == null) return;
+
+            if (_currentAttackHitList.Contains(targetable)) return;
+
+            var stats = targetable.GetComponent<CharacterStatsRuntime>();
+            if (stats == null)
+            {
+                Debug.LogWarning($"[PlayerCombat] Targetable '{targetable.name}' hit but has no " +
+                                 "CharacterStatsRuntime — recording as hit anyway to prevent " +
+                                 "spam. Misconfiguration: Targetable + CharacterStatsRuntime " +
+                                 "should live on the same GameObject.", targetable);
+                _currentAttackHitList.Add(targetable);
+                return;
+            }
+
+            stats.ApplyDamage(attackDamage);
+            _currentAttackHitList.Add(targetable);
+
+            Debug.Log($"[PlayerCombat] Hit {targetable.name} for {attackDamage} " +
+                      $"(HP now {stats.CurrentHP}/{stats.MaxHP}).");
         }
     }
 }

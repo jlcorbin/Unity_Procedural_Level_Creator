@@ -9,9 +9,9 @@ namespace LevelGen.Combat
     /// underlying SO is never mutated at runtime.
     /// </summary>
     /// <remarks>
-    /// <see cref="ApplyDamage"/> and <see cref="Heal"/> are scaffolding —
-    /// they compile but are not called from anywhere yet. Damage routing
-    /// from PlayerCombat / Targetable is a future milestone.
+    /// <see cref="ApplyDamage"/> is the public damage entry point —
+    /// PlayerCombat's hitbox routing calls it on hit. <see cref="Heal"/>
+    /// has no caller yet; it'll get one when potions / regen ship.
     /// </remarks>
     [DisallowMultipleComponent]
     public class CharacterStatsRuntime : MonoBehaviour
@@ -48,10 +48,10 @@ namespace LevelGen.Combat
 
         /// <summary>
         /// Reduces <see cref="CurrentHP"/> by <paramref name="amount"/>,
-        /// clamped to [0, MaxHP]. Marked internal — only systems in the
-        /// LevelGen.Combat assembly may call it (no external callers yet).
+        /// clamped to [0, MaxHP]. Public so any damage source (PlayerCombat
+        /// hitbox, traps, projectiles) can route into it.
         /// </summary>
-        internal void ApplyDamage(int amount)
+        public void ApplyDamage(int amount)
         {
             if (stats == null) return;
             int prev = currentHP;
@@ -61,10 +61,10 @@ namespace LevelGen.Combat
 
         /// <summary>
         /// Increases <see cref="CurrentHP"/> by <paramref name="amount"/>,
-        /// clamped to [0, MaxHP]. Marked internal — scaffolding for future
-        /// healing systems.
+        /// clamped to [0, MaxHP]. Public so future heal sources (potions,
+        /// regen, abilities) can call it.
         /// </summary>
-        internal void Heal(int amount)
+        public void Heal(int amount)
         {
             if (stats == null) return;
             int prev = currentHP;
@@ -72,9 +72,11 @@ namespace LevelGen.Combat
             Debug.Log($"[CharacterStatsRuntime] {DisplayName} HP {prev} -> {currentHP}");
         }
 
-        // TODO M-DamageRouting: remove these debug hooks once PlayerCombat
-        // routes real damage into ApplyDamage on hit. Inspector-only test
-        // surface for the HP/Stamina HUD milestone.
+        // TODO removeMe-after-stamina-and-heal-sources-exist: Inspector
+        // hooks for HUD verification. The HUD's lerp-on-heal currently has
+        // no other test surface, and a self-contained Inspector path for
+        // damage is convenient when the player isn't swinging at the test
+        // dummy. Both go away when stamina + heal sources land.
         [ContextMenu("Debug: Apply 10 Damage")]
         private void DebugApplyDamage10() { ApplyDamage(10); }
 
