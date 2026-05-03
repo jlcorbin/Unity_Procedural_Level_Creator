@@ -59,6 +59,13 @@ namespace LevelGen.Player
         private CharacterStatsRuntime _stats;
         private bool                  _attackBuffered;
 
+        // Set to a positive integer to override the next swing's damage
+        // for ONE successful hitbox-target hit, then auto-cleared. Used
+        // by Interactables (e.g. AssassinateInteractable) to deliver an
+        // unusual hit through the existing combo + hitbox path. NOT for
+        // general damage tuning.
+        private int _nextHitDamageOverride = -1;
+
         // Targets struck during the current swing — cleared on OnHitboxOpen.
         // Prevents double-hits when the collider re-enters the same trigger.
         private readonly HashSet<Targetable> _currentAttackHitList = new HashSet<Targetable>();
@@ -98,6 +105,13 @@ namespace LevelGen.Player
 
         private static bool IsActionState(AnimatorStateInfo info)
             => info.shortNameHash == AttackStateHash || info.shortNameHash == HitStateHash;
+
+        /// <summary>
+        /// Public alias of <see cref="IsActionLocked"/> for outside callers
+        /// (Interactables) to query whether the player can accept a new
+        /// action. Same state-hash check semantics.
+        /// </summary>
+        public bool IsBusy => IsActionLocked;
 
         // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -187,6 +201,32 @@ namespace LevelGen.Player
             // else: too early or too late — drop input.
         }
 
+        // ── Public hooks for Interactables ──────────────────────────────────
+
+        /// <summary>
+        /// Sets a one-shot damage override for the next successful hitbox-
+        /// target intersection. Auto-cleared inside
+        /// <see cref="NotifyHitboxTriggered"/> after one consumption.
+        /// Used by <c>AssassinateInteractable</c> (M6) to deliver an
+        /// unusual hit through the existing combo + hitbox path.
+        /// </summary>
+        public void SetNextHitDamageOverride(int damage)
+        {
+            _nextHitDamageOverride = damage;
+        }
+
+        /// <summary>
+        /// Public delegate of the private <c>OnAttackPressed</c> input
+        /// handler — runs the same routing as a manual LMB press.
+        /// Used by Interactables that fire the player's normal Attack
+        /// path (e.g. AssassinateInteractable). The buffered-combo
+        /// machine handles state.
+        /// </summary>
+        public void RequestAttack()
+        {
+            OnAttackPressed();
+        }
+
         // ── Public damage entry point ───────────────────────────────────────
 
         /// <summary>
@@ -269,7 +309,15 @@ namespace LevelGen.Player
                 return;
             }
 
-            stats.ApplyDamage(attackDamage);
+            // Per-swing damage override (single-shot, set by Interactables
+            // via SetNextHitDamageOverride). Consumed AFTER stats / hit-list
+            // checks so the warning + already-hit branches above leave the
+            // override intact for the next eligible swing.
+            int dmg = _nextHitDamageOverride > 0 ? _nextHitDamageOverride : attackDamage;
+            bool wasOverride = _nextHitDamageOverride > 0;
+            if (wasOverride) _nextHitDamageOverride = -1;
+
+            stats.ApplyDamage(dmg);
             _currentAttackHitList.Add(targetable);
 
             Vector3 hitPoint = hitbox != null
@@ -277,8 +325,9 @@ namespace LevelGen.Player
                 : other.bounds.center;
             targetable.RaiseHit(hitPoint);
 
-            Debug.Log($"[PlayerCombat] Hit {targetable.name} for {attackDamage} " +
-                      $"(HP now {stats.CurrentHP}/{stats.MaxHP}).");
+            Debug.Log($"[PlayerCombat] Hit {targetable.name} for {dmg}" +
+                      (wasOverride ? " (override)" : "") +
+                      $" (HP now {stats.CurrentHP}/{stats.MaxHP}).");
         }
     }
 }

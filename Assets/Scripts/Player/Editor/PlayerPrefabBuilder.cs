@@ -135,6 +135,12 @@ namespace LevelGen.Player.Editor
             var playerCombat  = root.GetComponent<PlayerCombat>();  // may be null pre-Combat-adder
             AssignPlayerDeathRefs(playerDeath, playerAnim, playerCtrl, playerCombat);
 
+            // M6: PlayerInteractor — singleton receiver for Interactable
+            // register/deregister calls. Resolves PlayerInputReader and
+            // PlayerDeath via GetComponent in Awake; no SerializeField
+            // refs to wire here.
+            root.AddComponent<PlayerInteractor>();
+
             // ── Wire UnityEvent persistent listeners (TASK 3) ────────────────
             // We rebuild m_ActionEvents directly via SerializedObject because
             // PlayerInput's runtime code does NOT auto-populate that array on

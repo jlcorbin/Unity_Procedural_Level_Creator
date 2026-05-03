@@ -51,6 +51,12 @@ namespace LevelGen.Player
         /// </summary>
         public event System.Action JumpPressed;
 
+        /// <summary>
+        /// Raised once per Interact button press (button-down edge).
+        /// Subscribed to by PlayerInteractor. Not raised on hold or release.
+        /// </summary>
+        public event System.Action InteractPressed;
+
         // ── UnityEvent endpoints ─────────────────────────────────────────────
         // Wired in the inspector to UnityEngine.InputSystem.PlayerInput's
         // per-action UnityEvents. Value-type actions (Move, Look) read every
@@ -78,10 +84,14 @@ namespace LevelGen.Player
             if (ctx.performed) AttackPressed?.Invoke();
         }
 
-        /// <summary>Interact stub. M1: log on press only.</summary>
+        /// <summary>
+        /// Interact action endpoint. Raises <see cref="InteractPressed"/>
+        /// on the performed phase (button-down). Consumed by
+        /// PlayerInteractor.
+        /// </summary>
         public void OnInteract(InputAction.CallbackContext ctx)
         {
-            if (ctx.performed) Debug.Log("[PlayerInputReader] Interact");
+            if (ctx.performed) InteractPressed?.Invoke();
         }
 
         /// <summary>Crouch stub. M1: log on press only.</summary>

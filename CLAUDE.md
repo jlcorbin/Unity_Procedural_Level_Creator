@@ -1770,6 +1770,224 @@ Deferred:
 - Sources of damage to the Player (no enemy AI yet — verify via
   the existing `[ContextMenu("Debug: Kill")]` hook).
 
+## M6 — player interact system + AssassinateInteractable (2026-05-03)
+
+Generic prefab-friendly Interact system. Press E to trigger
+contextual actions on nearby Interactables. Ships one concrete
+subclass — AssassinateInteractable — wired to the Dummy as the
+proof-of-concept. Architecture is ready for Open / Pickup /
+Read subclasses to be added later with no edits to the player
+or system core.
+
+Note on milestone numbering: this is the SECOND milestone shipped
+on 2026-05-03 — the first was Player Death (logged as M5 above).
+The user's prompt called this "M5 — Player Interact System"; the
+header was bumped to M6 here to avoid a duplicate `## M5` heading.
+The milestone log uses M6 going forward.
+
+Architectural decisions (locked):
+- Self-registration: each Interactable carries its own trigger
+  collider. OnTriggerEnter / Exit cache the player ref;
+  per-frame Update re-evaluates IsEligible and edge-detects
+  register / deregister flips. PlayerInteractor never polls the
+  world.
+- World-space prompt UI: each Interactable owns a child Canvas
+  (built idempotently by `EnsurePromptUI`) at its
+  `_promptAnchor` Transform. PlayerInteractor toggles only the
+  active interactable's prompt visibility.
+- Damage routing for Assassinate: NOT a sideways write. The
+  override flows through PlayerCombat's existing
+  Animator-trigger-and-hitbox path. AssassinateInteractable sets
+  a one-shot `_nextHitDamageOverride`, fires `RequestAttack()`
+  (delegates to the same OnAttackPressed handler as a manual
+  LMB press), and PlayerCombat.NotifyHitboxTriggered consumes
+  the override on the first hitbox-target intersection.
+  PlayerCombat.attackDamage stays the SerializeField default
+  (10) for normal swings.
+- InteractPriority enum: `Pickup=10`, `Open=50`,
+  `Assassinate=100`. PlayerInteractor picks highest-priority
+  registered Interactable; same-priority ties resolve to first-
+  registered (documented but not relied on).
+- PlayerInteractor singleton: `static Instance` set in Awake,
+  cleared in OnDestroy. Justified because Interactables can't
+  trust a player ref at trigger-enter time (the trigger collider
+  may have been entered by a child of the player; resolving the
+  tagged ancestor and routing through a known receiver is the
+  cleanest pattern). Project convention upgraded from "no cross-
+  cutting singletons" to "two cross-cutting receivers": MouseLook's
+  `_MouseLock` GameObject (per-scene) and PlayerInteractor's
+  `Instance` (per-prefab on Player_MaleHero).
+
+Single-direction dependency preserved:
+  PlayerInputReader → (event InteractPressed) → PlayerInteractor
+  → (call) → Interactable.Execute → (call) → PlayerCombat.RequestAttack
+  + PlayerCombat.SetNextHitDamageOverride.
+PlayerCombat is the only writer to the Animator parameters
+(SetAttackTrigger fires through PlayerAnimator.SetAttackTrigger).
+AssassinateInteractable does NOT touch the Animator directly.
+
+Interactable.cs (NEW, `LevelGen.Interaction`): abstract base.
+`[DisallowMultipleComponent]`. SerializeFields: `_priority`
+(InteractPriority), `_promptLabel` (string), `_promptAnchor`
+(Transform), `_playerTag` (string, default "Player"). Abstract:
+`IsEligible(GameObject)`, `Execute(GameObject)`. Concrete:
+`Reset` / `Awake` / `OnTriggerEnter` / `OnTriggerExit` / `Update`
+/ `OnDisable` / `Register` / `Deregister` / `ReevaluateRegistration`
+/ `SetPromptVisible` / `EnsurePromptUI`. The OnTriggerEnter
+walks the hierarchy from the colliding transform to find a
+tagged ancestor (the Player's tag is on the prefab root, but
+the trigger may collide with a child). EnsurePromptUI builds a
+child `_InteractPrompt` GameObject containing a World Space
+Canvas (scale 0.01) and a TMP_Text label rendering "Press [E] {label}".
+
+PlayerInteractor.cs (NEW, `LevelGen.Player`):
+`[RequireComponent(PlayerInputReader)]`,
+`[DisallowMultipleComponent]`, static `Instance` property.
+HashSet<Interactable> _registered; Interactable _active. On
+register/deregister recompute the active by max priority; if
+active changes, hide old prompt + show new. OnInteractPressed
+dispatches Execute on _active. Subscribes to PlayerDeath.OnPlayerDied
+via Awake-cached ref; on player death clears all registrations
++ hides any active prompt (belt-and-suspenders, since
+PlayerDeath disables PlayerController/PlayerCombat by default
+but not PlayerInteractor).
+
+PlayerInputReader.cs: extended with `event System.Action InteractPressed`
+alongside existing AttackPressed/JumpPressed. OnInteract
+endpoint now raises the event on `ctx.performed` and the M1
+stub log is removed (mirrors the OnAttack / OnJump pattern from
+M2-B Step 3 / M2-B Step 5). M1-stub logs preserved on Crouch /
+Previous / Next — those wait for their own consumers.
+
+PlayerCombat.cs: four additive surface changes, no refactor.
+  - private int `_nextHitDamageOverride = -1` field.
+  - public `IsBusy => IsActionLocked` alias property (lets
+    Interactables query without exposing the private state-hash
+    constants).
+  - public `SetNextHitDamageOverride(int)` setter.
+  - public `RequestAttack()` that delegates to the existing
+    private `OnAttackPressed` handler. Lets external callers
+    fire the player's Attack as if LMB had been pressed.
+  - Inside `NotifyHitboxTriggered`, the override is consumed
+    AFTER stats / hit-list checks (so the warning + already-hit
+    branches don't burn it). Override is single-shot — cleared
+    on first successful application. Debug log includes
+    `(override)` tag when an override was used.
+
+AssassinateInteractable.cs (NEW, `LevelGen.Interaction`):
+`[RequireComponent(SphereCollider)]`. Subclasses Interactable.
+SerializeFields: `_targetStats` (CharacterStatsRuntime,
+auto-resolved on Reset), `_targetTransform`, `_backArcDot`
+(default 0.5 ≈ 60° back arc), `_assassinateDamage` (int,
+default 99999). Reset() sets `_priority = Assassinate`,
+`_promptLabel = "Assassinate"`, anchors prompt to the target's
+transform, configures the SphereCollider as a trigger with
+radius 1.5. IsEligible: target alive AND `Vector3.Dot(target.forward,
+toPlayer) < -_backArcDot`. Execute: snap-rotate the player to
+face the target, set the damage override, call
+`combat.RequestAttack()`. Drops silently if `combat.IsBusy` is
+true (mid-Attack/Hit).
+
+DummyPrefabBuilder.cs: extended to add a `_AssassinateZone`
+child after the EnemyDeath component step. Zone gains a
+SphereCollider (trigger, radius 1.5, center (0, 0.9, 0)) +
+AssassinateInteractable + a `_PromptAnchor_Head` grandchild at
+local (0, 1.9, 0). Three SerializeField refs on
+AssassinateInteractable wired explicitly via SerializedObject:
+`_targetStats` → root's CharacterStatsRuntime, `_targetTransform`
+→ root, `_promptAnchor` → the head anchor. EnsurePromptUI
+called at build time so the prompt child is visible in the
+prefab inspector (otherwise it's only built on Awake).
+Idempotent within the existing clean-rebuild pattern (always
+called on a fresh root).
+
+Player_MaleHero.prefab: gains PlayerInteractor on root.
+PlayerInteractor has no SerializeField references (resolves
+PlayerInputReader + PlayerDeath via GetComponent in Awake), so
+no explicit field wiring is needed. Two authoring paths:
+  - `LevelGen ▶ Player ▶ Build Player_MaleHero Prefab` (folded
+    in alongside the M5 PlayerDeath fold-in).
+  - `LevelGen ▶ Player ▶ Add PlayerInteractor to Player_MaleHero
+    Prefab` (NEW, `PlayerInteractorPrefabAdder.cs`) — one-shot
+    LoadPrefabContents path so the user can ship M6 without
+    re-running the full prefab build. Idempotent.
+
+Validator: `Assets/Scripts/Interaction/Editor/InteractSystemValidator.cs`
+(menu `LevelGen ▶ Interaction ▶ Validate Interact System`) —
+16 read-only checks: Interactable.cs presence, Interactable
+abstract + abstract API, InteractPriority values, PlayerInteractor.cs
++ static Instance, RequireComponent(PlayerInputReader),
+PlayerInputReader InteractPressed event declared,
+PlayerInputReader.OnInteract no longer logs (M1 stub removed),
+PlayerCombat surface (override + setter + RequestAttack +
+IsBusy via source-scan), AssassinateInteractable subclasses
+Interactable, AssassinateInteractable RequireComponent(SphereCollider),
+Player_MaleHero.prefab tag = "Player", PlayerInteractor on
+Player_MaleHero, _AssassinateZone child + script on Dummy,
+SphereCollider isTrigger=true + radius>0, _targetStats wired,
+_promptAnchor wired. PASS / FAIL / SKIP format mirrors
+EnemyDeathValidator.
+
+Files:
+- Assets/Scripts/Interaction/Interactable.cs (NEW)
+- Assets/Scripts/Interaction/AssassinateInteractable.cs (NEW)
+- Assets/Scripts/Interaction/Editor/InteractSystemValidator.cs (NEW)
+- Assets/Scripts/Player/PlayerInteractor.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerInteractorPrefabAdder.cs (NEW)
+- Assets/Scripts/Player/PlayerInputReader.cs (InteractPressed
+  event + OnInteract stub log removed)
+- Assets/Scripts/Player/PlayerCombat.cs (override field +
+  setter + RequestAttack + IsBusy + consume in
+  NotifyHitboxTriggered)
+- Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs
+  (PlayerInteractor fold-in alongside M5's PlayerDeath fold-in)
+- Assets/Scripts/Combat/Editor/DummyPrefabBuilder.cs
+  (_AssassinateZone child + BuildAssassinateZone +
+  AssignAssassinateRefs helpers)
+- Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab (gains
+  _AssassinateZone child via builder rebuild)
+- Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab
+  (gains PlayerInteractor via either build path or standalone
+  adder)
+
+Verification (complete):
+- `LevelGen ▶ Interaction ▶ Validate Interact System` — 16 PASS / 0 FAIL.
+- Play-mode smoke test: confirmed working in test scene
+  (assassinate prompt appears behind Dummy, disappears in front,
+  E-press snap-rotates and kills via 99999-damage override).
+
+Validator first-run fix (2026-05-03, post-shipping): check 7
+("OnInteract no longer logs (M1 stub removed)") used a
+fixed-width 400-char source slice from `public void OnInteract`.
+Adjacent M1-stub sibling methods (OnCrouch / OnPrevious / OnNext)
+sit close enough that the slice spilled past OnInteract's
+closing brace and matched OnCrouch's still-present `Debug.Log`,
+producing a false positive even though OnInteract was clean.
+Patched to direct-string match against the literal stub line
+`Debug.Log("[PlayerInputReader] Interact"`. Lesson logged:
+fixed-width slice scans on source code spill across method
+boundaries when methods are short — for "is this specific stub
+gone" checks, prefer direct string match against the literal
+stub line over slice scans.
+
+Deferred:
+- Concrete subclasses: OpenInteractable (doors),
+  PickupInteractable (books, items), ReadInteractable (signs),
+  ActivateInteractable (levers).
+- World-space prompt billboarding toward camera (TODO comment
+  in Interactable.EnsurePromptUI). Currently faces +Z which is
+  acceptable from the existing camera angle.
+- Hold-to-interact / charge-up mechanics.
+- Per-key remapping in HUD ("[E]" is hardcoded in the prompt
+  string).
+- Distance-based tiebreaker if same-priority interactables
+  overlap (currently registration-order via HashSet enumeration —
+  documented as "first-registered" but enumeration order isn't
+  formally guaranteed for HashSet).
+- Stealth detection (alerted enemy → assassinate ineligible).
+- Snap-to-position on Execute (currently only snap-rotates;
+  player position untouched).
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

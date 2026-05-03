@@ -15,6 +15,7 @@ using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
 using LevelGen.Combat;
+using LevelGen.Interaction;
 
 namespace LevelGen.Combat.EditorTools
 {
@@ -138,6 +139,13 @@ namespace LevelGen.Combat.EditorTools
             var enemyDeath = root.AddComponent<EnemyDeath>();
             AssignEnemyDeathRefs(enemyDeath, animator, capsule, hitReaction);
 
+            // ── M6: _AssassinateZone child (interact system) ────────────────
+            // Sphere trigger + AssassinateInteractable on a separate child
+            // GameObject so it doesn't share the body collider's physics
+            // semantics. Prompt UI is auto-built by Interactable.Awake but
+            // we also call EnsurePromptUI now for editor-time visibility.
+            BuildAssassinateZone(root, runtime);
+
             // ── Save the prefab ─────────────────────────────────────────────
             bool success;
             var saved = PrefabUtility.SaveAsPrefabAsset(root, DummyPrefabPath, out success);
@@ -166,6 +174,7 @@ namespace LevelGen.Combat.EditorTools
                 $"  CharacterStats_Dummy:  {dummyStats.name} (HP={dummyStats.maxHP}, Stamina={dummyStats.maxStamina})\n" +
                 $"  Animator controller:   {baseController.name}\n" +
                 $"  Components on root:    CharacterStatsRuntime, Targetable, CapsuleCollider, EnemyHitReaction, EnemyDeath\n" +
+                $"  Child:                 _AssassinateZone (SphereCollider trigger + AssassinateInteractable)\n" +
                 $"  No player control scripts. Drop into a scene and press Play to see Idle."
             );
         }
@@ -320,6 +329,72 @@ namespace LevelGen.Combat.EditorTools
                 Debug.LogError($"[DummyPrefabBuilder] Failed to create folder: {path}");
             else
                 Debug.Log($"[DummyPrefabBuilder] Created folder: {path}");
+        }
+
+        /// <summary>
+        /// Builds the M6 _AssassinateZone child: a child GameObject with
+        /// a SphereCollider (trigger) + AssassinateInteractable, with the
+        /// _targetStats + _targetTransform refs wired to the parent
+        /// (which holds CharacterStatsRuntime), prompt anchor pointed at
+        /// a head-height transform on the body. Idempotent within the
+        /// clean-rebuild pattern (always called on a fresh root).
+        /// </summary>
+        private static void BuildAssassinateZone(GameObject root, CharacterStatsRuntime runtime)
+        {
+            var zone = new GameObject("_AssassinateZone");
+            zone.transform.SetParent(root.transform, worldPositionStays: false);
+            zone.transform.localPosition = Vector3.zero;
+            zone.transform.localRotation = Quaternion.identity;
+            zone.transform.localScale    = Vector3.one;
+
+            var sc = zone.AddComponent<SphereCollider>();
+            sc.isTrigger = true;
+            sc.radius    = 1.5f;
+            sc.center    = new Vector3(0f, 0.9f, 0f); // mid-body height
+
+            var assassinate = zone.AddComponent<AssassinateInteractable>();
+            // Reset() doesn't fire on programmatic AddComponent — wire the
+            // SerializeField refs explicitly. _promptAnchor goes on a
+            // head-height transform so the prompt floats above the head.
+            var headAnchor = new GameObject("_PromptAnchor_Head");
+            headAnchor.transform.SetParent(zone.transform, worldPositionStays: false);
+            headAnchor.transform.localPosition = new Vector3(0f, 1.9f, 0f);
+
+            AssignAssassinateRefs(assassinate, runtime, root.transform, headAnchor.transform);
+
+            // Build the prompt child up-front so it's visible in the
+            // prefab inspector (otherwise it's only built on Awake at
+            // runtime).
+            assassinate.EnsurePromptUI();
+        }
+
+        /// <summary>
+        /// Wires AssassinateInteractable's three SerializeField refs via
+        /// SerializedObject. Reset() does not fire on programmatic
+        /// AddComponent — Awake fallbacks aren't relevant here either
+        /// since the validator reads the serialized values.
+        /// </summary>
+        private static void AssignAssassinateRefs(AssassinateInteractable target,
+                                                  CharacterStatsRuntime targetStats,
+                                                  Transform targetTransform,
+                                                  Transform promptAnchor)
+        {
+            var so = new SerializedObject(target);
+            void Wire(string fieldName, Object value)
+            {
+                var prop = so.FindProperty(fieldName);
+                if (prop == null)
+                {
+                    Debug.LogError($"[DummyPrefabBuilder] AssassinateInteractable has no '{fieldName}' field.");
+                    return;
+                }
+                prop.objectReferenceValue = value;
+            }
+            Wire("_targetStats",     targetStats);
+            Wire("_targetTransform", targetTransform);
+            Wire("_promptAnchor",    promptAnchor);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(target);
         }
     }
 }

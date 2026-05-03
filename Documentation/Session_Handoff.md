@@ -1,25 +1,4 @@
-# Session Handoff Update — 2026-05-02
-
-> **Read first:** `CLAUDE.md` and the existing
-> `Documentation/Session_Handoff.md` (the one this prompt replaces).
->
-> Replace `Documentation/Session_Handoff.md` in place with the
-> contents below. Do NOT append — overwrite the entire file. The
-> previous handoff (dated 2026-05-01) is no longer the current
-> state.
->
-> Commit the change with message:
-> `docs(handoff): update Session_Handoff.md for 2026-05-02 (M-CursorLock + M4-A + M4-B)`
-
----
-
-## File contents to write
-
-Write the following to `Documentation/Session_Handoff.md`,
-replacing existing contents entirely:
-
-```markdown
-# Session Handoff — 2026-05-02
+# Session Handoff — 2026-05-03
 
 > **Purpose of this doc.** This is the canonical "where we are right
 > now" layer that sits on top of CLAUDE.md. CLAUDE.md is the architecture
@@ -40,224 +19,392 @@ Unity 6.4 URP mobile procedural level generator
 IL2CPP for Android + iOS. V2 architecture is master.
 
 Combat scaffolding for one enemy type (Dummy) is structurally
-complete: Player attacks → HP applied → flinch animation → death
-animation → cleanup → despawn. End-to-end loop verified. Cursor
-no longer escapes the Game view during Play-mode testing.
+complete and the player can both die and interact. End-to-end
+loop: Player attacks → Dummy HP applied → flinch → death anim →
+cleanup → despawn (M4 chain). Player HP→0 → Die01 + "You Died"
+overlay → Restart reloads scene (M5). Walk behind Dummy →
+"Press [E] Assassinate" prompt → E kills via 99999-damage
+override (M6).
 
-### Just shipped (this session — 2026-05-02)
+### Just shipped today (2026-05-03)
 
-Three milestones closed cleanly. All validators green.
+Two milestones closed cleanly. All validators green.
 
-**1. M-CursorLock — Cursor lock during Play mode (QoL detour)**
-- New folder `Assets/Scripts/Input/`.
-- `MouseLook.cs` moved from `Assets/Scripts/MouseLook.cs` →
-  `Assets/Scripts/Input/MouseLook.cs` preserving GUID via the
-  `.meta` move (the file was empty pre-move; no references to
-  break). Header comment clarifies it's a cursor-state controller,
-  NOT a look-rotation script — `PlayerInput` still owns Look input.
-- Behavior: `CursorLockMode.Locked` + `Cursor.visible = false` on
-  Play start; Escape unlocks; click in Game view re-locks; focus
-  loss (Alt-Tab) unlocks; OnDestroy/OnDisable restores cursor.
-- Uses `UnityEngine.InputSystem.Keyboard.current` /
-  `Mouse.current` (matches project's input stack), null-guarded
-  for headless mode.
-- `[DefaultExecutionOrder(-100)]` so it locks before other scripts
-  initialize.
-- `_MouseLock` GameObject placed in active Play-mode test scene.
-- Validator `MouseLookValidator.cs` under `LevelGen ▶ Input ▶
-  Validate MouseLook`: 7 checks, all PASS (the in-Play check
-  SKIPs in edit mode, which is correct).
-- Reason for the detour: misclicks outside the Game view were
-  interrupting combat iteration. Cheap to ship, immediate quality
-  improvement.
+**1. M5 — Player Death**
 
-**2. M4-A — Enemy Hit Reaction (Dummy)**
-- `Targetable` extended from pure marker → event publisher.
-  Added `event Action<Vector3> OnHit` and public
-  `RaiseHit(Vector3 hitPoint)`. Targetable still knows nothing
-  about colliders, animation, or stats — caller passes the hit
-  point; subscribers compute their own behavior.
-- `PlayerCombat.NotifyHitboxTriggered` now calls
-  `target.RaiseHit(hit.ClosestPoint(...))` immediately after
-  `ApplyDamage`. One-line addition; no refactor.
-- New `EnemyBaseController.controller` — minimal Animator with
-  Idle (default) and Hit states. `Hit` trigger parameter.
-  `AnyState → Hit` (canTransitionToSelf=false, fixed-duration
-  0.05s). `Hit → Idle` exit-time-driven (0.95). Built via
-  idempotent editor script `EnemyBaseControllerBuilder.cs`.
-- `Dummy.prefab` swapped from `PlayerBaseController` →
-  `EnemyBaseController`. Dummy no longer references Player's
-  Animator setup (resolves the M2 architectural messiness noted
-  in yesterday's Q1).
-- New `EnemyHitReaction` MonoBehaviour
-  (`[RequireComponent(typeof(Targetable))]`,
-  `[DisallowMultipleComponent]`). Subscribes to sibling
-  Targetable's OnHit, fires Hit trigger on child Animator. Sole
-  writer to Dummy's Hit parameter.
-- Stagger window: script-side cooldown,
-  `[SerializeField] float staggerWindow = 0.3f`. Hits within
-  window are swallowed (damage already applied upstream — only
-  the visual reaction is gated). Default tuned to combo cadence:
-  Attack01→02→03 each fires a fresh flinch; faster-than-combo
-  spam swallows extras.
-- Validator `EnemyHitReactionValidator.cs`: 14 checks, all PASS.
+Mirrors M4-B for the Player. HP→0 plays `Die01_SwordAndShield`,
+disables PlayerController + PlayerCombat (input still flows but
+no subscribers act on it), raises `PlayerDeath.OnPlayerDied` for
+UI. PlayerDeathOverlay shows a "You Died" canvas with a Restart
+button that reloads `SceneManager.GetActiveScene().buildIndex`.
 
-**3. M4-B — Enemy Death (Dummy)**
-- `CharacterStatsRuntime` gains
-  `event Action<CharacterStatsRuntime> OnDied` (payload = self,
-  mirroring OnHit's payload-passing convention) and public
-  `bool IsDead` property. Single-fire via `_hasDied` guard —
-  re-damaging a corpse does not re-fire OnDied. `Heal` does NOT
-  revive (defensive default; HP can rise above 0 again but
-  `_hasDied` stays true).
-- `EnemyBaseController` extended with terminal `Death` state
-  (Die01_SwordAndShield, Loop=false, **no outgoing transitions**
-  — Animator parks on last frame). New `Death` trigger.
-  `AnyState → Death` (canTransitionToSelf=false, fixed-duration
-  0.05s). EnemyBaseControllerBuilder updated, still idempotent.
-- New `EnemyDeath` MonoBehaviour — sole owner of the death
-  sequence. `[RequireComponent]` for CharacterStatsRuntime +
-  Targetable. On OnDied: disables Targetable, disables Collider,
-  disables EnemyHitReaction, fires Death trigger, schedules
-  `Destroy(gameObject, despawnDelay)`. Default despawn = 5s,
-  tunable; `<= 0` keeps the corpse forever.
-- `EnemyHitReaction` gained an `IsDead` guard in HandleHit —
-  belt-and-suspenders against same-frame OnHit/OnDied subscriber
-  ordering. Without it, a hit that crosses HP=0 could fire Hit
-  and Death on the same frame depending on subscriber order;
-  with it, the order is irrelevant.
-- `Dummy.prefab` gains `EnemyDeath` component, all refs wired
-  (animator, deathCollider, hitReaction).
-- Temporary `[ContextMenu("Kill")]` debug hook added to
-  `CharacterStatsRuntime` (calls `ApplyDamage(99999)`), tagged
-  `// TODO removeMe-after-...` like the existing damage/heal
-  hooks. Necessary because Dummy has 999 HP — manual death
-  testing was tedious.
-- Validator `EnemyDeathValidator.cs`: 16 checks, all PASS.
+- `PlayerBaseControllerExtender.cs` (NEW, editor) — idempotent
+  additive editor script that adds the Death state to the
+  existing PlayerBaseController WITHOUT recreating it (preserves
+  all M2-B / M2-C state and transitions). Adds `Death` Trigger
+  param + terminal `Death` state (no outgoing transitions) +
+  AnyState→Death (canTransitionToSelf=false, dur 0.05) only if
+  missing. Skips silently on re-run.
+- `PlayerAnimator.cs` — added `ParamDeath` const, `_hashDeath`
+  field, hash assignment in Awake, public `SetDeathTrigger()`.
+  Same pattern as the existing trigger-set methods.
+- `PlayerDeath.cs` (NEW, `LevelGen.Player`) — sole owner of the
+  death sequence. `[RequireComponent(CharacterStatsRuntime)]`,
+  `[DisallowMultipleComponent]`. Three SerializeField refs
+  (`_animator`, `_controller`, `_combat`). Subscribes to
+  `_stats.OnDied` in OnEnable; `HandleDied` runs the sequence:
+  disable PlayerController → disable PlayerCombat →
+  `_animator.SetDeathTrigger()` → raise `OnPlayerDied(this)`.
+  `_hasFired` guard against double-invoke.
+- `PlayerCombat.cs` — gained cached `_stats` reference (null-
+  tolerant, no `[RequireComponent]` — mirrors EnemyHitReaction)
+  + `IsDead` guard at the top of `TakeHit()`. Belt-and-suspenders
+  against same-frame OnHit/OnDied subscriber ordering.
+- `PlayerDeathOverlay.cs` (NEW, `LevelGen.UI`) — passive observer
+  on its prefab root with the Canvas as a child (canvas hide
+  doesn't disable the overlay's OnPlayerDied subscription).
+  Tag-based player lookup with retry coroutine (copies
+  PlayerHUD's `TryBindToPlayer` + `PollForPlayer`). `HandlePlayerDied`
+  shows the canvas, unlocks the cursor. **Three-layer Restart
+  input handling** (the part of M5 that took the most iteration):
+    1. **Keyboard fallback** in Update — R / Enter / Numpad-Enter
+       call OnRestartClicked directly. Works regardless of
+       EventSystem state.
+    2. **Manual mouse-over-RectTransform check** in Update — left
+       mouse + cursor inside the RestartButton's RectTransform
+       (resolved via `RectTransformUtility.RectangleContainsScreenPoint`
+       with null camera for ScreenSpaceOverlay) calls
+       OnRestartClicked. Bypasses EventSystem +
+       InputSystemUIInputModule entirely. **This is the
+       bulletproof layer.**
+    3. **Standard `Button.onClick`** — works only when the scene
+       has an EventSystem with a properly-bound
+       InputSystemUIInputModule.
+  PlayerDeathOverlayBuilder also auto-adds an EventSystem with
+  InputSystemUIInputModule on Place; PlayerDeathOverlay's Awake
+  has a runtime ensure that creates one if missing OR replaces
+  a legacy StandaloneInputModule with InputSystemUIInputModule.
+  Both belt-and-suspenders; layer 2 above is what actually makes
+  the click work.
+- `PlayerDeathOverlay.prefab` (NEW) — built via
+  `LevelGen ▶ UI ▶ Build PlayerDeathOverlay Prefab`. Canvas
+  sortingOrder=100 (above HUD's 10).
+- `PlayerDeath` added to Player_MaleHero.prefab via two paths:
+  folded into `BuildPlayerMaleHeroPrefab` (rebuild path) +
+  `LevelGen ▶ Player ▶ Add PlayerDeath to Player_MaleHero Prefab`
+  (one-shot LoadPrefabContents path). Mirrors the M4-A "fold
+  into the main builder" pattern.
+- `PlayerDeathValidator.cs` — 16 checks, all PASS.
 
-**Single-writer-per-Animator-parameter invariant preserved.**
-Dummy's Animator has two writers now — `EnemyHitReaction` owns
-Hit, `EnemyDeath` owns Death. Each owns exactly one parameter,
-no overlap. This is the established convention extended to
-multi-writer-but-non-overlapping; not a violation of the original
-rule.
+**2. M6 — Player Interact System + AssassinateInteractable**
+
+Generic prefab-friendly Interact system. Press E to trigger
+contextual actions on nearby Interactables. Ships one concrete
+subclass (AssassinateInteractable) wired to the Dummy. Architecture
+ready for Open / Pickup / Read subclasses with no edits to
+the player or system core.
+
+- `Interactable.cs` (NEW, `LevelGen.Interaction`) — abstract
+  base. `[DisallowMultipleComponent]`. SerializeFields:
+  `_priority` (InteractPriority), `_promptLabel`, `_promptAnchor`,
+  `_playerTag`. Abstract: `IsEligible(GameObject)`,
+  `Execute(GameObject)`. Owns trigger handling, register/deregister
+  against PlayerInteractor, prompt-UI build/visibility.
+  `EnsurePromptUI` builds a child World Space Canvas (scale 0.01)
+  with TMP_Text rendering "Press [E] {label}". Idempotent.
+- `InteractPriority` enum — `Pickup=10`, `Open=50`,
+  `Assassinate=100`. PlayerInteractor picks highest-priority
+  registered interactable; same-priority ties resolve to
+  first-registered (documented but not relied on).
+- `PlayerInteractor.cs` (NEW, `LevelGen.Player`) —
+  `[RequireComponent(PlayerInputReader)]`,
+  `[DisallowMultipleComponent]`, static `Instance` property
+  (singleton-ish; project has one Player). HashSet<Interactable>
+  for the registered set; `_active` is the highest-priority
+  registered interactable. Subscribes to
+  `PlayerInputReader.InteractPressed` (NEW event) and
+  `PlayerDeath.OnPlayerDied` (clears registrations + hides
+  prompts on death).
+- `PlayerInputReader.cs` — added `event System.Action InteractPressed`;
+  OnInteract now raises it on `ctx.performed`; M1 stub log
+  removed. Mirrors the M2-B Step 3 pattern that wired AttackPressed
+  / JumpPressed.
+- `PlayerCombat.cs` — four additive surface changes (no
+  refactor):
+  - `_nextHitDamageOverride` int field (single-shot).
+  - `IsBusy => IsActionLocked` public alias property.
+  - `SetNextHitDamageOverride(int)` setter.
+  - `RequestAttack()` public delegate to the existing private
+    `OnAttackPressed` handler.
+  - Inside `NotifyHitboxTriggered`, the override is consumed
+    AFTER stats / hit-list checks (so warning + already-hit
+    branches don't burn it) and is single-shot (cleared on
+    first successful application).
+- `AssassinateInteractable.cs` (NEW, `LevelGen.Interaction`) —
+  `[RequireComponent(SphereCollider)]`. Subclasses Interactable.
+  Eligibility = target alive AND
+  `Vector3.Dot(target.forward, toPlayer) < -_backArcDot`
+  (default 0.5 ≈ 60° back arc). Execute: snap-rotate the player
+  to face the target, set `_assassinateDamage = 99999` override,
+  call `combat.RequestAttack()`. Drops silently if `combat.IsBusy`.
+- `DummyPrefabBuilder.cs` — extended to add `_AssassinateZone`
+  child (SphereCollider trigger r=1.5, AssassinateInteractable)
+  + `_PromptAnchor_Head` grandchild at local (0, 1.9, 0). Three
+  SerializedObject refs wired explicitly. EnsurePromptUI called
+  at build time so the prompt child is visible in the prefab
+  inspector.
+- `PlayerInteractor` added to Player_MaleHero.prefab via two
+  paths (mirrors M5): folded into BuildPlayerMaleHeroPrefab +
+  `LevelGen ▶ Player ▶ Add PlayerInteractor to Player_MaleHero
+  Prefab` standalone adder.
+- `InteractSystemValidator.cs` — 16 checks. Validator check 7
+  (OnInteract stub-log gone) was patched mid-shipping after a
+  fixed-width slice scan from `public void OnInteract` spilled
+  past OnInteract's closing brace into OnCrouch (which still has
+  its own M1-stub log). Now uses direct string match against the
+  literal stub line `Debug.Log("[PlayerInputReader] Interact"`.
+
+### Verified shipping at end of session
+
+In the active test scene:
+- Combat loop from prior sessions still works: walking up to
+  Dummy + LMB combo damages 30 HP (3-hit at 10 dmg each); Dummy
+  stagger plays each hit.
+- Dummy now dies organically: it's at 50 HP (down from 999 —
+  M4-B test convenience). Combo + 2nd hit kills, plays Die01,
+  Targetable + Collider + EnemyHitReaction disabled, despawns
+  after 5s.
+- Player can die: right-click `CharacterStatsRuntime` →
+  `Debug: Kill` → Die01 plays + parks, WASD / mouse / LMB silent,
+  "You Died" overlay appears, cursor unlocks, R/Enter or
+  click-Restart reloads scene fresh with HP 100/100.
+- Walk behind a fresh Dummy → "Press [E] Assassinate" floats
+  above head; E snap-rotates the Player and instantly kills the
+  Dummy via the existing combo + hitbox path with the override
+  applied.
+- Walk in front of Dummy → no prompt (back-arc dot fails).
+- Cursor locks/hides on Play start; Escape unlocks; Alt-Tab
+  unlocks; PlayerDeathOverlay's HandlePlayerDied unlocks for
+  the death screen; scene reload re-locks via MouseLook.
+
+### What's broken / pending observation
+
+Nothing flagged. Combat + interact + death loops all live and
+stable.
 
 ---
 
-## Open architectural picks (for next session)
+## Open milestone candidates for next session
 
-None outstanding. The three Q1/Q2/Q3 questions from yesterday's
-handoff were answered and shipped:
-- Q1 → (b) EnemyBaseController, with Q1-followup (a)
-  canTransitionToSelf=false on Hit.
-- Q2 → (a) Targetable raises OnHit, with Q2-followup (b) payload
-  Action<Vector3>.
-- Q3 → (c) Stagger window, with Q3-followup (b) 0.3s default.
-- Death scope question → split out as M4-B with its own
-  decisions: Q1-a terminal Death state, Q2-a EnemyDeath as sole
-  owner, Q3-b despawn after 5s, Q4-b OnDied payload = self.
+User picks at session start. No forced next step — the project
+is at a clean checkpoint with two complete enemy-side action
+loops (combat + assassinate) and a complete player-death loop.
+
+**Combat / interact extensions (small to medium)**
+
+- **OpenInteractable** — second concrete Interactable subclass
+  (door open). Tests the abstract base's generality. Same
+  pattern as AssassinateInteractable but with different
+  eligibility (e.g., always-eligible if door is closed) and
+  Execute (rotate the door 90°, swap collider state).
+- **PickupInteractable** — third concrete subclass (item
+  pickup). Removes the item from the world; a future Inventory
+  system would receive the picked-up item.
+- **WeaponStats SO** — replace `attackDamage = 10` hardcoded
+  SerializeField on PlayerCombat with a ScriptableObject ref.
+  Path forward for weapon variety (World Bundle has 8 weapon
+  sets vs the wired SwordAndShield).
+- **Damage numbers / floating combat text** — cosmetic.
+  Subscribe to `Targetable.OnHit` → spawn TMP_Text at hit
+  point, lerp upward, fade out.
+- **Stamina gameplay** — wire sprint cost / attack cost / regen
+  on top of the existing data layer.
+
+**Combat / interact extensions (larger scope)**
+
+- **Player takes damage** — Dummy or new enemy gets a small AI:
+  face player, attack on cooldown, route damage back via the
+  same hitbox pattern. Closes the combat loop.
+- **More enemy types** — pick a second character prefab from
+  the World Bundle's 24 MC* prefabs; apply the EnemyBaseController
+  + EnemyHitReaction + EnemyDeath + AssassinateInteractable
+  pattern. Tests whether the foundations generalize.
+- **In-place respawn** (currently TODO in
+  PlayerDeathOverlay.OnRestartClicked) — needs spawn-point
+  architecture and respawn semantics.
+
+**Procedural-generation / level work**
+
+- **M2-D level integration** — LevelGenerator-driven runtime
+  spawn (composite Player_RuntimeRig refactor). The remaining
+  piece of M2 player work; needs RoomBuilder's PlayerSpawnPoint
+  marker (already shipped).
+- **V2 generator door-geometry placement** — door prefab
+  placement at ExitPoint connections. Pairs naturally with
+  OpenInteractable.
+- **Whitebox `PieceCatalogue` end-to-end test** — wire the
+  whitebox pack into PieceCatalogue, validate in Room Workshop,
+  run through the V2 generator.
 
 ---
 
-## What's next — natural branches
+## What CC will likely need from you for the next prompt
 
-The combat scaffolding is now structurally complete for one enemy
-type. Pick one (or propose another):
+Depends on the milestone picked. For an Interactable subclass:
 
-1. **Enemy AI — basic chase + attack on Dummy.** Closes the damage
-   loop the other direction (Player can be attacked). Currently
-   Player has stats + HUD but nothing damages it.
-2. **Second enemy type — exercises the override-controller
-   pattern** noted yesterday as the right long-term pattern (Q1-c
-   in the M4-A discussion, deferred at the time). Architecture is
-   now ready to actually use.
-3. **Player death.** Mirror M4-B for Player: OnDied event already
-   exists on CharacterStatsRuntime, so it's mostly UI/restart
-   flow rather than new combat code.
-4. **Back to the level generator.** V2 was at a stable checkpoint
-   before the combat detour started. Room connection logic
-   (door prefab placement decisions) was the next priority. See
-   "On the horizon" section below for the V2 backlog.
-5. **Something else.**
+1. Behavior table for the new interaction (eligibility,
+   execute side effects).
+2. Whether the prompt anchor needs a child Transform or can
+   default to the GO itself.
+3. Whether the new subclass needs its own [RequireComponent].
 
-No tentative recommendation — these are all reasonable. The combat
-side has its own internal momentum (loop-closing via #1 is
-satisfying); the V2 side is the older project trunk and arguably
-the higher-value direction long-term.
+For a damage-routing change (WeaponStats SO, damage numbers):
+
+1. Whether per-weapon damage values should ship with a
+   SerializeField asset reference on PlayerCombat (single
+   weapon) or via a slot system (future weapon swap).
+2. Default damage value when WeaponStats is null (today's 10).
+
+---
+
+## Working preferences (unchanged)
+
+- No coding in chat — all implementation goes back as Claude
+  Code prompts (markdown files saved to
+  `/mnt/user-data/outputs/`).
+- All prompts end with telling Claude Code to compact.
+- CLAUDE.md is canonical, updated each session (CC handles the
+  append at the end of each prompt's deliverables).
+- Behavior tables before code on complex logic.
+- Empirical/direct: Inspector data over theoretical derivation;
+  immediate misread correction.
+- Project Knowledge sync: scripts + docs only. Asset packs and
+  binary assets excluded; paste specific files into the chat
+  if needed.
+- One question at a time when narrowing scope; multi-choice
+  over prose.
+- "M5 / M6 numbering note": the user's M6 prompt was titled
+  "M5 — Player Interact System" but Player Death had already
+  shipped as M5 earlier the same day. CLAUDE.md uses M6 going
+  forward to avoid duplicate `## M5` headings.
+
+---
+
+## Things to leave alone
+
+- M1 + M2-A + M2-B + M2-C + M3 + M4-A + M4-B + M5 + M6 —
+  verified working, do not refactor.
+- The 7 V1 cleanup commits and their history — done, merged,
+  stable.
+- `Assets/Scripts/Experimental/` — dormant, don't reference
+  from V2.
+- `LVL_Configurator` — "complete, do not touch" per CLAUDE.md
+  (const-string updates for folder reorg are the only
+  acceptable touch).
+- V2 generator (Phases A–D) — at a stable checkpoint.
+- Combat foundation, HUD, damage routing, MouseLook,
+  EnemyHitReaction, EnemyDeath, PlayerDeath, PlayerDeathOverlay,
+  Interactable, PlayerInteractor, AssassinateInteractable —
+  all tested and locked. Next milestone *adds to* them, doesn't
+  modify them.
+- Interactable abstract base — extend by subclassing only; do
+  not modify the base.
+- The triple-redundant Restart input handling on
+  PlayerDeathOverlay — keep all three layers; layer 2 (manual
+  mouse-over-RectTransform) is load-bearing.
+
+---
+
+## Lessons from this session worth remembering
+
+1. **InputSystemUIInputModule programmatic AddComponent
+   doesn't bind actions.** When `InputSystemUIInputModule` is
+   added via `AddComponent`, its `actionsAsset` field stays
+   null and per-action references (point, leftClick, submit)
+   point at nothing. The module looks fine in the Inspector
+   and produces no error logs, but UGUI clicks silently don't
+   dispatch. The editor's `GameObject ▶ UI ▶ Event System`
+   menu auto-assigns the package's `DefaultInputActions.inputactions`;
+   programmatic adds do not. Workaround: layer a manual mouse-
+   over-RectTransform check in Update via
+   `RectTransformUtility.RectangleContainsScreenPoint` with
+   null camera for ScreenSpaceOverlay canvases. Bulletproof
+   across InputSystem versions. See
+   `PlayerDeathOverlay.Update` for the canonical pattern.
+
+2. **Fixed-width slice scans on source code spill across method
+   boundaries.** Validator check 7 (M6) used a 400-char slice
+   from `public void OnInteract` to verify the M1 stub log was
+   gone. Sibling M1-stub methods (OnCrouch / OnPrevious /
+   OnNext) sit close enough that the slice ran past OnInteract's
+   closing brace and matched OnCrouch's still-present
+   `Debug.Log`, producing a false positive. For "is this
+   specific stub gone" checks, prefer direct string match
+   against the literal stub line (`Debug.Log("[PlayerInputReader]
+   Interact"`) — exact, immune to neighbor noise. Bracket-
+   matching the method body is more rigorous but adds parser
+   complexity for a one-line check.
+
+3. **Reset() doesn't fire on programmatic AddComponent**
+   (carried forward from M5). It fires only when the user adds
+   the component via the editor's Add Component menu OR clicks
+   Reset in the Inspector context menu. For SerializeField refs
+   that prefab builders need wired, use SerializedObject
+   helpers explicitly (see PlayerPrefabBuilder.AssignPlayerDeathRefs
+   + DummyPrefabBuilder.AssignAssassinateRefs).
+
+4. **Carry-forward from previous sessions:** AnimationEvents
+   persist via `.meta` (use `ModelImporter.clipAnimations`
+   API); Unity dispatches AnimationEvents to the Animator's
+   GameObject only (use a forwarder); triggers need a
+   non-static collider partner (kinematic Rigidbody on child
+   trigger if root has only CharacterController);
+   programmatic UI Images need explicit sprite for `Filled` /
+   `Sliced` clipping; World Bundle FBX filename ≠ AnimationClip
+   sub-asset name (Idle "Shiled" → "Shield") — name loader
+   constants for the sub-asset, not the FBX filename.
 
 ---
 
 ## File inventory at end of session
 
-New runtime scripts:
+**M5 — Player Death**
 ```
-Assets/Scripts/Input/MouseLook.cs   (moved from Assets/Scripts/, GUID preserved)
-Assets/Scripts/Combat/EnemyHitReaction.cs
-Assets/Scripts/Combat/EnemyDeath.cs
-```
-
-New editor scripts:
-```
-Assets/Scripts/Input/Editor/MouseLookValidator.cs
-Assets/Scripts/Combat/Editor/EnemyBaseControllerBuilder.cs
-Assets/Scripts/Combat/Editor/EnemyHitReactionValidator.cs
-Assets/Scripts/Combat/Editor/EnemyDeathValidator.cs
-```
-
-Modified runtime scripts:
-```
-Assets/Scripts/Combat/Targetable.cs
-   (added OnHit event + RaiseHit method; was pure marker)
-Assets/Scripts/Combat/CharacterStatsRuntime.cs
-   (added OnDied event + IsDead property + _hasDied guard;
-    added [ContextMenu("Kill")] debug hook tagged removeMe)
-Assets/Scripts/Player/PlayerCombat.cs
-   (added one line to NotifyHitboxTriggered: target.RaiseHit
-    after ApplyDamage)
+Assets/Scripts/Player/PlayerDeath.cs (NEW)
+Assets/Scripts/Player/Editor/PlayerBaseControllerExtender.cs (NEW)
+Assets/Scripts/Player/Editor/PlayerDeathPrefabAdder.cs (NEW)
+Assets/Scripts/Player/Editor/PlayerDeathValidator.cs (NEW)
+Assets/Scripts/Player/PlayerAnimator.cs (Death hash + param + SetDeathTrigger)
+Assets/Scripts/Player/PlayerCombat.cs (cached _stats + IsDead guard at top of TakeHit)
+Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs (PlayerDeath fold-in + AssignPlayerDeathRefs helper)
+Assets/Scripts/UI/PlayerDeathOverlay.cs (NEW; triple-redundant Restart input)
+Assets/Scripts/UI/Editor/PlayerDeathOverlayBuilder.cs (NEW; auto-adds EventSystem with InputSystemUIInputModule on Place)
+Assets/Animators/Player/PlayerBaseController.controller (extended in place via PlayerBaseControllerExtender)
+Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab (gains PlayerDeath)
+Assets/Prefabs/UI/PlayerDeathOverlay.prefab (NEW)
 ```
 
-New / modified assets:
+**M6 — Player Interact System + AssassinateInteractable**
 ```
-Assets/Animations/Controllers/EnemyBaseController.controller
-   (Idle + Hit + Death states; Hit + Death triggers;
-    AnyState→Hit, AnyState→Death, Hit→Idle transitions;
-    Death is terminal)
-```
-
-Modified prefabs:
-```
-Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab
-   (Animator now references EnemyBaseController instead of
-    PlayerBaseController; gained EnemyHitReaction component;
-    gained EnemyDeath component with all refs wired)
-```
-
-New scene objects:
-```
-_MouseLock GameObject in active Play-mode test scene
-   (with MouseLook component)
+Assets/Scripts/Interaction/Interactable.cs (NEW)
+Assets/Scripts/Interaction/AssassinateInteractable.cs (NEW)
+Assets/Scripts/Interaction/Editor/InteractSystemValidator.cs (NEW)
+Assets/Scripts/Player/PlayerInteractor.cs (NEW)
+Assets/Scripts/Player/Editor/PlayerInteractorPrefabAdder.cs (NEW)
+Assets/Scripts/Player/PlayerInputReader.cs (InteractPressed event + OnInteract stub log removed)
+Assets/Scripts/Player/PlayerCombat.cs (override field + setter + RequestAttack + IsBusy + consume in NotifyHitboxTriggered)
+Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs (PlayerInteractor fold-in)
+Assets/Scripts/Combat/Editor/DummyPrefabBuilder.cs (_AssassinateZone child + helpers)
+Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab (gains _AssassinateZone child)
+Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab (gains PlayerInteractor)
 ```
 
-CLAUDE.md updated with three dated entries under the existing
-milestone-log structure (M-CursorLock, M4-A, M4-B).
+CLAUDE.md updated with M5 + M6 entries (M6 numbered as such to
+avoid header collision with M5 — see the milestone-numbering
+note above).
 
----
-
-## Validators current state
-
-All green at end of session:
-
-| Validator                         | Checks | Status   |
-| ---                               | ---    | ---      |
-| DummyAndStatsValidator            | 12/12  | PASS     |
-| PlayerHUDValidator                | 11/11  | PASS     |
-| DamageRoutingValidator            | 12/12  | PASS     |
-| MouseLookValidator                |  7/7   | PASS*    |
-| EnemyHitReactionValidator         | 14/14  | PASS     |
-| EnemyDeathValidator               | 16/16  | PASS     |
-
-*MouseLookValidator: the in-Play cursor-state check SKIPs in edit
-mode, which is correct behavior. Counts as PASS.
+Memory: `feedback_inputsystem_ui_module_addcomponent.md` saved
+during M5 verification (UGUI button-click dispatch chain).
 
 ---
 
@@ -273,112 +420,6 @@ file automatically. Otherwise paste:
 >
 > all prompts end with telling claude code to compact
 >
-> Combat scaffolding for Dummy is structurally complete (hit
-> reactions, death, despawn, all validators green). No
-> architectural picks outstanding. Five natural-next-branches
-> listed in the handoff doc — please summarize them and I'll
-> pick.
-
----
-
-## Working preferences (unchanged)
-
-- No coding in chat — all implementation goes back as Claude Code
-  prompts (markdown files saved to `/mnt/user-data/outputs/`)
-- All prompts end with telling Claude Code to compact
-- CLAUDE.md is canonical, updated each session (CC handles the
-  append at the end of each prompt's deliverables)
-- Behavior tables before code on complex logic
-- Empirical/direct: Inspector data over theoretical derivation;
-  immediate misread correction
-- Project Knowledge sync: scripts + docs only. Asset packs and
-  binary assets excluded; paste specific files into the chat if
-  needed
-- One question at a time when narrowing scope; multi-choice over
-  prose
-
----
-
-## Things to leave alone
-
-- M1 + M2-A + M2-B + M2-C + M3 — verified working, do not refactor
-- M-CursorLock — done
-- M4-A + M4-B — done, all validators green, do not refactor
-- The 7 V1 cleanup commits and their history — done, merged, stable
-- `Assets/Scripts/Experimental/` — dormant, don't reference from V2
-- `LVL_Configurator` — "complete, do not touch" per CLAUDE.md
-  (const-string updates for folder reorg are the only acceptable
-  touch)
-- V2 generator (Phases A–D) — at a stable checkpoint
-- The combat foundation, HUD, damage routing, hit reaction, and
-  death sequence — all tested and locked. Future enemy work
-  *adds to* them, doesn't modify them.
-
----
-
-## Lessons from this session worth remembering
-
-1. **Move scripts via `git mv` (or filesystem move including the
-   `.meta` file), never delete-and-recreate.** Even an empty file's
-   GUID is worth preserving — it costs nothing and avoids future
-   broken references if anything ever started pointing at it.
-2. **Single-writer-per-Animator-parameter scales cleanly.** With
-   Hit owned by EnemyHitReaction and Death owned by EnemyDeath,
-   the rule held without compromise. The original "single writer
-   to the Animator" formulation generalizes naturally.
-3. **Same-frame event-ordering races are real but cheap to
-   defend against.** OnHit and OnDied could both fire on the same
-   damage call when HP crosses 0; subscriber order isn't
-   guaranteed; an `IsDead` early-return in the Hit handler makes
-   the order irrelevant. Belt-and-suspenders is worth it for
-   cross-script event subscriptions.
-4. **Targetable as a pure marker was the wrong abstraction.**
-   Promoting it to event publisher (OnHit) made the Player→Enemy
-   wiring obvious and kept the player-side code unchanged. Marker
-   components that "just exist" tend to want at least an event.
-5. **Animator state terminality matters.** Death state has zero
-   outgoing transitions, not "outgoing transition with HasExitTime
-   = false" or similar. A truly terminal state has no exits at
-   all — any transition is a foot-gun.
-6. **Temporary debug hooks should be tagged removeMe.** The
-   `Apply 10 Damage` / `Heal 10` hooks from M3 were tagged this
-   way and the `Kill` hook joined them. When real damage/heal
-   sources exist, these get removed in one pass.
-7. **QoL detours are worth it.** The cursor-lock fix was scoped at
-   ~30 lines but improved every subsequent combat-iteration
-   session. If something is annoying you during development, fix
-   it before it costs more time than the fix.
-
----
-
-## On the horizon (V2 generator backlog — unchanged from previous handoff)
-
-Deferred while combat work happens:
-
-- Room connection logic — actual door prefab placement decisions
-  (some openings stay open, others get doors) now that doorways
-  and ExitPoints are established
-- Tier stacking — multi-tier room height support
-- End-to-end generator testing with Whitebox PieceCatalogue +
-  LVL_Configurator run
-
-Deferred to later phase:
-- Diamond and Circle room shapes (ShapeStamp methods are
-  dormant/ready)
-- ExitPoint auto-detection for non-straight LVL modules (Option A:
-  geometry scanning for opening centers)
-- Dress step (PropCatalogue / SpawnPoints)
-- `RoomWorkshop.unity` and `LevelGenerator.unity` scene creation
-
-Open git issue: Large batch commits on the E: drive produce
-`Permission denied` on `.git/objects/` writes (likely AV
-interference). Workaround: PowerShell script committing ~5 files
-at a time with `git gc` on failure.
-```
-
----
-
-## Compact
-
-After the file is written and committed, **compact the
-conversation**.
+> Picking up from yesterday's handoff — combat + interact +
+> death loops are all shipped and verified. No forced next
+> step — see "Open milestone candidates" in the handoff for picks.
