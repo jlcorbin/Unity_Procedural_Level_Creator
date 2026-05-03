@@ -131,6 +131,13 @@ namespace LevelGen.Combat.EditorTools
             var hitReaction = root.AddComponent<EnemyHitReaction>();
             AssignAnimatorField(hitReaction, animator);
 
+            // ── EnemyDeath (sole writer to the Death Animator parameter) ────
+            // Subscribes to CharacterStatsRuntime.OnDied at runtime; on
+            // death disables Targetable + Collider + EnemyHitReaction and
+            // schedules Destroy with despawnDelay (5f default).
+            var enemyDeath = root.AddComponent<EnemyDeath>();
+            AssignEnemyDeathRefs(enemyDeath, animator, capsule, hitReaction);
+
             // ── Save the prefab ─────────────────────────────────────────────
             bool success;
             var saved = PrefabUtility.SaveAsPrefabAsset(root, DummyPrefabPath, out success);
@@ -158,7 +165,7 @@ namespace LevelGen.Combat.EditorTools
                 $"  CharacterStats_Master: {AssetDatabase.LoadAssetAtPath<CharacterStats>(MasterStatsPath)?.name ?? "(missing)"}\n" +
                 $"  CharacterStats_Dummy:  {dummyStats.name} (HP={dummyStats.maxHP}, Stamina={dummyStats.maxStamina})\n" +
                 $"  Animator controller:   {baseController.name}\n" +
-                $"  Components on root:    CharacterStatsRuntime, Targetable, CapsuleCollider, EnemyHitReaction\n" +
+                $"  Components on root:    CharacterStatsRuntime, Targetable, CapsuleCollider, EnemyHitReaction, EnemyDeath\n" +
                 $"  No player control scripts. Drop into a scene and press Play to see Idle."
             );
         }
@@ -225,10 +232,10 @@ namespace LevelGen.Combat.EditorTools
 
             var asset = ScriptableObject.CreateInstance<CharacterStats>();
             asset.displayName = "Dummy";
-            asset.maxHP       = 999;
+            asset.maxHP       = 50;
             asset.maxStamina  = 100;
-            asset.description = "Stationary target practice. Will not die — high HP gives indefinite " +
-                                "practice without damage application existing yet.";
+            asset.description = "Stationary target practice. Dies on the 2nd hit of a 2nd combo " +
+                                "(full 3-hit combo = 30 dmg) so the M4-B death sequence triggers organically.";
 
             AssetDatabase.CreateAsset(asset, DummyStatsPath);
             AssetDatabase.SaveAssets();
@@ -276,6 +283,32 @@ namespace LevelGen.Combat.EditorTools
             prop.objectReferenceValue = animator;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(reaction);
+        }
+
+        /// <summary>
+        /// Wires the three SerializeField references on EnemyDeath
+        /// (animator, deathCollider, hitReaction) at build time. Despawn
+        /// delay keeps its inspector default (5f).
+        /// </summary>
+        private static void AssignEnemyDeathRefs(EnemyDeath death, Animator animator,
+                                                 Collider deathCollider, EnemyHitReaction hitReaction)
+        {
+            var so = new SerializedObject(death);
+            void Wire(string fieldName, Object value)
+            {
+                var prop = so.FindProperty(fieldName);
+                if (prop == null)
+                {
+                    Debug.LogError($"[DummyPrefabBuilder] EnemyDeath has no '{fieldName}' serialized field.");
+                    return;
+                }
+                prop.objectReferenceValue = value;
+            }
+            Wire("animator",      animator);
+            Wire("deathCollider", deathCollider);
+            Wire("hitReaction",   hitReaction);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(death);
         }
 
         private static void EnsureFolder(string parent, string name)

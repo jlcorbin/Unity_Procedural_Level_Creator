@@ -1,9 +1,13 @@
 // EnemyBaseControllerBuilder.cs — builds Animators/Enemy/EnemyBaseController.controller.
 //
-// Minimal enemy graph: Idle (default) + Hit. The Hit reaction is
-// gated by a single Trigger parameter, fired from EnemyHitReaction
-// after Targetable.OnHit. Stagger window is C#-side (script-side
-// cooldown), not Animator-side — graph stays simple.
+// Minimal enemy graph: Idle (default) + Hit + Death (terminal).
+// Hit reaction is gated by a Trigger parameter, fired from
+// EnemyHitReaction after Targetable.OnHit. Death is gated by a
+// separate Trigger parameter, fired from EnemyDeath after
+// CharacterStatsRuntime.OnDied. Stagger window is C#-side (script-
+// side cooldown), not Animator-side — graph stays simple. Death
+// has NO outgoing transitions; the Animator parks on the last
+// frame until the GameObject is destroyed by despawn.
 //
 // Idempotent: re-running deletes the existing controller and rebuilds
 // from scratch. No interactive prompt.
@@ -34,7 +38,13 @@ namespace LevelGen.Combat.EditorTools
         private const string HitClipPath  = "Assets/AssetPacks/RPG Tiny Hero World Bundle/RPGTinyHeroWavePBR/Animation/SwordAndShield/GetHit01_SwordAndShield.fbx";
         private const string HitClipName  = "GetHit01_SwordAndShield";
 
-        public const string ParamHit = "Hit";
+        // Die01 — FBX filename and sub-asset name match (no Shiled typo
+        // on this one; verified via the .meta clipAnimations entry).
+        private const string DeathClipPath = "Assets/AssetPacks/RPG Tiny Hero World Bundle/RPGTinyHeroWavePBR/Animation/SwordAndShield/Die01_SwordAndShield.fbx";
+        private const string DeathClipName = "Die01_SwordAndShield";
+
+        public const string ParamHit   = "Hit";
+        public const string ParamDeath = "Death";
 
         [MenuItem("LevelGen/Combat/Build EnemyBaseController")]
         public static void Build()
@@ -55,6 +65,14 @@ namespace LevelGen.Combat.EditorTools
                 return;
             }
 
+            var deathClip = LoadClip(DeathClipPath, DeathClipName);
+            if (deathClip == null)
+            {
+                Debug.LogError($"[EnemyBaseControllerBuilder] Could not load Death clip '{DeathClipName}' " +
+                               $"from {DeathClipPath}. Aborting.");
+                return;
+            }
+
             EnsureFolder("Assets", "Animators");
             EnsureFolder("Assets/Animators", "Enemy");
 
@@ -64,7 +82,8 @@ namespace LevelGen.Combat.EditorTools
 
             var controller = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
 
-            controller.AddParameter(ParamHit, AnimatorControllerParameterType.Trigger);
+            controller.AddParameter(ParamHit,   AnimatorControllerParameterType.Trigger);
+            controller.AddParameter(ParamDeath, AnimatorControllerParameterType.Trigger);
 
             var rootSm = controller.layers[0].stateMachine;
 
@@ -77,6 +96,14 @@ namespace LevelGen.Combat.EditorTools
             hit.motion              = hitClip;
             hit.writeDefaultValues  = true;
             hit.speed               = 1f;
+
+            // Death — terminal state. Animator parks on the last frame
+            // until the GameObject is destroyed by despawn (EnemyDeath).
+            // No outgoing transition.
+            var death = rootSm.AddState("Death");
+            death.motion             = deathClip;
+            death.writeDefaultValues = true;
+            death.speed              = 1f;
 
             rootSm.defaultState = idle;
 
@@ -92,6 +119,17 @@ namespace LevelGen.Combat.EditorTools
             anyToHit.offset              = 0f;
             anyToHit.canTransitionToSelf = false;
 
+            // AnyState → Death. Trigger-driven; canTransitionToSelf=false
+            // so a leaked second Death trigger can't restart the clip
+            // (EnemyDeath also guards with _hasFired, but defense in depth).
+            var anyToDeath = rootSm.AddAnyStateTransition(death);
+            anyToDeath.AddCondition(AnimatorConditionMode.If, 0f, ParamDeath);
+            anyToDeath.hasExitTime         = false;
+            anyToDeath.hasFixedDuration    = true;
+            anyToDeath.duration            = 0.05f;
+            anyToDeath.offset              = 0f;
+            anyToDeath.canTransitionToSelf = false;
+
             // Hit → Idle. Exit-time driven (clip nearly finishes before
             // returning to Idle).
             var hitToIdle = hit.AddTransition(idle);
@@ -101,16 +139,20 @@ namespace LevelGen.Combat.EditorTools
             hitToIdle.duration         = 0.10f;
             hitToIdle.offset           = 0f;
 
+            // Death has NO outgoing transitions — terminal.
+
             EditorUtility.SetDirty(controller);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
             Debug.Log(
                 $"[EnemyBaseControllerBuilder] Built {ControllerPath}.\n" +
-                $"  Parameters: Hit (Trigger)\n" +
-                $"  States: Idle (default, motion={idleClip.name}), Hit (motion={hitClip.name})\n" +
+                $"  Parameters: Hit (Trigger), Death (Trigger)\n" +
+                $"  States: Idle (default, motion={idleClip.name}), Hit (motion={hitClip.name}), " +
+                $"Death (terminal, motion={deathClip.name})\n" +
                 $"  Transitions: AnyState → Hit (Hit trigger, dur 0.05, canTransitionToSelf=false), " +
-                $"Hit → Idle (no cond, exitTime 0.95, dur 0.10)"
+                $"AnyState → Death (Death trigger, dur 0.05, canTransitionToSelf=false), " +
+                $"Hit → Idle (no cond, exitTime 0.95, dur 0.10), Death has no outgoing transitions."
             );
         }
 

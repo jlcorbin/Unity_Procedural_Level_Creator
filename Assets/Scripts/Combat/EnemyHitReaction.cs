@@ -32,8 +32,9 @@ namespace LevelGen.Combat
                  "(damage application is unaffected).")]
         [SerializeField] private float staggerWindow = 0.3f;
 
-        private Targetable _targetable;
-        private float      _lastHitTime = -999f;
+        private Targetable             _targetable;
+        private CharacterStatsRuntime  _stats;
+        private float                  _lastHitTime = -999f;
 
         private static readonly int HitTriggerHash = Animator.StringToHash("Hit");
 
@@ -45,6 +46,7 @@ namespace LevelGen.Combat
         private void Awake()
         {
             _targetable = GetComponent<Targetable>();
+            _stats      = GetComponent<CharacterStatsRuntime>();
             if (animator == null) animator = GetComponentInChildren<Animator>();
         }
 
@@ -61,6 +63,13 @@ namespace LevelGen.Combat
         private void HandleHit(Vector3 hitPoint)
         {
             if (animator == null) return;
+
+            // Same-frame OnHit/OnDied ordering insurance: if HP just
+            // crossed 0 in the same ApplyDamage call that raised this
+            // OnHit, IsDead is already true. EnemyDeath will disable
+            // this component shortly, but a leaked SetTrigger here
+            // would queue a Hit-after-Death.
+            if (_stats != null && _stats.IsDead) return;
 
             float now = Time.time;
             if (now - _lastHitTime < staggerWindow) return;

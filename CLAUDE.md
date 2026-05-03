@@ -1415,10 +1415,156 @@ Verification (complete):
   (sanity re-run after rebuilds).
 - Play-mode smoke test: confirmed working in test scene.
 
-Death deferred (next milestone): Death state, `Die01_SwordAndShield`,
-HP-zero hooks on `CharacterStatsRuntime`, AnyState → Death
-transition. Other enemy types deferred. Knockback / VFX consumers
-of the hit-point payload deferred.
+Death deferred to M4-B (shipped 2026-05-03 — see below). Other
+enemy types deferred. Knockback / VFX consumers of the hit-point
+payload deferred.
+
+## M4-B — enemy death (Dummy, 2026-05-03)
+
+Closes the death loop on Dummy. HP→0 now plays Die01, disables
+the corpse's interaction surface (Targetable + Collider +
+EnemyHitReaction), and despawns after a configurable delay.
+Player-side death and other enemy types remain out of scope.
+
+Architectural decisions (locked):
+- Animator: `EnemyBaseController` gains a Death state. Terminal —
+  AnyState→Death (trigger), no outgoing transition. Animator parks
+  on the last frame of Die01 until despawn destroys the GameObject.
+- Cleanup ownership: new `EnemyDeath` script is the sole owner of
+  the death sequence. Subscribes to
+  `CharacterStatsRuntime.OnDied`, executes the 5-step cleanup
+  (disable Targetable / Collider / EnemyHitReaction → fire Death
+  trigger → schedule Destroy).
+- Despawn: `Destroy(gameObject, despawnDelay)` with
+  `despawnDelay = 5f` default, tunable on EnemyDeath. <=0 keeps
+  the corpse forever (test convenience).
+- Event signature: `event Action<CharacterStatsRuntime> OnDied`
+  on CharacterStatsRuntime. Pass-self payload mirrors
+  Targetable.OnHit's pattern.
+- Single-writer-per-Animator-parameter invariant preserved.
+  Dummy's Animator now has two writers: EnemyHitReaction (Hit
+  trigger) and EnemyDeath (Death trigger). Each owns exactly one
+  parameter; no overlap. Established convention upgraded from
+  single-writer-per-Animator to single-writer-per-parameter.
+- Hit-after-Death suppression: `EnemyHitReaction.HandleHit`
+  early-returns on `_stats.IsDead`. Belt-and-suspenders against
+  same-frame OnHit/OnDied ordering — without it, OnHit subscribers
+  registered after EnemyDeath could queue a Hit trigger that
+  arrives a frame after Death.
+
+CharacterStatsRuntime.cs: extended with `using System;`, public
+event `OnDied` (`Action<CharacterStatsRuntime>`), private
+`_hasDied` flag, public `IsDead` property. ApplyDamage now sets
+`_hasDied = true` BEFORE invoking OnDied (subscriber-safe — any
+handler reading IsDead from inside the event handler sees the
+post-death state). Single-fire — subsequent ApplyDamage calls
+post-death do not re-raise. Heal does NOT revive: HP can rise
+above 0 again via Heal, but `_hasDied` stays true and OnDied
+does not re-fire (defensive default; revisit if revival semantics
+ever ship). Added `[ContextMenu("Debug: Kill")]` hook that calls
+`ApplyDamage(99999)`, tagged
+`// TODO removeMe-after-real-damage-sources-kill-things` —
+necessary because Dummy is at 999 HP and clicking Apply 10 Damage
+100 times to trigger a death is intolerable.
+
+EnemyBaseController.controller: extended via the existing
+EnemyBaseControllerBuilder (still idempotent — delete + recreate).
+Adds a `Death` Trigger parameter and a `Death` state with motion
+= `Die01_SwordAndShield` (FBX filename + sub-asset name match —
+no Shiled-typo issue on this clip; verified via .meta
+clipAnimations entry). New transition AnyState→Death:
+condition `Death` (If), hasExitTime=false, fixedDuration=true,
+duration=0.05, canTransitionToSelf=false. Death has NO outgoing
+transitions (terminal). Builder log line updated to enumerate
+the new param/state/transition.
+
+EnemyDeath.cs (NEW): namespace `LevelGen.Combat`.
+`[RequireComponent(CharacterStatsRuntime)]`,
+`[RequireComponent(Targetable)]`, `[DisallowMultipleComponent]`.
+Three SerializeField references (animator, deathCollider,
+hitReaction) auto-resolved on Reset() and re-resolved as
+fallbacks in Awake(). Subscribes to `_stats.OnDied` in OnEnable,
+unsubscribes in OnDisable. `HandleDied(_)` is `_hasFired`-guarded
+(belt-and-suspenders against accidental re-subscription); on
+first invoke runs the 5-step cleanup in order:
+  1. `_targetable.enabled = false` — corpse is no longer a hit
+     resolution target.
+  2. `deathCollider.enabled = false` — corpse no longer blocks.
+  3. `hitReaction.enabled = false` — releases the OnHit
+     subscription cleanly.
+  4. `animator.SetTrigger(DeathTriggerHash)` — plays Die01.
+  5. `Destroy(gameObject, despawnDelay)` if `despawnDelay > 0f`.
+
+EnemyHitReaction.cs: gained a `_stats` cached reference (resolved
+in Awake) and an early-return `if (_stats != null && _stats.IsDead)
+return;` at the top of HandleHit. Order matters: this runs BEFORE
+the stagger-window gate, so a hit-while-dead never updates
+`_lastHitTime` either. The `_stats` reference is null-guarded
+because EnemyHitReaction does NOT [RequireComponent] StatsRuntime
+(future enemies could plausibly have a hit reaction without HP).
+
+DummyPrefabBuilder.cs: gained `EnemyDeath` AddComponent after the
+EnemyHitReaction step, plus an `AssignEnemyDeathRefs` helper that
+SerializedObject-wires all three field references in one call
+(animator → MaleCharacterPBR child Animator; deathCollider →
+the CapsuleCollider on the root added in M4-A; hitReaction →
+the sibling EnemyHitReaction added in M4-A). Idempotent — the
+clean-rebuild pattern means a fresh root every time, no
+AddComponent guard needed.
+
+Validator: `Assets/Scripts/Combat/Editor/EnemyDeathValidator.cs`
+(menu `LevelGen ▶ Combat ▶ Validate EnemyDeath`) — 16 read-only
+checks: OnDied event type, IsDead property type+getter,
+EnemyDeath.cs presence, three RequireComponent + DisallowMultiple
+attributes, EnemyBaseController Death param + state + AnyState→Death
+canTransitionToSelf=false, Death-has-zero-outgoing-transitions
+(terminal check), Dummy.prefab EnemyDeath presence + three
+references wired (SerializedObject reads), EnemyHitReaction.cs
+source contains `IsDead`, M4-A validator type+Run still resolvable
+(belt-and-suspenders sanity — confirms M4-A surface didn't
+disappear; user re-runs M4-A validator manually for full output).
+Format mirrors EnemyHitReactionValidator.
+
+Files:
+- Assets/Scripts/Combat/CharacterStatsRuntime.cs (event +
+  IsDead + Kill ContextMenu + Heal-doesn't-revive guard)
+- Assets/Scripts/Combat/EnemyDeath.cs (NEW)
+- Assets/Scripts/Combat/EnemyHitReaction.cs (IsDead guard)
+- Assets/Scripts/Combat/Editor/EnemyBaseControllerBuilder.cs
+  (Death state + Death param + AnyState→Death transition)
+- Assets/Scripts/Combat/Editor/DummyPrefabBuilder.cs (EnemyDeath
+  AddComponent + AssignEnemyDeathRefs helper)
+- Assets/Scripts/Combat/Editor/EnemyDeathValidator.cs (NEW)
+- Assets/Animators/Enemy/EnemyBaseController.controller
+  (rebuilt by builder — adds Death param/state/transition)
+- Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab (rebuilt
+  by `Build Dummy Prefab` after EnemyBaseController exists —
+  gains EnemyDeath component with all three references wired)
+
+Pending follow-up:
+- User runs `LevelGen ▶ Combat ▶ Build EnemyBaseController` (adds
+  the Death state via the rebuilt asset).
+- User runs `LevelGen ▶ Combat ▶ Build Dummy Prefab` (re-binds
+  the Animator to the new controller GUID and adds EnemyDeath).
+- User runs `LevelGen ▶ Combat ▶ Validate EnemyDeath` — expect
+  16 PASS / 0 FAIL.
+- User re-runs the previous validators for sanity (Damage Routing
+  12/12, EnemyHitReaction 14/14).
+- Play-mode smoke test: walk to Dummy, right-click
+  CharacterStatsRuntime → `Debug: Kill`. Expect Die01 plays,
+  combo no longer flinches the corpse, player walks through
+  where the Dummy stood, after 5s the GameObject vanishes.
+  Re-place a fresh Dummy via `Place Dummy in Active Scene` —
+  fresh one works correctly.
+
+Deferred:
+- Respawn-during-Play menu — not yet needed; manual Place re-runs
+  cover the testing case.
+- Loot drops, kill counters, death VFX.
+- Player death (Player has its own HP/HUD; player-side OnDied
+  hook is a separate milestone).
+- Death-fade-into-floor or ragdoll handoff (Die01 holds last
+  frame standing; visually OK for now).
 
 ## Next CC task
 

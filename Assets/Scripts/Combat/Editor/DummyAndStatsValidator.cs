@@ -26,7 +26,9 @@ namespace LevelGen.Combat.EditorTools
         private const string MasterStatsPath = "Assets/Data/CharacterStats/CharacterStats_Master.asset";
         private const string DummyStatsPath  = "Assets/Data/CharacterStats/CharacterStats_Dummy.asset";
         private const string DummyPrefabPath = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
-        private const string BaseCtrlPath    = "Assets/Animators/Player/PlayerBaseController.controller";
+        // M4-A swapped Dummy from PlayerBaseController to EnemyBaseController.
+        // Path updated to keep the assertion meaningful as the spec evolved.
+        private const string BaseCtrlPath    = "Assets/Animators/Enemy/EnemyBaseController.controller";
 
         [MenuItem("LevelGen/Combat/Validate Combat Foundation")]
         public static void Run()
@@ -87,15 +89,17 @@ namespace LevelGen.Combat.EditorTools
             }
 
             // ── 7: Dummy values match spec ──────────────────────────────────
+            // M4-B dropped Dummy HP from 999 → 50 so the death pipeline
+            // triggers organically from a 2-combo chain (3-hit combo = 30 dmg).
             if (dummyStats != null)
             {
                 bool ok = dummyStats.displayName == "Dummy"
-                          && dummyStats.maxHP      == 999
+                          && dummyStats.maxHP      == 50
                           && dummyStats.maxStamina == 100;
                 Check("7 Dummy values match spec", ok,
                     $"displayName='{dummyStats.displayName}', " +
                     $"maxHP={dummyStats.maxHP}, maxStamina={dummyStats.maxStamina} " +
-                    "(expected: 'Dummy', 999, 100)");
+                    "(expected: 'Dummy', 50, 100)");
             }
             else
             {
@@ -177,13 +181,13 @@ namespace LevelGen.Combat.EditorTools
             else
             {
                 // The Animator field type is RuntimeAnimatorController; comparing
-                // to AnimatorController works because PlayerBaseController IS an
+                // to AnimatorController works because EnemyBaseController IS an
                 // AnimatorController (not an override).
                 animOk = baseCtrl != null && animator.runtimeAnimatorController == baseCtrl;
                 animDetail = $"controller='{animator.runtimeAnimatorController.name}' " +
-                             $"(expected: 'PlayerBaseController' at {BaseCtrlPath})";
+                             $"(expected: 'EnemyBaseController' at {BaseCtrlPath})";
             }
-            Check("12 Animator references PlayerBaseController", animOk, animDetail);
+            Check("12 Animator references EnemyBaseController", animOk, animDetail);
 
             Summary(pass, fail);
         }

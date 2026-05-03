@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace LevelGen.Combat
@@ -10,8 +11,11 @@ namespace LevelGen.Combat
     /// </summary>
     /// <remarks>
     /// <see cref="ApplyDamage"/> is the public damage entry point —
-    /// PlayerCombat's hitbox routing calls it on hit. <see cref="Heal"/>
-    /// has no caller yet; it'll get one when potions / regen ship.
+    /// PlayerCombat's hitbox routing calls it on hit. It also raises
+    /// <see cref="OnDied"/> exactly once when HP transitions from > 0
+    /// to <= 0. <see cref="Heal"/> has no caller yet; it'll get one
+    /// when potions / regen ship. Heal does NOT revive — death is
+    /// one-way for now.
     /// </remarks>
     [DisallowMultipleComponent]
     public class CharacterStatsRuntime : MonoBehaviour
@@ -23,12 +27,25 @@ namespace LevelGen.Combat
         [HideInInspector] [SerializeField] private int currentHP;
         [HideInInspector] [SerializeField] private int currentStamina;
 
+        private bool _hasDied;
+
+        /// <summary>
+        /// Raised exactly once when HP transitions from &gt; 0 to &lt;= 0.
+        /// Payload is this runtime instance (mirrors Targetable.OnHit's
+        /// pass-self pattern). Single-fire — subsequent ApplyDamage calls
+        /// post-death do not re-raise.
+        /// </summary>
+        public event Action<CharacterStatsRuntime> OnDied;
+
         public CharacterStats Stats          => stats;
         public int            CurrentHP      => currentHP;
         public int            CurrentStamina => currentStamina;
         public int            MaxHP          => stats != null ? stats.maxHP      : 0;
         public int            MaxStamina     => stats != null ? stats.maxStamina : 0;
         public string         DisplayName    => stats != null ? stats.displayName : name;
+
+        /// <summary>True after OnDied has been raised. Stays true even if Heal restores HP.</summary>
+        public bool           IsDead         => _hasDied;
 
         void Awake()
         {
@@ -48,7 +65,8 @@ namespace LevelGen.Combat
 
         /// <summary>
         /// Reduces <see cref="CurrentHP"/> by <paramref name="amount"/>,
-        /// clamped to [0, MaxHP]. Public so any damage source (PlayerCombat
+        /// clamped to [0, MaxHP]. Raises <see cref="OnDied"/> the first
+        /// time HP reaches 0. Public so any damage source (PlayerCombat
         /// hitbox, traps, projectiles) can route into it.
         /// </summary>
         public void ApplyDamage(int amount)
@@ -57,12 +75,22 @@ namespace LevelGen.Combat
             int prev = currentHP;
             currentHP = Mathf.Clamp(currentHP - amount, 0, MaxHP);
             Debug.Log($"[CharacterStatsRuntime] {DisplayName} HP {prev} -> {currentHP}");
+
+            if (currentHP <= 0 && !_hasDied)
+            {
+                // Set the flag BEFORE invoking so subscribers reading
+                // IsDead from inside the handler see the post-death state.
+                _hasDied = true;
+                OnDied?.Invoke(this);
+            }
         }
 
         /// <summary>
         /// Increases <see cref="CurrentHP"/> by <paramref name="amount"/>,
         /// clamped to [0, MaxHP]. Public so future heal sources (potions,
-        /// regen, abilities) can call it.
+        /// regen, abilities) can call it. Does NOT revive — if called
+        /// post-death, HP rises but <see cref="IsDead"/> stays true and
+        /// <see cref="OnDied"/> does not re-fire.
         /// </summary>
         public void Heal(int amount)
         {
@@ -82,5 +110,12 @@ namespace LevelGen.Combat
 
         [ContextMenu("Debug: Heal 10")]
         private void DebugHeal10() { Heal(10); }
+
+        // TODO removeMe-after-real-damage-sources-kill-things: forces
+        // immediate death for smoke-testing the M4-B Death pipeline
+        // (Dummy is currently 999 HP). Removable once an enemy AI / heavy
+        // weapon makes organic death easy to reproduce.
+        [ContextMenu("Debug: Kill")]
+        private void DebugKill() { ApplyDamage(99999); }
     }
 }

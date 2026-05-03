@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: CharacterStats_Dummy
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Combat.CharacterStats
   displayName: Dummy
-  maxHP: 999
+  maxHP: 50
   maxStamina: 100
-  description: "Stationary target practice. Will not die \u2014 high HP gives indefinite
-    practice without damage application existing yet."
+  description: "Stationary target practice. Dies on the 2nd hit of a 2nd combo
+    (full 3-hit combo = 30 dmg) so the M4-B death sequence triggers organically."
