@@ -1561,10 +1561,214 @@ Deferred:
 - Respawn-during-Play menu — not yet needed; manual Place re-runs
   cover the testing case.
 - Loot drops, kill counters, death VFX.
-- Player death (Player has its own HP/HUD; player-side OnDied
-  hook is a separate milestone).
+- Player death — shipped as M5 (2026-05-03 — see below).
 - Death-fade-into-floor or ragdoll handoff (Die01 holds last
   frame standing; visually OK for now).
+
+## M5 — player death (2026-05-03)
+
+Mirrors M4-B for the Player. HP→0 plays Die01, disables
+PlayerController + PlayerCombat, raises PlayerDeath.OnPlayerDied
+for UI to subscribe to. PlayerDeathOverlay shows a "You Died"
+overlay with a Restart button that reloads the active scene.
+Player corpse stays in the scene until Restart (no Destroy —
+deliberate divergence from EnemyDeath's despawn).
+
+Architectural decisions (locked):
+- Animator: `PlayerBaseController` gains a terminal `Death` state
+  via PlayerBaseControllerExtender (idempotent additive editor
+  script — does NOT rebuild the existing controller; preserves
+  all prior M2-B/M2-C state and transitions). AnyState→Death
+  trigger transition, canTransitionToSelf=false. Death has NO
+  outgoing transitions; Animator parks on the last frame.
+- Animator-writer invariant: `PlayerAnimator` is still the SOLE
+  writer to Player Animator parameters. New `SetDeathTrigger()`
+  public method follows the existing SetHitTrigger /
+  SetAttackTrigger / SetJumpTrigger / SetComboNext pattern
+  (`_ready`-gated, hash-cached in Awake).
+- Cleanup ownership: `PlayerDeath` MonoBehaviour subscribes to
+  `CharacterStatsRuntime.OnDied`; on first fire disables
+  `PlayerController` + `PlayerCombat`, calls
+  `_animator.SetDeathTrigger()`, raises its own
+  `OnPlayerDied(this)` event for UI subscribers.
+- Input handling: `PlayerInputReader` keeps raising events post-
+  death; the disabled `PlayerController` / `PlayerCombat`
+  components silently ignore them. Restart button is a Unity
+  UGUI button (not InputSystem-driven), so disabling
+  PlayerController / PlayerCombat does NOT block clicks.
+- Restart: `SceneManager.LoadScene(activeScene.buildIndex)`.
+  TODO comment in `PlayerDeathOverlay.OnRestartClicked` flags
+  in-place respawn as the future-respawn architecture
+  alternative.
+- Cursor: `MouseLook` locks at Play start; `PlayerDeathOverlay`
+  unlocks explicitly when the overlay shows so the Restart button
+  is clickable. Scene reload runs `MouseLook.OnEnable` again,
+  re-locking normally.
+
+PlayerBaseControllerExtender.cs (NEW, editor):
+  - Loads existing PlayerBaseController (does NOT recreate, so
+    M2-B work survives).
+  - Adds `Death` Trigger param if missing.
+  - Adds `Death` state with motion = Die01_SwordAndShield if
+    missing (FBX filename + sub-asset name match — no Shiled
+    typo on this clip).
+  - Adds AnyState→Death transition if missing
+    (canTransitionToSelf=false, hasExitTime=false, dur 0.05).
+  - Idempotent — re-running with everything present is the
+    "all skipped" green state.
+
+PlayerAnimator.cs: extended with `ParamDeath` const, `_hashDeath`
+field, hash assignment in Awake, public `SetDeathTrigger()`
+method. Pattern matches existing trigger-set methods identically.
+
+PlayerDeath.cs (NEW): namespace `LevelGen.Player`.
+`[RequireComponent(CharacterStatsRuntime)]`,
+`[DisallowMultipleComponent]`. Three SerializeField references
+(_animator, _controller, _combat) with both Reset() auto-resolve
+(editor-only) and Awake fallbacks (runtime). Subscribes to
+`_stats.OnDied` in OnEnable, unsubscribes in OnDisable.
+`HandleDied(_)` is `_hasFired`-guarded; on first invoke runs:
+  1. `_controller.enabled = false` — movement input ignored.
+  2. `_combat.enabled = false` — attack input ignored.
+  3. `_animator.SetDeathTrigger()` — queues Death.
+  4. `OnPlayerDied?.Invoke(this)` — UI subscribers see post-
+     cleanup state with trigger queued.
+Public `event Action<PlayerDeath> OnPlayerDied` and bool
+`HasFired` accessor.
+
+PlayerCombat.cs: gained `_stats` cached reference (resolved in
+Awake, null-tolerant — no [RequireComponent] for
+CharacterStatsRuntime, mirrors EnemyHitReaction's pattern). New
+guard at top of `TakeHit()`:
+  `if (_stats != null && _stats.IsDead) return;`
+Belt-and-suspenders against same-frame OnHit/OnDied subscriber
+ordering — without it, a hit landing in the same frame as HP→0
+could queue a flinch right before Death plays.
+
+PlayerDeathOverlay.cs (NEW, `LevelGen.UI`): passive observer.
+`[DisallowMultipleComponent]`. Lives on the prefab root with the
+Canvas as a child (so SetActive(false) on the canvas doesn't
+disable the overlay's OnPlayerDied subscription). Tag-based
+player lookup with retry coroutine (copies `PlayerHUD`'s
+TryBindToPlayer + PollForPlayer pattern verbatim). `HandlePlayerDied`
+shows the canvas, unlocks cursor. `OnRestartClicked` reloads
+active scene via `SceneManager.LoadScene(activeScene.buildIndex)`.
+
+Restart input handling — three layers, in priority order:
+1. Keyboard fallback in `Update`: R / Enter / Numpad-Enter while
+   the canvas is active call `OnRestartClicked` directly. Works
+   regardless of EventSystem state.
+2. Manual mouse-over-button check in `Update`: when the left
+   mouse button is pressed and the cursor is inside the
+   RestartButton's RectTransform (resolved via
+   `RectTransformUtility.RectangleContainsScreenPoint` with
+   null camera, since the canvas is ScreenSpaceOverlay), call
+   `OnRestartClicked`. Bypasses the EventSystem +
+   InputSystemUIInputModule dispatch chain entirely.
+3. Standard UGUI Button.onClick — works only when the scene has
+   an EventSystem with `InputSystemUIInputModule` AND the module
+   has UI actions bound (the editor's
+   `GameObject ▶ UI ▶ Event System` flow auto-assigns
+   `DefaultInputActions.inputactions`; programmatic
+   `AddComponent<InputSystemUIInputModule>()` leaves the actions
+   asset null, so the module is alive but inert).
+
+The triple-redundant input was necessary: during M5 verification
+the user's first-Play attempt couldn't click the button. The
+diagnosis chain went: missing EventSystem → wrong input module →
+no actions bound. The mouse-over-RectTransform fallback is the
+bulletproof layer; the keyboard fallback covers gamepad / quick-
+test cycles. EventSystem auto-add in the Place menu and a
+runtime `EnsureRuntimeEventSystem` in `Awake` are still present
+as best-effort layers but no longer load-bearing.
+
+PlayerDeathOverlay.prefab (NEW): Canvas root, ScreenSpaceOverlay,
+sortingOrder=100 (above PlayerHUD's sortingOrder=10). Backdrop
+(75% black full-screen Sliced Image), "You Died" TMP_Text
+(96pt bold red), Restart button (240×64 px). Built via
+`PlayerDeathOverlayBuilder.cs` editor (BUILD + Place menus,
+mirrors PlayerHUDBuilder). Sprite-fix lesson from PlayerHUD
+carried forward — backdrop assigns `UI/Skin/UISprite.psd`.
+
+Player_MaleHero.prefab: gains `PlayerDeath` component on root,
+all three field references wired via SerializedObject. Two
+authoring paths:
+  - `LevelGen ▶ Player ▶ Build Player_MaleHero Prefab` (folded
+    into the rebuild flow per M4-A "fold authoring into the
+    main builder" lesson — internal helper
+    `PlayerPrefabBuilder.AssignPlayerDeathRefs`).
+  - `LevelGen ▶ Player ▶ Add PlayerDeath to Player_MaleHero
+    Prefab` (NEW, `PlayerDeathPrefabAdder.cs`) — one-shot
+    LoadPrefabContents path so the user can ship M5 without
+    re-running the full prefab build. Idempotent. Warns clearly
+    if PlayerCombat is missing (user must run
+    PlayerCombatPrefabAdder first, then re-run this menu to
+    wire `_combat`).
+
+Validator: `Assets/Scripts/Player/Editor/PlayerDeathValidator.cs`
+(menu `LevelGen ▶ Player ▶ Validate Player Death`) — 16 read-only
+checks: PlayerDeath.cs presence, RequireComponent + DisallowMultiple,
+OnPlayerDied event signature, PlayerAnimator.SetDeathTrigger
+public surface, PlayerAnimator source contains "Death" hash,
+PlayerBaseController Death param + state + terminal (zero
+outgoing transitions) + AnyState→Death canTransitionToSelf=false,
+PlayerCombat.TakeHit body contains IsDead reference (slice-search),
+Player_MaleHero.prefab PlayerDeath presence + three refs wired
+(SerializedObject reads), PlayerDeathOverlay script + prefab exist.
+Format mirrors EnemyDeathValidator.
+
+Files:
+- Assets/Scripts/Player/PlayerAnimator.cs (Death hash + param +
+  SetDeathTrigger)
+- Assets/Scripts/Player/PlayerCombat.cs (cached _stats + IsDead
+  guard at top of TakeHit)
+- Assets/Scripts/Player/PlayerDeath.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerBaseControllerExtender.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerDeathPrefabAdder.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerDeathValidator.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs
+  (PlayerDeath fold-in + AssignPlayerDeathRefs helper)
+- Assets/Scripts/UI/PlayerDeathOverlay.cs (NEW)
+- Assets/Scripts/UI/Editor/PlayerDeathOverlayBuilder.cs (NEW)
+- Assets/Animators/Player/PlayerBaseController.controller
+  (extended via PlayerBaseControllerExtender — Death param +
+  state + AnyState→Death transition added; M2-B/M2-C state
+  preserved)
+- Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab
+  (gains PlayerDeath via either build path or standalone adder)
+- Assets/Prefabs/UI/PlayerDeathOverlay.prefab (NEW, produced by
+  PlayerDeathOverlayBuilder)
+
+Pending follow-up:
+- User runs `LevelGen ▶ Player ▶ Extend PlayerBaseController
+  (M5 Death)` — adds Death param/state/transition to the
+  controller in place.
+- User runs `LevelGen ▶ UI ▶ Build PlayerDeathOverlay Prefab`.
+- User runs `LevelGen ▶ Player ▶ Add PlayerDeath to
+  Player_MaleHero Prefab` (or rebuilds the prefab via
+  Build Player_MaleHero Prefab — both paths work).
+- User runs `LevelGen ▶ UI ▶ Place PlayerDeathOverlay in Active
+  Scene` (test scene).
+- User runs `LevelGen ▶ Player ▶ Validate Player Death` —
+  expect 16 PASS / 0 FAIL.
+- Sanity re-runs all prior validators (DamageRouting 12/12,
+  PlayerHUD 11/11, Combat Foundation 12/12, EnemyHitReaction
+  14/14, EnemyDeath 16/16, MouseLook 7/7).
+- Play-mode smoke test: enter Play, walk near Dummy, right-click
+  CharacterStatsRuntime on Player_MaleHero in Hierarchy →
+  `Debug: Kill`. Expect Die01 plays + parks on last frame, WASD
+  / mouse / left-click silent, "You Died" overlay appears,
+  cursor unlocks, click Restart → scene reloads → fresh run with
+  HP 100/100.
+
+Deferred:
+- In-place respawn (TODO comment in
+  PlayerDeathOverlay.OnRestartClicked — needs spawn-point
+  architecture / respawn semantics).
+- Death VFX / SFX / camera effects.
+- Game over UI polish (death cause, kill counts, etc.).
+- Sources of damage to the Player (no enemy AI yet — verify via
+  the existing `[ContextMenu("Debug: Kill")]` hook).
 
 ## Next CC task
 

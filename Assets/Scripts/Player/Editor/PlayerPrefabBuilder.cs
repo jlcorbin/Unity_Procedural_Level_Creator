@@ -121,9 +121,19 @@ namespace LevelGen.Player.Editor
             ipi.defaultActionMap     = "Player";
             ipi.notificationBehavior = PlayerNotifications.InvokeUnityEvents;
 
-            var reader = root.AddComponent<PlayerInputReader>();
-            root.AddComponent<PlayerAnimator>();
-            root.AddComponent<PlayerController>();
+            var reader        = root.AddComponent<PlayerInputReader>();
+            var playerAnim    = root.AddComponent<PlayerAnimator>();
+            var playerCtrl    = root.AddComponent<PlayerController>();
+
+            // M5: PlayerDeath — sole owner of the death sequence. Folded
+            // into the build so future rebuilds carry the component (M4-A
+            // "fold authoring into the main builder" lesson). PlayerCombat
+            // is added via PlayerCombatPrefabAdder (M2-B convention), so
+            // its ref is best-effort here — the standalone
+            // PlayerDeathPrefabAdder re-wires it after PlayerCombat lands.
+            var playerDeath   = root.AddComponent<PlayerDeath>();
+            var playerCombat  = root.GetComponent<PlayerCombat>();  // may be null pre-Combat-adder
+            AssignPlayerDeathRefs(playerDeath, playerAnim, playerCtrl, playerCombat);
 
             // ── Wire UnityEvent persistent listeners (TASK 3) ────────────────
             // We rebuild m_ActionEvents directly via SerializedObject because
@@ -467,6 +477,37 @@ namespace LevelGen.Player.Editor
                 Debug.LogError($"[PlayerPrefabBuilder] Failed to create folder: {path}");
             else
                 Debug.Log($"[PlayerPrefabBuilder] Created folder: {path}");
+        }
+
+        /// <summary>
+        /// Wires the three SerializeField references on PlayerDeath
+        /// (_animator, _controller, _combat). Reset() does not fire on
+        /// programmatic AddComponent — Awake fallbacks on PlayerDeath
+        /// resolve the same way at runtime, but the validator reads
+        /// the serialized values, so explicit wiring at build time is
+        /// what makes the asset round-trip green.
+        /// </summary>
+        internal static void AssignPlayerDeathRefs(PlayerDeath death,
+                                                   PlayerAnimator animator,
+                                                   PlayerController controller,
+                                                   PlayerCombat combat)
+        {
+            var so = new SerializedObject(death);
+            void Wire(string fieldName, Object value)
+            {
+                var prop = so.FindProperty(fieldName);
+                if (prop == null)
+                {
+                    Debug.LogError($"[PlayerPrefabBuilder] PlayerDeath has no '{fieldName}' serialized field.");
+                    return;
+                }
+                prop.objectReferenceValue = value;
+            }
+            Wire("_animator",   animator);
+            Wire("_controller", controller);
+            Wire("_combat",     combat);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(death);
         }
 
         /// <summary>

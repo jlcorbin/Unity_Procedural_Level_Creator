@@ -29,6 +29,7 @@ namespace LevelGen.Player
         private const string ParamJump        = "Jump";
         private const string ParamIsGrounded  = "IsGrounded";
         private const string ParamComboNext   = "ComboNext";
+        private const string ParamDeath       = "Death";
 
         // ── Cached state ────────────────────────────────────────────────────
         private Animator _animator;
@@ -41,6 +42,7 @@ namespace LevelGen.Player
         private int _hashJump;
         private int _hashIsGrounded;
         private int _hashComboNext;
+        private int _hashDeath;
         private bool _ready;
 
         // ── Public API ──────────────────────────────────────────────────────
@@ -155,6 +157,21 @@ namespace LevelGen.Player
             _animator.SetTrigger(_hashComboNext);
         }
 
+        /// <summary>
+        /// Fires the Death trigger. The Animator transitions from Any State
+        /// to the terminal Death state and plays Die01 once, parking on the
+        /// last frame (Death has no outgoing transitions).
+        /// canTransitionToSelf is false so a leaked second trigger can't
+        /// restart the clip; PlayerDeath also guards with `_hasFired`.
+        /// Safe to call before Awake — silently dropped if the Animator is
+        /// not yet resolved.
+        /// </summary>
+        public void SetDeathTrigger()
+        {
+            if (!_ready) return;
+            _animator.SetTrigger(_hashDeath);
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -175,6 +192,7 @@ namespace LevelGen.Player
             _hashJump        = Animator.StringToHash(ParamJump);
             _hashIsGrounded  = Animator.StringToHash(ParamIsGrounded);
             _hashComboNext   = Animator.StringToHash(ParamComboNext);
+            _hashDeath       = Animator.StringToHash(ParamDeath);
             _ready = true;
         }
     }

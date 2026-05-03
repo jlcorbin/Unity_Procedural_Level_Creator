@@ -54,9 +54,10 @@ namespace LevelGen.Player
 
         // ── Cached refs / state ─────────────────────────────────────────────
 
-        private PlayerInputReader _input;
-        private PlayerAnimator    _animator;
-        private bool              _attackBuffered;
+        private PlayerInputReader     _input;
+        private PlayerAnimator        _animator;
+        private CharacterStatsRuntime _stats;
+        private bool                  _attackBuffered;
 
         // Targets struck during the current swing — cleared on OnHitboxOpen.
         // Prevents double-hits when the collider re-enters the same trigger.
@@ -104,6 +105,10 @@ namespace LevelGen.Player
         {
             _input    = GetComponent<PlayerInputReader>();
             _animator = GetComponent<PlayerAnimator>();
+            // Null-tolerant — PlayerCombat does not [RequireComponent]
+            // CharacterStatsRuntime (matches EnemyHitReaction's
+            // null-guarded pattern).
+            _stats    = GetComponent<CharacterStatsRuntime>();
         }
 
         private void OnEnable()
@@ -193,6 +198,13 @@ namespace LevelGen.Player
         [ContextMenu("Take Hit")]
         public void TakeHit()
         {
+            // Hit-after-Death guard — belt-and-suspenders against
+            // same-frame OnHit/OnDied ordering. PlayerDeath also disables
+            // this component on the OnDied path, but a hit landing in the
+            // same frame as HP→0 could otherwise queue a flinch right
+            // before Death plays.
+            if (_stats != null && _stats.IsDead) return;
+
             if (_animator == null) return;
             _animator.SetHitTrigger();
             _attackBuffered = false;
