@@ -23,7 +23,7 @@ namespace LevelGen.Combat.EditorTools
         // ── Paths ───────────────────────────────────────────────────────────
         private const string DummyPrefabPath  = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
         private const string PackPrefabPath   = "Assets/AssetPacks/RPG Tiny Hero Duo/Prefab/MaleCharacterPBR.prefab";
-        private const string BaseCtrlPath     = "Assets/Animators/Player/PlayerBaseController.controller";
+        private const string BaseCtrlPath     = "Assets/Animators/Enemy/EnemyBaseController.controller";
         private const string StatsFolder      = "Assets/Data/CharacterStats";
         private const string MasterStatsPath  = "Assets/Data/CharacterStats/CharacterStats_Master.asset";
         private const string DummyStatsPath   = "Assets/Data/CharacterStats/CharacterStats_Dummy.asset";
@@ -51,7 +51,8 @@ namespace LevelGen.Combat.EditorTools
             var baseController = AssetDatabase.LoadAssetAtPath<AnimatorController>(BaseCtrlPath);
             if (baseController == null)
             {
-                Debug.LogError($"[DummyPrefabBuilder] Cannot load base controller at {BaseCtrlPath}. Aborting.");
+                Debug.LogError($"[DummyPrefabBuilder] Cannot load base controller at {BaseCtrlPath}. " +
+                               "Run 'LevelGen ▶ Combat ▶ Build EnemyBaseController' first. Aborting.");
                 return;
             }
 
@@ -82,6 +83,18 @@ namespace LevelGen.Combat.EditorTools
             AssignStatsField(runtime, dummyStats);
             root.AddComponent<Targetable>();
 
+            // Body collider — the trigger collider that PlayerCombat's
+            // weapon hitbox enters during a swing. Values mirror
+            // PlayerCombatHitboxBuilder.AddColliderToDummy (the original
+            // M3 authoring step). Folded into the build so rebuilds don't
+            // drop the capsule.
+            var capsule = root.AddComponent<CapsuleCollider>();
+            capsule.isTrigger = false;
+            capsule.radius    = 0.4f;
+            capsule.height    = 1.8f;
+            capsule.center    = new Vector3(0f, 0.9f, 0f);
+            capsule.direction = 1; // Y axis
+
             // Nested visible model — same MaleCharacterPBR rig the player uses.
             var character = (GameObject)PrefabUtility.InstantiatePrefab(packPrefab, root.transform);
             if (character == null)
@@ -111,6 +124,13 @@ namespace LevelGen.Combat.EditorTools
             animator.cullingMode     = AnimatorCullingMode.CullUpdateTransforms;
             EditorUtility.SetDirty(animator);
 
+            // ── EnemyHitReaction (sole writer to the Hit Animator parameter) ─
+            // Added after the Animator is wired so the field-binding finds it.
+            // Re-running Build creates a new root, so this is naturally
+            // idempotent — no AddComponent guard needed.
+            var hitReaction = root.AddComponent<EnemyHitReaction>();
+            AssignAnimatorField(hitReaction, animator);
+
             // ── Save the prefab ─────────────────────────────────────────────
             bool success;
             var saved = PrefabUtility.SaveAsPrefabAsset(root, DummyPrefabPath, out success);
@@ -138,7 +158,7 @@ namespace LevelGen.Combat.EditorTools
                 $"  CharacterStats_Master: {AssetDatabase.LoadAssetAtPath<CharacterStats>(MasterStatsPath)?.name ?? "(missing)"}\n" +
                 $"  CharacterStats_Dummy:  {dummyStats.name} (HP={dummyStats.maxHP}, Stamina={dummyStats.maxStamina})\n" +
                 $"  Animator controller:   {baseController.name}\n" +
-                $"  Components on root:    CharacterStatsRuntime, Targetable\n" +
+                $"  Components on root:    CharacterStatsRuntime, Targetable, CapsuleCollider, EnemyHitReaction\n" +
                 $"  No player control scripts. Drop into a scene and press Play to see Idle."
             );
         }
@@ -237,6 +257,25 @@ namespace LevelGen.Combat.EditorTools
             prop.objectReferenceValue = stats;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(runtime);
+        }
+
+        /// <summary>
+        /// Assigns the private <c>animator</c> SerializeField on an
+        /// EnemyHitReaction (cross-assembly write — Editor assembly can't
+        /// touch the private field directly).
+        /// </summary>
+        private static void AssignAnimatorField(EnemyHitReaction reaction, Animator animator)
+        {
+            var so = new SerializedObject(reaction);
+            var prop = so.FindProperty("animator");
+            if (prop == null)
+            {
+                Debug.LogError("[DummyPrefabBuilder] EnemyHitReaction has no 'animator' serialized field.");
+                return;
+            }
+            prop.objectReferenceValue = animator;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(reaction);
         }
 
         private static void EnsureFolder(string parent, string name)

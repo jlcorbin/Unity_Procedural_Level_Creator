@@ -1235,6 +1235,191 @@ RoomPresetLibrary, LevelGeneratorEditor, RoomWorkshopWindow,
 PlaceholderPrefabFactory, LevelGenSetup. All recoverable from git
 history pre-cleanup.
 
+## M-CursorLock — cursor lock during Play mode (2026-05-02)
+
+QoL detour from M4 hit-reaction work — no architectural changes to
+existing systems.
+
+- MouseLook.cs (LevelGen.Input) at Assets/Scripts/Input/MouseLook.cs.
+  Moved from Assets/Scripts/MouseLook.cs preserving the .meta GUID
+  (f797b8d394913ea4cb0c366ee3a7b9ea). New folder Assets/Scripts/Input/.
+- Behavior: locks + hides cursor on enable; Escape unlocks; left-click
+  in Game view re-locks; Application.focusChanged=false (Alt-Tab)
+  unlocks; OnDisable/OnDestroy unlock as clean teardown.
+  [DefaultExecutionOrder(-100)] runs before sibling scripts on frame 0.
+- Reads UnityEngine.InputSystem.Keyboard.current /
+  Mouse.current with null-guards for headless / batch mode.
+- Public surface: bool IsLocked { get; private set; }. No public
+  methods. Single MonoBehaviour, no other types.
+- Despite the legacy filename, this does NOT rotate the camera or
+  read mouse delta — PlayerInput owns Look input. The class is purely
+  a Cursor.lockState / Cursor.visible controller.
+- Validator: Assets/Scripts/Input/Editor/MouseLookValidator.cs
+  (LevelGen ▶ Input ▶ Validate MouseLook) — 7 checks: file at new
+  path, old path gone, type+MonoBehaviour, [DefaultExecutionOrder]
+  non-positive, namespace contains "Input", exactly one active
+  MouseLook in current scene, Play-mode cursor state (skipped in
+  edit mode). Read-only.
+- Placer: same file hosts a sibling menu item
+  (LevelGen ▶ Input ▶ Place _MouseLock in Active Scene) that creates
+  the _MouseLock GameObject + MouseLook component, idempotent
+  (no-op if already present), Undo-registered, marks the scene
+  dirty for save.
+
+Files:
+- Assets/Scripts/Input/MouseLook.cs (filled-in stub)
+- Assets/Scripts/Input/Editor/MouseLookValidator.cs (NEW)
+
+Pending follow-up:
+- User runs `LevelGen ▶ Input ▶ Place _MouseLock in Active Scene`
+  in Player_M1_Test.unity (or whichever scene is currently used
+  for Play-mode testing) and saves the scene.
+- Validator should hit 6 PASS + 1 SKIP (edit mode) or 7 PASS
+  (Play mode).
+- DontDestroyOnLoad behavior deferred until scene transitions exist.
+
+## M4-A — enemy hit reaction (Dummy, 2026-05-02)
+
+First reactive enemy behavior. Damage routing was already shipped
+in M3 (DamageRoutingValidator 12/12); this milestone makes the
+Dummy *visually* react when struck. Death is explicitly deferred.
+
+Architectural decisions (locked):
+- Animator: new `EnemyBaseController` (Idle + Hit only). Dummy
+  stops referencing `PlayerBaseController`.
+- Hit transition: `AnyState → Hit` with
+  `canTransitionToSelf = false`. Stagger window lives in C#.
+- Event routing: `Targetable` transitioned from pure marker →
+  event publisher (`event Action<Vector3> OnHit`,
+  `public RaiseHit(Vector3)`). Payload is the world-space hit
+  point on the target's collider.
+- Stagger: script-side cooldown on `EnemyHitReaction`, default
+  `staggerWindow = 0.3f`. Within the window, additional `OnHit`
+  calls are visually swallowed (damage is already applied
+  upstream — they do not re-fire the Hit trigger).
+- Single-writer-to-Animator invariant preserved.
+  `EnemyHitReaction` is the sole script writing to the Dummy's
+  Animator parameters.
+
+Targetable.cs: extended from pure marker → marker + event
+publisher. Existing AimPoint resolution preserved. New event
+`OnHit` (`Action<Vector3>`) and public `RaiseHit(Vector3)` method.
+The class still holds no hit state — `RaiseHit` is a pure
+pass-through to subscribers.
+
+PlayerCombat.cs: one-line addition in `NotifyHitboxTriggered`
+inside the stats-found branch, after `ApplyDamage` and the
+`_currentAttackHitList.Add` call. Computes hit point as
+`other.ClosestPoint(hitbox.bounds.center)` (with
+`other.bounds.center` fallback if `hitbox` is somehow null) and
+calls `targetable.RaiseHit(hitPoint)`. The misconfiguration
+warning branch (Targetable without CharacterStatsRuntime) does
+NOT call `RaiseHit` — firing the event there would mislead
+subscribers since no damage actually applied. No refactoring of
+surrounding code.
+
+EnemyBaseController.controller: built procedurally via
+`Assets/Scripts/Combat/Editor/EnemyBaseControllerBuilder.cs`
+(menu `LevelGen ▶ Combat ▶ Build EnemyBaseController`,
+idempotent — deletes & recreates). Lives at
+`Assets/Animators/Enemy/EnemyBaseController.controller`.
+- Parameters: `Hit` (Trigger).
+- States: `Idle` (default, motion = `Idle_Battle_SwordAndShield`
+  sub-asset of `Idle_Battle_SwordAndShiled.fbx` — matches what the
+  Dummy displayed pre-swap, preserves continuity), `Hit` (motion
+  = `GetHit01_SwordAndShield`).
+  Both states: writeDefaultValues=1, speed=1.0.
+- Transitions:
+  AnyState → Hit: condition `Hit` (If), hasExitTime=false,
+    fixedDuration=true, duration=0.05, canTransitionToSelf=false.
+  Hit → Idle: no conditions, hasExitTime=true, exitTime=0.95,
+    fixedDuration=true, duration=0.10.
+The "Loop=false" requirement at the state level is governed by
+the exit-time transition — Hit transitions out at normalizedTime
+0.95 before any clip-side loop wraps. Same pattern as
+PlayerBaseController's Hit/Attack states (clip-side `loopTime=1`
+left untouched; behavior governed Animator-side).
+
+FBX-vs-subasset name mismatch (lesson, surfaced during initial
+build): the Idle FBX's filename retains the publisher's "Shiled"
+typo (`Idle_Battle_SwordAndShiled.fbx`) but the AnimationClip
+sub-asset inside was renamed to "Shield" during the M3 pack swap
+(Duo → World Bundle). `LoadAllAssetRepresentationsAtPath` returns
+clips by their sub-asset name, not the FBX filename. First build
+attempt failed with "Could not load Idle clip" because the
+constant used the FBX filename. CLAUDE.md M3-02A had flagged this
+exact mismatch ("Idle: typo'd 'Shiled' → corrected 'Shield'");
+should be the default assumption when loading World Bundle clips
+from now on. The Hit clip's filename and sub-asset name match —
+no Hit-side fix needed.
+
+DummyPrefabBuilder.cs: three surgical edits. (1) `BaseCtrlPath`
+constant updated from `PlayerBaseController.controller` →
+`EnemyBaseController.controller`. (2) After the Animator wiring
+block, `EnemyHitReaction` is added to the Dummy root with its
+`animator` field bound to the `MaleCharacterPBR` child Animator
+via `AssignAnimatorField` helper (mirrors existing
+`AssignStatsField` SerializedObject pattern). (3) `CapsuleCollider`
+folded into the build (root-level, isTrigger=false, radius=0.4,
+height=1.8, center=(0,0.9,0), direction=Y). Previously the capsule
+was added by a separate `LevelGen ▶ Combat ▶ Add Collider to
+Dummy` menu (in `PlayerCombatHitboxBuilder.cs`); the standalone
+menu still works, but folding the capsule into the main builder
+prevents rebuild from dropping it (regression caught by
+DamageRoutingValidator check 10 during M4-A verification).
+Re-running `Build Dummy Prefab` is idempotent — a fresh root is
+created from scratch each time, so no AddComponent guard is
+needed. Build now logs `CapsuleCollider` and `EnemyHitReaction`
+alongside the other root-level components.
+
+EnemyHitReaction.cs (NEW): namespace `LevelGen.Combat`.
+`[RequireComponent(typeof(Targetable))]`,
+`[DisallowMultipleComponent]`. Subscribes to `Targetable.OnHit`
+in OnEnable, unsubscribes in OnDisable. `HandleHit(Vector3)`
+checks the script-side stagger cooldown — if outside the
+window, updates `_lastHitTime` and calls
+`animator.SetTrigger(HitTriggerHash)`. The Vector3 hit point is
+ignored for now (pass-through to future knockback / VFX
+subscribers).
+
+Validator: `Assets/Scripts/Combat/Editor/EnemyHitReactionValidator.cs`
+(menu `LevelGen ▶ Combat ▶ Validate EnemyHitReaction`) — 14
+read-only checks: Targetable.OnHit event type, RaiseHit signature,
+EnemyHitReaction.cs presence, RequireComponent + DisallowMultiple
+attributes, EnemyBaseController asset + parameter + state +
+transition shape (canTransitionToSelf=false on AnyState→Hit,
+hasExitTime=true on Hit→Idle), Dummy.prefab Animator points at
+EnemyBaseController (NOT PlayerBaseController), EnemyHitReaction
+on Dummy root with `animator` field wired, PlayerCombat.cs
+source contains `RaiseHit(` call. Format mirrors
+`DamageRoutingValidator`. Uses `RequireComponent.m_Type0/1/2`
+public field surface for attribute introspection.
+
+Files:
+- Assets/Scripts/Combat/Targetable.cs (event publisher)
+- Assets/Scripts/Combat/EnemyHitReaction.cs (NEW)
+- Assets/Scripts/Combat/Editor/EnemyBaseControllerBuilder.cs (NEW)
+- Assets/Scripts/Combat/Editor/EnemyHitReactionValidator.cs (NEW)
+- Assets/Scripts/Combat/Editor/DummyPrefabBuilder.cs (controller
+  swap + EnemyHitReaction wiring)
+- Assets/Scripts/Player/PlayerCombat.cs (RaiseHit call after
+  ApplyDamage in NotifyHitboxTriggered)
+- Assets/Animators/Enemy/EnemyBaseController.controller (NEW,
+  produced by builder)
+- Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab (rebuilt
+  by `Build Dummy Prefab` after EnemyBaseController exists)
+
+Verification (complete):
+- `LevelGen ▶ Combat ▶ Validate EnemyHitReaction` — 14 PASS / 0 FAIL.
+- `LevelGen ▶ Combat ▶ Validate Damage Routing` — 12 PASS / 0 FAIL
+  (sanity re-run after rebuilds).
+- Play-mode smoke test: confirmed working in test scene.
+
+Death deferred (next milestone): Death state, `Die01_SwordAndShield`,
+HP-zero hooks on `CharacterStatsRuntime`, AnyState → Death
+transition. Other enemy types deferred. Knockback / VFX consumers
+of the hit-point payload deferred.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
