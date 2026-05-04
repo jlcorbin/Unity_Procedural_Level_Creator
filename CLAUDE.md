@@ -1988,6 +1988,181 @@ Deferred:
 - Snap-to-position on Execute (currently only snap-rotates;
   player position untouched).
 
+## M7 — OpenInteractable + TestDoor (2026-05-04)
+
+Second concrete `Interactable` subclass. Generic open/close
+behavior — designed for doors, gates, chests, drawers, lids —
+with a procedurally-built test door (`TestDoor.prefab`) as a
+stand-in for verifying the loop without depending on level-gen
+work. M16 will eventually wire `OpenInteractable` onto real FDP
+`COMP_Door_*` prefabs; until then the test door lives in
+`Assets/Prefabs/TestRig/` as a diagnostic.
+
+Architectural decisions (locked):
+- TestDoor is a procedural primitive (cube on a hinge), NOT an
+  FDP prefab. M7 is player/interaction only — no level-gen
+  touch.
+- Toggleable: first press opens (+90° lerp over 0.4s), second
+  press closes (-90°). `OpenInteractable` carries an `_isOpen`
+  bool and updates `_promptLabel` ("Open" ↔ "Close") whenever
+  state flips.
+- Coroutine lerp on the `OpenInteractable` MonoBehaviour. While
+  the coroutine is in flight, `_isAnimating = true` and
+  `IsEligible` returns false (so the prompt hides during the
+  swing). `Execute` early-returns on `_isAnimating == true` as
+  defense-in-depth against same-frame double-press.
+- Target rotations cached in Awake (`_closedRotation`,
+  `_openRotation` from the hinge's initial localRotation).
+  Re-deriving each cycle would compound floating-point drift
+  across many toggles — caching guarantees the door always
+  returns to exactly the same closed orientation.
+
+Invariants preserved:
+- Single-direction dependency holds. PlayerInteractor calls
+  `interactable.Execute(player)`; OpenInteractable runs its
+  coroutine on itself; no callbacks to player-side code.
+- Interactable abstract base remains a marker-plus-subclass
+  pattern. M7 does NOT modify the base contract; it only
+  generalizes `_promptLabel` from "fixed at inspector time" to
+  "mutable + reflected to Canvas via RefreshPromptLabel()."
+  Purely additive — the field was already `protected`, so
+  subclasses could already mutate it; the new helper just gives
+  them an idempotent way to push the change to the visible TMP.
+- AssassinateInteractable, PlayerInteractor, PlayerCombat,
+  PlayerInputReader, animator controllers, and character
+  prefabs all unchanged.
+
+Interactable.cs: three surgical additive changes, no removals.
+  - `_promptLabel` doc-comment expanded ("subclasses may mutate
+    at runtime; call RefreshPromptLabel() to push the change").
+  - New public `RefreshPromptLabel()` method: pushes the current
+    `_promptLabel` to the cached TMP_Text. Idempotent. Cheap —
+    text update only, does NOT rebuild the Canvas.
+  - `EnsurePromptUI()` now calls `RefreshPromptLabel()` at both
+    exit paths (the early-return-on-existing-child path and the
+    after-build path). Keeps the build path and the re-find
+    path symmetric — a subclass that mutates `_promptLabel`
+    after the prompt UI was first built will see the new text
+    on the next `EnsurePromptUI()` or `SetPromptVisible(true)`
+    call.
+  - `SetPromptVisible(true)` simplified to call
+    `RefreshPromptLabel()` instead of duplicating the text-set
+    code inline.
+
+OpenInteractable.cs (NEW, `LevelGen.Interaction`):
+`[RequireComponent(SphereCollider)]`. Subclasses Interactable.
+SerializeFields:
+  - `_hinge` (Transform, auto-resolved on Reset to `transform`)
+  - `_rotationAxis` (Vector3, default Vector3.up)
+  - `_openAngle` (float, default 90°)
+  - `_animationDuration` (float, default 0.4s)
+  - `_openLabel` (string, default "Open")
+  - `_closeLabel` (string, default "Close")
+Reset: `_priority = InteractPriority.Open`, `_promptLabel = _openLabel`,
+SphereCollider configured as trigger r=1.5. Awake: caches
+`_closedRotation` and `_openRotation` from the hinge's initial
+localRotation BEFORE base.Awake builds the prompt UI; sets
+`_promptLabel` from `_isOpen` then calls `base.Awake()` which
+calls `EnsurePromptUI` which calls `RefreshPromptLabel`.
+IsEligible: returns false during animation (so the prompt hides
+during the swing). Execute: early-returns on `_isAnimating`,
+otherwise starts `AnimateRotation` coroutine. Coroutine:
+smoothstep ease-in-out (`t * t * (3 - 2t)`), Quaternion.Slerp
+between cached from/to rotations, on completion flips `_isOpen`,
+swaps `_promptLabel` to the other side, calls `RefreshPromptLabel`,
+clears `_isAnimating`. Update tick re-registers automatically
+(IsEligible flips back to true).
+
+TestDoorBuilder.cs (NEW, `LevelGen.Interaction.Editor`): two
+menu items.
+  - `LevelGen ▶ Interaction ▶ Build TestDoor Prefab` —
+    idempotent rebuild. Hierarchy:
+    ```
+    TestDoor (root)
+    ├── HingePivot (empty)
+    │   └── DoorLeaf (Cube primitive, scale 1×2×0.1m,
+    │                 localPosition (0.5, 1, 0) so HingePivot
+    │                 sits at the hinge edge)
+    └── _OpenZone
+        ├── SphereCollider (trigger, r=1.5, center (0.5, 1, 0))
+        └── OpenInteractable (_hinge → HingePivot,
+                              _promptAnchor → HingePivot)
+    ```
+    Material: URP/Lit (project standard per
+    WhiteboxPackFactory pattern), brown
+    `Color(0.6f, 0.4f, 0.2f)` via `_BaseColor`. Falls back with
+    a warning if URP/Lit shader not found. The Cube primitive's
+    own BoxCollider stays as a non-trigger physical collider so
+    the player can't walk through the closed door.
+    Wires `_hinge` + `_promptAnchor` via SerializedObject (Reset
+    doesn't fire on programmatic AddComponent — M6 lesson #3).
+    EnsurePromptUI called at build time so the prompt child is
+    visible in the prefab inspector.
+  - `LevelGen ▶ Interaction ▶ Place TestDoor in Active Scene` —
+    instantiates at world (0, 0, 3). Skips if a TestDoor is
+    already in the scene.
+Save path: `Assets/Prefabs/TestRig/TestDoor.prefab`. The
+`TestRig` folder is created on first build; its name signals
+"diagnostic, not gameplay" so it stays segregated when M16
+ships real doors.
+
+Validator: `Assets/Scripts/Interaction/Editor/OpenInteractableValidator.cs`
+(menu `LevelGen ▶ Interaction ▶ Validate OpenInteractable`) —
+12 read-only checks: OpenInteractable.cs presence, subclass
+relationship, RequireComponent(SphereCollider), source contains
+`_openLabel` + `_closeLabel` (literal-stub matches per M6
+lesson #2 — direct String.Contains, no fixed-width slice),
+source contains `AnimateRotation` coroutine, Interactable base
+declares `RefreshPromptLabel` public method (reflection),
+Interactable.cs source contains both the declaration and a
+call site for `RefreshPromptLabel` (covers the EnsurePromptUI
+hookup), TestDoor.prefab presence, _OpenZone child presence,
+SphereCollider trigger=true + radius>0, OpenInteractable
+component on _OpenZone, `_hinge` field non-null
+(SerializedObject read).
+
+Files:
+- Assets/Scripts/Interaction/Interactable.cs (additive:
+  RefreshPromptLabel + EnsurePromptUI hooks)
+- Assets/Scripts/Interaction/OpenInteractable.cs (NEW)
+- Assets/Scripts/Interaction/Editor/TestDoorBuilder.cs (NEW)
+- Assets/Scripts/Interaction/Editor/OpenInteractableValidator.cs (NEW)
+- Assets/Prefabs/TestRig/TestDoor.prefab (NEW, produced by
+  TestDoorBuilder)
+
+No modifications to: AssassinateInteractable, PlayerInteractor,
+PlayerCombat, PlayerInputReader, any animator controller, any
+character prefab.
+
+Pending follow-up:
+- User runs `LevelGen ▶ Interaction ▶ Build TestDoor Prefab`.
+- User runs `LevelGen ▶ Interaction ▶ Place TestDoor in Active Scene`.
+- User runs `LevelGen ▶ Interaction ▶ Validate OpenInteractable`
+  — expect 12 PASS / 0 FAIL.
+- Sanity re-runs of all prior validators (DamageRouting 12/12,
+  PlayerHUD 11/11, Combat Foundation 12/12, EnemyHitReaction
+  14/14, EnemyDeath 16/16, MouseLook 7/7, PlayerDeath 16/16,
+  InteractSystem 16/16) — none should regress.
+- Play-mode smoke test: walk near test door → "Press [E] Open"
+  appears; E swings the door open over 0.4s with ease-in-out;
+  prompt re-appears as "Press [E] Close"; E swings closed; spam
+  E mid-swing is silently dropped; walking away mid-swing lets
+  the door finish; combo cycles stable. Walk to Dummy + door at
+  the same time to verify priority (Assassinate=100 > Open=50)
+  picks the right one.
+
+Deferred:
+- M16 will replace TestDoor with FDP `COMP_Door_*` prefabs
+  wired to OpenInteractable.
+- Locked / unlocked door states (key check on IsEligible).
+- Door SFX / VFX.
+- Per-side eligibility (open from front only).
+- Bidirectional doors with separate "Open from front" / "Open
+  from back" eligibility.
+- Multiple-press chest opening / "hold to open" mechanics.
+- Per-frame Canvas billboard toward Camera.main (still TODO in
+  Interactable.EnsurePromptUI from M6).
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

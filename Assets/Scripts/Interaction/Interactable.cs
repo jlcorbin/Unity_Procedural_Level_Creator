@@ -54,7 +54,9 @@ namespace LevelGen.Interaction
                  "Picks the highest-priority registered interactable.")]
         [SerializeField] protected InteractPriority _priority = InteractPriority.Pickup;
 
-        [Tooltip("Short label shown in the prompt. Renders as 'Press [E] {label}'.")]
+        [Tooltip("Short label shown in the prompt. Renders as 'Press [E] {label}'. " +
+                 "Subclasses may mutate this at runtime; call RefreshPromptLabel() " +
+                 "afterward to push the new value to the visible Canvas.")]
         [SerializeField] protected string _promptLabel = "Interact";
 
         [Tooltip("Transform that anchors the world-space prompt UI. " +
@@ -206,7 +208,19 @@ namespace LevelGen.Interaction
             if (_promptRoot == null) EnsurePromptUI();
             if (_promptRoot == null) return; // build failed; already logged
             _promptRoot.SetActive(show);
-            if (show && _promptLabelText != null)
+            if (show) RefreshPromptLabel();
+        }
+
+        /// <summary>
+        /// Pushes the current <see cref="PromptLabel"/> value to the
+        /// world-space TMP_Text. Idempotent. Call this after mutating
+        /// <c>_promptLabel</c> from a subclass to update the visible
+        /// prompt. Cheap — does NOT rebuild the Canvas, only updates
+        /// the text content.
+        /// </summary>
+        public void RefreshPromptLabel()
+        {
+            if (_promptLabelText != null)
                 _promptLabelText.text = $"Press [E] {_promptLabel}";
         }
 
@@ -228,6 +242,10 @@ namespace LevelGen.Interaction
                 _promptRoot      = existing.gameObject;
                 _promptCanvas    = existing.GetComponentInChildren<Canvas>(includeInactive: true);
                 _promptLabelText = existing.GetComponentInChildren<TMP_Text>(includeInactive: true);
+                // Sync the visible text to the current _promptLabel — covers
+                // the case where a subclass mutated _promptLabel after the
+                // prompt UI was first built.
+                RefreshPromptLabel();
                 return;
             }
 
@@ -276,6 +294,9 @@ namespace LevelGen.Interaction
             // it's still readable, so deferred until camera-relative
             // billboarding is needed by a future Interactable subclass.
 
+            // Final sync — same call as the early-return path above. Keeps
+            // the build path and the re-find path symmetric.
+            RefreshPromptLabel();
             _promptRoot.SetActive(false);
         }
     }

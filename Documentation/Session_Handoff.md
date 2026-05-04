@@ -292,7 +292,7 @@ For a damage-routing change (WeaponStats SO, damage numbers):
 
 ## Things to leave alone
 
-- M1 + M2-A + M2-B + M2-C + M3 + M4-A + M4-B + M5 + M6 —
+- M1 + M2-A + M2-B + M2-C + M3 + M4-A + M4-B + M5 + M6 + M7 —
   verified working, do not refactor.
 - The 7 V1 cleanup commits and their history — done, merged,
   stable.
@@ -304,14 +304,22 @@ For a damage-routing change (WeaponStats SO, damage numbers):
 - V2 generator (Phases A–D) — at a stable checkpoint.
 - Combat foundation, HUD, damage routing, MouseLook,
   EnemyHitReaction, EnemyDeath, PlayerDeath, PlayerDeathOverlay,
-  Interactable, PlayerInteractor, AssassinateInteractable —
-  all tested and locked. Next milestone *adds to* them, doesn't
-  modify them.
+  Interactable, PlayerInteractor, AssassinateInteractable,
+  OpenInteractable, TestDoor — all tested and locked. Next
+  milestone *adds to* them, doesn't modify them.
 - Interactable abstract base — extend by subclassing only; do
-  not modify the base.
+  not modify the base. The M7 additive `RefreshPromptLabel()`
+  helper is the only sanctioned post-Awake label-mutation path
+  for subclasses; do not bypass it (e.g. by adding a public
+  setter on `_promptLabel` or by writing to TMP_Text directly
+  from a subclass).
 - The triple-redundant Restart input handling on
   PlayerDeathOverlay — keep all three layers; layer 2 (manual
   mouse-over-RectTransform) is load-bearing.
+- M7 — OpenInteractable + TestDoor — done, validators green
+  (12/12), do not refactor. TestDoor lives in
+  `Assets/Prefabs/TestRig/` as a diagnostic stand-in until M16
+  ships real FDP `COMP_Door_*` prefabs.
 
 ---
 
