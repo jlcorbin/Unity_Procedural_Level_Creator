@@ -42,22 +42,25 @@ namespace LevelGen.Combat.EditorTools
                 else    { fail++; Debug.LogError($"[Validator] FAIL — {label}: {detail}"); }
             }
 
-            // ── 1: Targetable.OnHit event of type Action<Vector3> ───────────
+            // ── 1: Targetable.OnHit event of type Action<Vector3, float> ────
+            // M8 extended the payload from Action<Vector3> → Action<Vector3, float>
+            // so DamageNumberSpawner can read the damage value alongside the
+            // hit point. Hit-reaction subscribers ignore the new param.
             var targetableType = typeof(Targetable);
             var onHitEvent = targetableType.GetEvent("OnHit",
                 BindingFlags.Public | BindingFlags.Instance);
             bool ok1 = onHitEvent != null
-                       && onHitEvent.EventHandlerType == typeof(Action<Vector3>);
-            Check("1 Targetable.OnHit event of type Action<Vector3>", ok1,
+                       && onHitEvent.EventHandlerType == typeof(Action<Vector3, float>);
+            Check("1 Targetable.OnHit event of type Action<Vector3, float>", ok1,
                 onHitEvent == null
                     ? "event missing"
-                    : $"handlerType='{onHitEvent.EventHandlerType.Name}' (expected Action`1[Vector3])");
+                    : $"handlerType='{onHitEvent.EventHandlerType.Name}' (expected Action`2[Vector3, float])");
 
-            // ── 2: Targetable.RaiseHit(Vector3) public ──────────────────────
+            // ── 2: Targetable.RaiseHit(Vector3, float) public ───────────────
             var raiseHitMethod = targetableType.GetMethod("RaiseHit",
                 BindingFlags.Public | BindingFlags.Instance,
-                null, new[] { typeof(Vector3) }, null);
-            Check("2 Targetable.RaiseHit(Vector3) public", raiseHitMethod != null,
+                null, new[] { typeof(Vector3), typeof(float) }, null);
+            Check("2 Targetable.RaiseHit(Vector3, float) public", raiseHitMethod != null,
                 raiseHitMethod != null ? "found" : "missing or wrong signature");
 
             // ── 3: EnemyHitReaction.cs at expected path ─────────────────────

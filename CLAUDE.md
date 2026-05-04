@@ -2163,6 +2163,195 @@ Deferred:
 - Per-frame Canvas billboard toward Camera.main (still TODO in
   Interactable.EnsurePromptUI from M6).
 
+## M8 — Damage numbers / floating combat text (2026-05-04)
+
+First real consumer of the `Targetable.OnHit` event payload
+introduced in M4-A as a "future hook for knockback / VFX
+subscribers." Cosmetic-only — no game logic changes. World-
+space TMP_Text drifts upward and fades out on every hit, scene-
+wide, automatically picking up new Targetables spawned at
+runtime.
+
+Architectural decisions (locked):
+- Event payload extended from `Action<Vector3>` to
+  `Action<Vector3, float>` — hit point + damage value. The
+  existing subscriber `EnemyHitReaction.HandleHit` updates its
+  signature and ignores the new param.
+  `PlayerCombat.NotifyHitboxTriggered` passes the actual damage
+  applied (post-override consumption) to RaiseHit. The damage
+  number reflects what landed — including assassinate's 99999
+  override.
+- New static event `Targetable.AnyTargetableHit(Vector3, float)`
+  fires alongside the instance event from `RaiseHit`.
+  `DamageNumberSpawner` subscribes once to the static event;
+  every Targetable in the scene (including ones spawned at
+  runtime) routes through it automatically. Subscribers MUST
+  unsubscribe in `OnDisable` — static event lifetime survives
+  domain reloads.
+- `DamageNumberSpawner` is a singleton-scoped manager
+  (`static Instance`). Third project singleton after MouseLook
+  (`_MouseLock`) and PlayerInteractor. Per-scene scope, no
+  DontDestroyOnLoad — scene reload via Restart resets it
+  cleanly. Duplicates self-destroy in Awake with warning.
+- `DamageNumber` prefab is a bare GameObject + `TextMeshPro`
+  component (NOT inside a Canvas — that would force ScreenSpace
+  + RectTransform sizing). The TMP component on a no-Canvas
+  GameObject renders via the world-space mesh-renderer path.
+- No object pooling. Each DamageNumber is its own GameObject;
+  pool only if profiling shows GC hitches. Optimization without
+  measurement is technical debt.
+- No camera billboarding. The current near-top-down camera
+  makes static-orientation text legible. `transform.LookAt(
+  Camera.main)` per frame would couple every DamageNumber to
+  Camera.main and add a per-frame Update we don't need.
+
+Invariants preserved:
+- Single-direction dependency holds. PlayerCombat is the
+  damage-application site; Targetable raises events;
+  EnemyHitReaction + DamageNumberSpawner are pure consumers.
+- Single-writer-per-Animator-parameter unaffected — M8 doesn't
+  touch animators.
+
+Targetable.cs: extended from "marker + event publisher (one
+event)" → "marker + event publisher (instance + static fan-out)".
+Event signature `Action<Vector3>` → `Action<Vector3, float>`.
+RaiseHit signature `(Vector3)` → `(Vector3, float)`. RaiseHit
+body now invokes both `OnHit?.Invoke(...)` and
+`AnyTargetableHit?.Invoke(...)`. Class XML doc updated to
+describe both event surfaces and warn about static-event leak
+prevention.
+
+PlayerCombat.cs: one-line surgical change in
+`NotifyHitboxTriggered`:
+  `targetable.RaiseHit(hitPoint)` → `targetable.RaiseHit(hitPoint, dmg)`
+The `dmg` local was already computed at the call site (post-
+override consumption), so no surrounding refactor needed. The
+damage number reflects the actual damage dealt — assassinate
+shows "99999", normal swing shows "10".
+
+EnemyHitReaction.cs: `HandleHit(Vector3 hitPoint)` →
+`HandleHit(Vector3 hitPoint, float damage)`. Body unchanged
+beyond a comment noting the float param is intentionally
+ignored (Hit reaction doesn't care about damage value, just
+that a hit happened). The `OnEnable`/`OnDisable` subscriptions
+type-checked against the new delegate type automatically — no
+change needed there.
+
+DamageNumber.cs (NEW, `LevelGen.UI`): `[RequireComponent(TMP_Text)]`,
+`[DisallowMultipleComponent]`. SerializeFields: `_lifetime` (1.0s),
+`_riseDistance` (1.5 units), `_color` (white). `Initialize(Vector3
+worldPosition, float damage)` sets transform.position, writes
+text via `damage.ToString("0")` (integer-rounded display — "10"
+not "10.0"), starts the rise+fade coroutine. Coroutine uses
+smoothstep ease (`t * t * (3 - 2t)`, same curve as
+OpenInteractable's door swing) to drift up `_riseDistance` units
+while fading alpha 1→0. Self-destroys at lifetime end.
+
+DamageNumberSpawner.cs (NEW, `LevelGen.UI`):
+`[DisallowMultipleComponent]`, static `Instance`. SerializeFields:
+`_damageNumberPrefab` (DamageNumber, wired by builder),
+`_spawnParent` (Transform, defaults to self). Awake sets Instance
++ duplicate-self-destroy guard. OnEnable/OnDisable pair subscribes
++ unsubscribes `Targetable.AnyTargetableHit += HandleAnyHit`.
+HandleAnyHit instantiates one DamageNumber per call, routes
+through Initialize. Null-tolerant on `_damageNumberPrefab`
+(silent drop, no warn-spam).
+
+Pattern carryforward: subscribe in OnEnable / unsubscribe in
+OnDisable matches EnemyHitReaction's pattern. The static-event
+unsubscribe is load-bearing — without it, the next domain reload's
+spawner would fire alongside this destroyed one, doubling numbers
+per hit.
+
+Builder:
+`Assets/Scripts/UI/Editor/DamageNumberBuilder.cs` —
+three menu items:
+  - `LevelGen ▶ UI ▶ Build DamageNumber Prefab` (creates a bare
+    GameObject + TextMeshPro with fontSize=6 white-bold-with-
+    black-outline text, alignment=Center, NOT wrapped in a
+    Canvas — world-space mesh-renderer rendering. Saved to
+    `Assets/Prefabs/UI/DamageNumber.prefab`. Idempotent
+    delete+recreate.)
+  - `LevelGen ▶ UI ▶ Build DamageNumberSpawner Prefab` (creates
+    DamageNumberSpawner GameObject, wires `_damageNumberPrefab`
+    via SerializedObject — Reset() doesn't fire on programmatic
+    AddComponent, M6 lesson #3. Saved to
+    `Assets/Prefabs/UI/DamageNumberSpawner.prefab`. Aborts if
+    DamageNumber prefab missing or has no DamageNumber component.)
+  - `LevelGen ▶ UI ▶ Place DamageNumberSpawner in Active Scene`
+    (instantiates at world origin. Idempotent — selects existing
+    if a DamageNumberSpawner already exists in scene.)
+
+Validator:
+`Assets/Scripts/UI/Editor/DamageNumberValidator.cs`
+(menu `LevelGen ▶ UI ▶ Validate Damage Numbers`) — 14 read-only
+checks: Targetable.cs source-scan for new event declaration +
+static event + RaiseHit body invokes both events (literal-stub
+matches per M6 lesson #2 — direct String.Contains, no slice),
+RaiseHit reflection check `(Vector3, float)`,
+EnemyHitReaction.HandleHit reflection check `(Vector3, float)`,
+PlayerCombat.cs source contains `targetable.RaiseHit(hitPoint, dmg)`,
+DamageNumber + DamageNumberSpawner script presence + attributes,
+Initialize reflection check, static Instance property type check,
+spawner subscribe AND unsubscribe pair (leak prevention),
+DamageNumber + DamageNumberSpawner prefabs exist with
+_damageNumberPrefab wired via SerializedObject, EnemyHitReaction.cs
+source contains the new HandleHit declaration. Read-only.
+
+EnemyHitReactionValidator.cs updated: checks 1+2 expect the new
+`Action<Vector3, float>` event type and `(Vector3, float)` RaiseHit
+signature respectively. Without this update the M4-A validator
+would FAIL after M8 lands.
+
+Files:
+- Assets/Scripts/Combat/Targetable.cs (event signature change,
+  static event added, RaiseHit signature change)
+- Assets/Scripts/Combat/EnemyHitReaction.cs (HandleHit signature
+  update — float param ignored)
+- Assets/Scripts/Player/PlayerCombat.cs (RaiseHit call updated
+  to pass dmg)
+- Assets/Scripts/Combat/Editor/EnemyHitReactionValidator.cs
+  (event-type + RaiseHit-signature checks updated)
+- Assets/Scripts/UI/DamageNumber.cs (NEW)
+- Assets/Scripts/UI/DamageNumberSpawner.cs (NEW)
+- Assets/Scripts/UI/Editor/DamageNumberBuilder.cs (NEW)
+- Assets/Scripts/UI/Editor/DamageNumberValidator.cs (NEW)
+- Assets/Prefabs/UI/DamageNumber.prefab (NEW, produced by builder)
+- Assets/Prefabs/UI/DamageNumberSpawner.prefab (NEW, produced by builder)
+
+No modifications to: any animator controllers, character prefabs
+(Player_MaleHero, Dummy), Interactables (Assassinate / Open),
+PlayerHUD, PlayerDeathOverlay.
+
+Pending follow-up:
+- User runs `LevelGen ▶ UI ▶ Build DamageNumber Prefab`.
+- User runs `LevelGen ▶ UI ▶ Build DamageNumberSpawner Prefab`.
+- User runs `LevelGen ▶ UI ▶ Place DamageNumberSpawner in Active Scene`.
+- User runs `LevelGen ▶ UI ▶ Validate Damage Numbers` —
+  expect 14 PASS / 0 FAIL.
+- Sanity re-runs of all prior validators — DamageRouting 12/12,
+  PlayerHUD 11/11, Combat Foundation 12/12, EnemyHitReaction
+  14/14 (with updated event-type + RaiseHit-signature checks),
+  EnemyDeath 16/16, MouseLook 7/7, PlayerDeath 16/16,
+  InteractSystem 16/16, OpenInteractable 12/12.
+- Play-mode smoke test: hit Dummy with Attack01 → "10" floats
+  up from hit point and fades. Triple combo → three numbers
+  spawn independently. Assassinate → "99999" floats up. Reload
+  scene via PlayerDeathOverlay Restart → fresh spawner takes
+  over, no double-spawning.
+
+Deferred:
+- Color coding by damage type (fire/ice/poison/crit) — needs
+  DamageInfo struct introduction in a separate intentional
+  milestone.
+- Crit indicator (larger font, gold color).
+- Healing numbers (green, on Heal events) — needs Heal event
+  on CharacterStatsRuntime first.
+- Object pooling (only if profiling shows GC hitches).
+- Camera-billboarding for non-top-down views.
+- Per-actor RaiseHit-Y-offset to avoid numbers spawning at
+  ground level when hit point is on a low collider.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

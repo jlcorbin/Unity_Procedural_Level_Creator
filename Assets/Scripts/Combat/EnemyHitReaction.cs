@@ -60,8 +60,11 @@ namespace LevelGen.Combat
             if (_targetable != null) _targetable.OnHit -= HandleHit;
         }
 
-        private void HandleHit(Vector3 hitPoint)
+        private void HandleHit(Vector3 hitPoint, float damage)
         {
+            // damage param ignored — Hit reaction doesn't care about
+            // the damage value, just that a hit happened. The float is
+            // here for the M8 OnHit signature change.
             if (animator == null) return;
 
             // Same-frame OnHit/OnDied ordering insurance: if HP just

@@ -323,7 +323,7 @@ namespace LevelGen.Player
             Vector3 hitPoint = hitbox != null
                 ? other.ClosestPoint(hitbox.bounds.center)
                 : other.bounds.center;
-            targetable.RaiseHit(hitPoint);
+            targetable.RaiseHit(hitPoint, dmg);
 
             Debug.Log($"[PlayerCombat] Hit {targetable.name} for {dmg}" +
                       (wasOverride ? " (override)" : "") +

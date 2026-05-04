@@ -292,8 +292,8 @@ For a damage-routing change (WeaponStats SO, damage numbers):
 
 ## Things to leave alone
 
-- M1 + M2-A + M2-B + M2-C + M3 + M4-A + M4-B + M5 + M6 + M7 —
-  verified working, do not refactor.
+- M1 + M2-A + M2-B + M2-C + M3 + M4-A + M4-B + M5 + M6 + M7 +
+  M8 — verified working, do not refactor.
 - The 7 V1 cleanup commits and their history — done, merged,
   stable.
 - `Assets/Scripts/Experimental/` — dormant, don't reference
@@ -320,6 +320,17 @@ For a damage-routing change (WeaponStats SO, damage numbers):
   (12/12), do not refactor. TestDoor lives in
   `Assets/Prefabs/TestRig/` as a diagnostic stand-in until M16
   ships real FDP `COMP_Door_*` prefabs.
+- M8 — Damage numbers — done, validators green (14/14), do not
+  refactor. `Targetable.OnHit` signature is now
+  `Action<Vector3, float>` — adding more payload fields requires
+  migrating all subscribers; weigh cost before changing again.
+  When damage types arrive (fire/ice/etc.) introduce a small
+  `DamageInfo` struct in a separate intentional milestone, do
+  not bloat the event payload further.
+- `Targetable.AnyTargetableHit` static event — must remain
+  paired with `OnEnable += / OnDisable -=` in every subscriber.
+  Static event lifetime survives domain reloads; missing
+  unsubscribes leak across Play sessions.
 
 ---
 
