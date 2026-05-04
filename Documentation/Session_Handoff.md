@@ -1,4 +1,4 @@
-# Session Handoff — 2026-05-03
+# Session Handoff — 2026-05-04 (M5/M6/M7 closed 2026-05-03; M8/M9/M10/M11 closed 2026-05-04)
 
 > **Purpose of this doc.** This is the canonical "where we are right
 > now" layer that sits on top of CLAUDE.md. CLAUDE.md is the architecture
@@ -187,10 +187,100 @@ In the active test scene:
   unlocks; PlayerDeathOverlay's HandlePlayerDied unlocks for
   the death screen; scene reload re-locks via MouseLook.
 
+### Shipped post-2026-05-03 (M8 → M11)
+
+Six additional milestones landed since the original handoff date.
+Validators passed for M8 / M9 / M10. M11 validators pass; runtime
+behavior still under diagnosis (see "What's broken / pending
+observation" below).
+
+**M8 — Damage numbers / floating combat text.** `Targetable.OnHit`
+extended to `Action<Vector3, float>`; new static `AnyTargetableHit`
+fan-out. `DamageNumber.cs` + `DamageNumberSpawner.cs` (singleton
+manager subscribes once, spawns world-space TMP_Text per hit).
+14/14 validator. Builder + spawner prefab idempotent.
+
+**M9 — Stamina gameplay.** Sprint drains stamina; 0 stamina drops
+to walk; regen lifts CanSprint back. CharacterStats SO gained
+`_staminaDrainPerSecond` (25) + `_staminaRegenPerSecond` (33).
+CharacterStatsRuntime `currentStamina` int → float internally;
+public `CurrentStamina` returns `Mathf.CeilToInt`. `PlayerStamina`
+on Player root owns drain/regen Update; PullCanSprint pattern.
+PlayerController gained `IsSprintingNow` + cached `_stamina` ref;
+animator passthrough swapped to IsSprintingNow. 12/12 validator.
+
+**M10 — Basic Dummy AI.** EnemyBaseController gained MoveSpeed
+(Float) + Attack (Trigger), Locomotion (1D blend tree
+Idle@0/MoveFWD@1) + Attack (Attack01_SwordAndShiled —
+typo'd sub-asset name preserved per M3 swap notes). EnemyAI
+(NavMeshAgent + FSM Idle/Chase/Attack/Cooldown). NavMesh baked
+via modern AI Navigation 2.x `NavMeshSurface` — `_NavMeshSurface`
+GameObject in scene + NavMeshModifier(ignoreFromBuild=true) on
+NavMeshAgent / CharacterController objects. EnemyAnimationEventAbsorber
+(no-op) on MaleCharacterPBR child. 16/16 validator.
+
+**M11 — Player takes damage.** EnemyAnimationEventAbsorber
+deleted; replaced by EnemyAnimationEventForwarder (routes
+events to EnemyCombat). EnemyCombat (mirror of PlayerCombat
+hitbox path; IsDead + friendly-fire `CompareTag("Player")`
+guards). EnemyHitboxRelay. EnemyWeaponHitbox child under
+weapon_r (BoxCollider trigger+disabled, kinematic Rigidbody
+required for OnTriggerEnter, EnemyHitboxRelay._combat wired).
+PlayerHitReaction subscribes to its own Targetable.OnHit, calls
+PlayerCombat.TakeHit (no stagger window per Q4). Player_MaleHero
+gained Targetable + PlayerHitReaction; CharacterController.radius
+bumped 0.3 → 0.4 (Q5) for symmetric combat reach via
+`PlayerCapsuleTuner`. 17/17 validator (compile + wiring layer).
+
+**M11 post-tune (post-validator pass).** EnemyAI defaults bumped:
+`_attackRange` 1.8 → 1.3, `_stoppingDistance` 1.5 → 1.0.
+DummyPrefabBuilder `agent.stoppingDistance` 1.5 → 1.0 (matches).
+Original 1.8/1.5 placed Dummy beyond the EnemyWeaponHitbox arc
+reach (~1.2m forward of Dummy pivot at peak swing); swings
+landed in air. New defaults give 0.5m capsule-edge overlap at
+peak swing for consistent hits. **Requires `LevelGen ▶ Combat ▶
+Build Dummy Prefab` to rebuild with the new SerializeField
+defaults** (existing prefab still carries the old serialized
+1.8/1.5 until rebuilt).
+
 ### What's broken / pending observation
 
-Nothing flagged. Combat + interact + death loops all live and
-stable.
+**M11 runtime damage routing — under diagnosis as of session
+end.** User reports: post-tune the Dummy now closes to contact
+range and the sword visibly passes through the Player body, but
+no damage applies and no GetHit01 flinch animation plays.
+EnemyCombatValidator passes 17/17 at the wiring layer, so the
+build-time graph is correct — the failure is somewhere in the
+runtime chain. Likely candidates (in diagnostic order):
+
+1. User may not have run all M11 player-side adders. Required
+   menus, in order:
+   - `LevelGen ▶ Player ▶ Add Targetable to Player_MaleHero Prefab`
+   - `LevelGen ▶ Player ▶ Add PlayerHitReaction to Player_MaleHero Prefab`
+   - `LevelGen ▶ Player ▶ Tune CharacterController for Hit Reception`
+   - `LevelGen ▶ Combat ▶ Build Dummy Prefab` (rebuilds with M11
+     EnemyCombat + Forwarder + EnemyWeaponHitbox + post-tune ranges)
+2. AnimationEvent dispatch on Dummy's Attack01 clip — if the
+   `OnHitboxOpen` / `OnHitboxClose` events were lost from the
+   FBX `.meta` somehow, the Forwarder never fires and the
+   BoxCollider never enables.
+3. EnemyWeaponHitbox child or its kinematic Rigidbody missing
+   from the Dummy prefab post-rebuild — would cause OnTriggerEnter
+   to silently never fire (M3 lesson: kinematic Rigidbody is
+   required for trigger-on-moving-collider events).
+4. Friendly-fire guard `stats.CompareTag("Player")` failing
+   because the Player root tag is something other than "Player".
+
+Next-session-CC's first move: ask user to run
+`LevelGen ▶ Combat ▶ Validate Enemy Combat` and paste output;
+confirm Inspector state of Player_MaleHero (Targetable +
+PlayerHitReaction present?) and Dummy (EnemyCombat on root?
+Forwarder on MaleCharacterPBR child? EnemyWeaponHitbox child
+under weapon_r with all three components?). If all wiring is
+correct, add temporary debug logs in
+`EnemyAnimationEventForwarder.OnHitboxOpen` and
+`EnemyCombat.NotifyHitboxTriggered` to pinpoint which link
+fails at runtime.
 
 ---
 

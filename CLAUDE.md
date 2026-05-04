@@ -2591,9 +2591,17 @@ EnemyAI.cs (NEW, `LevelGen.Combat`):
 (Idle/Chase/Attack/Cooldown). SerializeFields: `_animator`
 (auto-resolved on Reset to a child Animator), `_playerTag`
 (default "Player"), three ranges (`_detectionRange=8`,
-`_attackRange=1.8`, `_leashRange=15`), three movement values
-(`_chaseSpeed=2.5`, `_stoppingDistance=1.5`, `_turnSpeed=540`),
+`_attackRange=1.3`, `_leashRange=15`), three movement values
+(`_chaseSpeed=2.5`, `_stoppingDistance=1.0`, `_turnSpeed=540`),
 one combat value (`_attackCooldown=1.5`).
+**Note**: `_attackRange` + `_stoppingDistance` were tuned down
+post-M11 from 1.8 / 1.5 → 1.3 / 1.0 because the original
+distance placed the Dummy beyond the EnemyWeaponHitbox arc
+reach (~1.2m forward of Dummy pivot at peak swing); swings
+landed in air. New defaults give 0.5m capsule-edge overlap
+at peak swing for consistent hits. DummyPrefabBuilder seeds
+`agent.stoppingDistance = 1.0` to match (EnemyAI.Awake
+overrides at runtime; the seed is for inspector consistency).
 Awake resolves siblings + does initial agent setup. Start
 finds Player by tag (PlayerHUD-style retry coroutine if not
 yet spawned). Update: early-returns on `_stats.IsDead` (M4-B
