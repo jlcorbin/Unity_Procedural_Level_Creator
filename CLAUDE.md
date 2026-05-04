@@ -2526,6 +2526,193 @@ Deferred:
 - Stamina-locked combos / blocking systems
 - WeaponStats SO with per-weapon stamina costs
 
+## M10 — Basic Dummy AI (2026-05-04)
+
+First reactive enemy behavior with initiative. Through M9 the
+Dummy was stationary — Animator with Idle / Hit / Death only.
+M10 wires a NavMeshAgent + per-frame FSM so the Dummy can
+detect the player, chase, attack on cooldown, and leash back
+to Idle. Damage routing TO the player remains M11's territory;
+M10's attack swings fire AnimationEvents that are absorbed by
+a no-op stub.
+
+Architectural decisions (locked):
+- Full FSM package this milestone: movement (NavMeshAgent),
+  Animator locomotion state (1D blend tree on MoveSpeed), Attack
+  state, AI FSM (Idle / Chase / Attack / Cooldown). NO damage to
+  player.
+- NavMeshAgent + baked NavMesh in the test scene. Editor menu
+  `LevelGen ▶ Combat ▶ Bake Test Scene NavMesh` creates a
+  `_NavMeshSurface` GameObject with the modern AI Navigation
+  2.x package (`Unity.AI.Navigation.NavMeshSurface`,
+  CollectObjects=All, useGeometry=PhysicsColliders) and bakes.
+- FSM with three tunable ranges: detection (Idle→Chase trigger),
+  attack (Chase→Attack trigger), leash (Chase→Idle trigger).
+  Asymmetric `_stoppingDistance < _attackRange` — agent stops
+  sliding before the FSM range fires, so Chase→Attack isn't
+  jittery at the boundary.
+- Reuse `Attack01_SwordAndShiled` clip (publisher's typo
+  preserved on this clip; only Idle was renamed during the M3
+  pack swap). Its embedded OnHitboxOpen / OnHitboxClose events
+  fire on the Dummy's Animator GameObject and are absorbed by
+  `EnemyAnimationEventAbsorber` until M11 ships `EnemyCombat`.
+
+Single-writer-per-Animator-parameter invariant (extended):
+  - `Hit`        — EnemyHitReaction (M4-A)
+  - `Death`      — EnemyDeath       (M4-B)
+  - `MoveSpeed`  — EnemyAI          (M10)
+  - `Attack`     — EnemyAI          (M10)
+EnemyAI joins as the third writer to disjoint parameters.
+Convention from M4-B (single-writer-per-*parameter*, not per-
+Animator) holds.
+
+M4-A interruption pattern preserved:
+  `AnyState → Hit` (`canTransitionToSelf=false`) continues to
+  interrupt the new Locomotion + Attack states. EnemyAI reads
+  `_stats.IsDead` and the Animator's current state shortNameHash
+  (== Hit) to suspend FSM tick mid-Hit. Once Hit→Idle completes,
+  FSM resumes; if MoveSpeed > 0.1 next frame the rig blends
+  back into Locomotion automatically.
+
+Single-direction dependency at each call site:
+  EnemyAI READS player Transform (tag-found at Awake),
+  Animator state (for Hit suspension), agent.velocity. WRITES
+  MoveSpeed/Attack to Animator, agent.SetDestination /
+  isStopped / velocity, transform.rotation (manual face-during-
+  Cooldown / Attack swing). Does NOT subscribe to PlayerDeath —
+  chasing a dead player is harmless in M10 (no damage applied);
+  M11 / M13 will revisit when player death needs to suppress
+  enemy aggression.
+
+EnemyAI.cs (NEW, `LevelGen.Combat`):
+`[RequireComponent(NavMeshAgent)]`,
+`[RequireComponent(CharacterStatsRuntime)]`,
+`[DisallowMultipleComponent]`. Public nested enum `State`
+(Idle/Chase/Attack/Cooldown). SerializeFields: `_animator`
+(auto-resolved on Reset to a child Animator), `_playerTag`
+(default "Player"), three ranges (`_detectionRange=8`,
+`_attackRange=1.8`, `_leashRange=15`), three movement values
+(`_chaseSpeed=2.5`, `_stoppingDistance=1.5`, `_turnSpeed=540`),
+one combat value (`_attackCooldown=1.5`).
+Awake resolves siblings + does initial agent setup. Start
+finds Player by tag (PlayerHUD-style retry coroutine if not
+yet spawned). Update: early-returns on `_stats.IsDead` (M4-B
+terminal) or `IsInHitState` (M4-A suspension); else dispatches
+to TickIdle / TickChase / TickCooldown by current state (Attack
+is owned by AttackCoroutine). Always drives MoveSpeed at end of
+Update from `agent.velocity.magnitude / _chaseSpeed`. EnterAttack
+sets agent.isStopped=true, fires Attack trigger, starts
+AttackCoroutine which polls Animator normalizedTime ≥ 0.92
+to detect anim completion (matches the controller's exitTime),
+manually faces the player each frame during the swing.
+
+EnemyAnimationEventAbsorber.cs (NEW, `LevelGen.Combat`):
+`[DisallowMultipleComponent]`. Two empty public methods:
+`OnHitboxOpen()` and `OnHitboxClose()`. Sole purpose:
+suppress the "AnimationEvent has no receiver" warnings on
+the Dummy's Animator when Attack01 plays. M11 replaces
+this with a real EnemyCombat that fires an enemy weapon
+hitbox. Method names MUST exactly match the player-side
+endpoint names — Unity dispatches AnimationEvents by
+method name, no parent walk (M4-A lesson).
+
+EnemyBaseControllerBuilder.cs: extended with two new
+parameters (MoveSpeed Float, Attack Trigger), two new
+states (Locomotion 1D blend tree on MoveSpeed: Idle@0 /
+MoveFWD_Battle_InPlace_SwordAndShield@1; Attack with
+Attack01_SwordAndShiled clip — typo preserved per M3-02A
+pack-swap notes), four new transitions (Idle→Locomotion at
+MoveSpeed>0.1 dur 0.15, Locomotion→Idle at MoveSpeed<0.1
+dur 0.15, AnyState→Attack on Attack trigger
+canTransitionToSelf=false dur 0.10, Attack→Locomotion no-cond
+exitTime 0.92 dur 0.10). Existing M4-A AnyState→Hit / Hit→Idle
+and M4-B AnyState→Death preserved. BlendTree saved as a
+sub-asset of the controller via `CreateBlendTreeInController`.
+
+DummyPrefabBuilder.cs: extended after EnemyDeath wiring with:
+NavMeshAgent (radius 0.4, height 1.8 to match CapsuleCollider;
+speed 2.5, stoppingDistance 1.5, angularSpeed 540, acceleration
+12, autoBraking true, updateRotation true), EnemyAI (with
+`_animator` SerializedObject-wired to the MaleCharacterPBR
+child Animator — Reset() doesn't fire on programmatic
+AddComponent; M6 lesson), and EnemyAnimationEventAbsorber
+on the MaleCharacterPBR child (so AnimationEvents from
+Attack01 have a receiver). New helper `AssignEnemyAIRefs`
+mirrors the existing `AssignEnemyDeathRefs` pattern. Build
+log line updated to enumerate the new components.
+
+EnemyAINavMeshBaker.cs (NEW, editor): menu
+`LevelGen ▶ Combat ▶ Bake Test Scene NavMesh`. Edit-mode
+only (early-returns + logs error if Application.isPlaying).
+Walks the active scene, adds NavMeshModifier(ignoreFromBuild=true)
+to any GameObject with NavMeshAgent or CharacterController
+(excludes Player + Dummy from the bake; without this, the
+Player's CharacterController would carve a Player-shaped hole
+at its Play-mode start position). Creates or reuses a single
+`_NavMeshSurface` GameObject in the active scene; bakes via
+NavMeshSurface.BuildNavMesh() (modern AI Navigation 2.x API,
+package version 2.0.12). Idempotent. Marks the active scene
+dirty so the user remembers to save.
+
+Validator: `Assets/Scripts/Combat/Editor/EnemyAIValidator.cs`
+(menu `LevelGen ▶ Combat ▶ Validate Enemy AI`) — 16 read-only
+checks: EnemyAI presence + RequireComponent attributes for
+NavMeshAgent + CharacterStatsRuntime + State enum shape;
+EnemyAnimationEventAbsorber presence + OnHitboxOpen/Close
+methods (reflection); EnemyBaseController parameter shape
+(MoveSpeed Float + Attack Trigger); Locomotion state with
+BlendTree motion; Attack state with Attack01_SwordAndShiled
+clip; Idle↔Locomotion transitions with MoveSpeed conditions;
+AnyState→Attack with canTransitionToSelf=false; Attack→Locomotion
+with exitTime ≥ 0.9; Dummy.prefab NavMeshAgent presence + EnemyAI
+with `_animator` SerializedObject-wired + Absorber on child.
+Read-only — no scene mutations, no NavMesh bake (separate menu).
+Format mirrors EnemyDeathValidator.
+
+Files:
+- Assets/Scripts/Combat/EnemyAI.cs (NEW)
+- Assets/Scripts/Combat/EnemyAnimationEventAbsorber.cs (NEW)
+- Assets/Scripts/Combat/Editor/EnemyAINavMeshBaker.cs (NEW)
+- Assets/Scripts/Combat/Editor/EnemyAIValidator.cs (NEW)
+- Assets/Scripts/Combat/Editor/EnemyBaseControllerBuilder.cs
+  (4 new params/states/transitions added; M4-A + M4-B work
+  preserved verbatim)
+- Assets/Scripts/Combat/Editor/DummyPrefabBuilder.cs
+  (NavMeshAgent + EnemyAI + Absorber folded into clean-rebuild
+  pattern; AssignEnemyAIRefs SerializedObject helper added)
+- Assets/Animators/Enemy/EnemyBaseController.controller
+  (rebuilt by builder — gains MoveSpeed, Attack params, Locomotion
+  + Attack states, 4 new transitions)
+- Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab
+  (rebuilt by builder — gains NavMeshAgent + EnemyAI on root,
+  EnemyAnimationEventAbsorber on MaleCharacterPBR child)
+
+No modifications to: Player_MaleHero.prefab, any UI/HUD,
+interactables (M6/M7), M4-A/M4-B/M5/M8/M9 work. EnemyAI
+and AssassinateInteractable coexist via existing patterns —
+the Assassinate prompt only realistically fires when the
+Dummy is in Idle or Cooldown (during Chase the agent
+auto-rotates to face the player, defeating the back-arc check).
+
+Pending follow-up:
+- M11: replace EnemyAnimationEventAbsorber with EnemyCombat
+  that fires an enemy weapon hitbox + applies player damage
+  on OnHitboxOpen.
+- Multi-target / threat tables / aggro lists.
+- Knockback beyond the existing M4-A Hit reaction.
+- NavMeshObstacle on TestDoor when in open state (M16's
+  territory once real doors arrive).
+- Enemy-distinct attack animations (M14 — currently shares
+  the Player's Attack01 clip).
+- Patrol routes / waypoint behavior.
+- Performance audit if multiple Dummies are placed (Update
+  cost per agent is fine for one but FindGameObjectWithTag
+  per-spawn is wasteful for swarms — cache the player Transform
+  in a singleton).
+- EnemyAI doesn't subscribe to PlayerDeath — chasing a dead
+  player is acceptable in M10 since no damage applies. M11 /
+  M13 will revisit.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

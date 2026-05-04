@@ -293,7 +293,7 @@ For a damage-routing change (WeaponStats SO, damage numbers):
 ## Things to leave alone
 
 - M1 + M2-A + M2-B + M2-C + M3 + M4-A + M4-B + M5 + M6 + M7 +
-  M8 + M9 — verified working, do not refactor.
+  M8 + M9 + M10 — verified working, do not refactor.
 - The 7 V1 cleanup commits and their history — done, merged,
   stable.
 - `Assets/Scripts/Experimental/` — dormant, don't reference
@@ -348,6 +348,22 @@ For a damage-routing change (WeaponStats SO, damage numbers):
   sprint state. The Animator (step 9) reads this, NOT
   `_input.IsSprinting` — passing raw input would play Sprint
   clip while physically walking when stamina is empty.
+- M10 — Dummy AI FSM — done, validators green (16/16), do
+  not refactor.
+- `EnemyAnimationEventAbsorber` is a M10-only stub. M11 will
+  replace it with `EnemyCombat`. Don't add hitbox / damage
+  logic to the absorber — keep the bodies empty.
+- `NavMeshAgent` on Dummy is authoritative for position. Don't
+  also add a CharacterController or move via transform.position;
+  agent owns it.
+- `Attack01_SwordAndShiled` clip retains the publisher's typo
+  (only Idle was renamed during M3 pack swap). Use the typo'd
+  name when looking up the sub-asset, not "Attack01_SwordAndShield".
+- The NavMesh bake (`LevelGen ▶ Combat ▶ Bake Test Scene NavMesh`)
+  is edit-mode only and adds a `_NavMeshSurface` GameObject +
+  NavMeshModifier(ignoreFromBuild=true) components to scene
+  objects with NavMeshAgent or CharacterController. Don't delete
+  these out of the test scene without re-baking.
 
 ---
 

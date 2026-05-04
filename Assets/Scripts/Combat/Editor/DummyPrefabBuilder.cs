@@ -14,6 +14,7 @@
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using UnityEngine.AI;
 using LevelGen.Combat;
 using LevelGen.Interaction;
 
@@ -139,6 +140,38 @@ namespace LevelGen.Combat.EditorTools
             var enemyDeath = root.AddComponent<EnemyDeath>();
             AssignEnemyDeathRefs(enemyDeath, animator, capsule, hitReaction);
 
+            // ── M10: NavMeshAgent (movement) ────────────────────────────────
+            // Authoritative for position once added — Dummy must NOT also
+            // gain a CharacterController. Height + radius mirror the
+            // CapsuleCollider so the agent's collision footprint matches
+            // its physics footprint.
+            var agent = root.AddComponent<NavMeshAgent>();
+            agent.height            = 1.8f;
+            agent.radius            = 0.4f;
+            agent.baseOffset        = 0f;
+            agent.speed             = 2.5f;   // matches EnemyAI._chaseSpeed default
+            agent.angularSpeed      = 540f;
+            agent.acceleration      = 12f;
+            agent.stoppingDistance  = 1.5f;   // matches EnemyAI._stoppingDistance default
+            agent.autoBraking       = true;
+            agent.updateRotation    = true;
+            agent.updatePosition    = true;
+
+            // ── M10: EnemyAI (FSM + sole writer to MoveSpeed + Attack) ──────
+            // Subscribes to nothing; reads player by tag at Awake. _animator
+            // is wired via SerializedObject (Reset() doesn't fire on
+            // programmatic AddComponent — M6 lesson).
+            var enemyAI = root.AddComponent<EnemyAI>();
+            AssignEnemyAIRefs(enemyAI, animator);
+
+            // ── M10: EnemyAnimationEventAbsorber on the Animator's GO ───────
+            // Attack01 clip carries OnHitboxOpen / OnHitboxClose
+            // AnimationEvents from the Player's M3 hitbox wiring. Without
+            // a receiver on the Animator's GO, Unity logs warnings every
+            // swing (events don't walk parents — M4-A lesson). M11 will
+            // replace this absorber with a real EnemyCombat.
+            character.AddComponent<EnemyAnimationEventAbsorber>();
+
             // ── M6: _AssassinateZone child (interact system) ────────────────
             // Sphere trigger + AssassinateInteractable on a separate child
             // GameObject so it doesn't share the body collider's physics
@@ -173,9 +206,10 @@ namespace LevelGen.Combat.EditorTools
                 $"  CharacterStats_Master: {AssetDatabase.LoadAssetAtPath<CharacterStats>(MasterStatsPath)?.name ?? "(missing)"}\n" +
                 $"  CharacterStats_Dummy:  {dummyStats.name} (HP={dummyStats.maxHP}, Stamina={dummyStats.maxStamina})\n" +
                 $"  Animator controller:   {baseController.name}\n" +
-                $"  Components on root:    CharacterStatsRuntime, Targetable, CapsuleCollider, EnemyHitReaction, EnemyDeath\n" +
+                $"  Components on root:    CharacterStatsRuntime, Targetable, CapsuleCollider, EnemyHitReaction, EnemyDeath, NavMeshAgent, EnemyAI\n" +
+                $"  Components on child:   EnemyAnimationEventAbsorber (M10 stub for OnHitboxOpen/Close)\n" +
                 $"  Child:                 _AssassinateZone (SphereCollider trigger + AssassinateInteractable)\n" +
-                $"  No player control scripts. Drop into a scene and press Play to see Idle."
+                $"  Drop into a scene with a baked NavMesh ('LevelGen ▶ Combat ▶ Bake Test Scene NavMesh') and press Play."
             );
         }
 
@@ -318,6 +352,26 @@ namespace LevelGen.Combat.EditorTools
             Wire("hitReaction",   hitReaction);
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(death);
+        }
+
+        /// <summary>
+        /// Wires the private <c>_animator</c> SerializeField on EnemyAI
+        /// (M10) via SerializedObject. Other EnemyAI fields keep their
+        /// SerializeField defaults — tunables (ranges, speeds, cooldown)
+        /// are intentionally inspector-tunable, not builder-baked.
+        /// </summary>
+        private static void AssignEnemyAIRefs(EnemyAI ai, Animator animator)
+        {
+            var so = new SerializedObject(ai);
+            var prop = so.FindProperty("_animator");
+            if (prop == null)
+            {
+                Debug.LogError("[DummyPrefabBuilder] EnemyAI has no '_animator' serialized field.");
+                return;
+            }
+            prop.objectReferenceValue = animator;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(ai);
         }
 
         private static void EnsureFolder(string parent, string name)
