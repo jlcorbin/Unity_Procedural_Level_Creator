@@ -293,7 +293,7 @@ For a damage-routing change (WeaponStats SO, damage numbers):
 ## Things to leave alone
 
 - M1 + M2-A + M2-B + M2-C + M3 + M4-A + M4-B + M5 + M6 + M7 +
-  M8 + M9 + M10 — verified working, do not refactor.
+  M8 + M9 + M10 + M11 — verified working, do not refactor.
 - The 7 V1 cleanup commits and their history — done, merged,
   stable.
 - `Assets/Scripts/Experimental/` — dormant, don't reference
@@ -364,6 +364,35 @@ For a damage-routing change (WeaponStats SO, damage numbers):
   NavMeshModifier(ignoreFromBuild=true) components to scene
   objects with NavMeshAgent or CharacterController. Don't delete
   these out of the test scene without re-baking.
+- M11 — Player takes damage — done, validators green (16/16),
+  do not refactor.
+- `EnemyCombat` is per-enemy; new enemies copy the pattern.
+  Do not generalize until the third duplicate exists (rule of
+  three).
+- The friendly-fire guard `stats.CompareTag("Player")` in
+  `EnemyCombat.NotifyHitboxTriggered` is a hard-coded "Player
+  only" filter. Removing it is a future M-Factions milestone.
+  Don't soften it casually — without it, two Dummies in melee
+  range damage each other on swings.
+- The IsDead guard at the top of
+  `EnemyCombat.NotifyHitboxTriggered` preserves M5's terminal-
+  Death semantic (no corpse-flinch). Don't remove.
+- `EnemyAnimationEventForwarder` REPLACED the M10 absorber.
+  The absorber file is deleted. Don't recreate it — if you
+  need a no-op stub for a new enemy clip, copy the Forwarder
+  pattern with `_combat = null` tolerated.
+- `Player_MaleHero.prefab` now carries Targetable +
+  PlayerHitReaction. Targetable is bidirectional (Player and
+  Enemy both publish OnHit / AnyTargetableHit) — code that
+  filters "is this a player or enemy hit" must check tags or
+  components, NOT the presence of Targetable.
+- `Player_MaleHero.prefab` CharacterController.radius = 0.4
+  (bumped from 0.3 in M11 Q5 for hit-reception reach matching
+  the Dummy's CapsuleCollider). DON'T revert to 0.3 without
+  first tuning the alternative — separate hit-reception
+  CapsuleCollider while keeping CC at 0.3 for narrow-gap
+  movement. EnemyCombatValidator check 17 enforces the lower
+  bound (>= 0.35).
 
 ---
 

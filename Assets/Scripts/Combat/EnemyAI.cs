@@ -53,8 +53,12 @@ namespace LevelGen.Combat
         [Tooltip("Distance at which Idle → Chase fires. Default 8m.")]
         [SerializeField] private float _detectionRange = 8.0f;
 
-        [Tooltip("Distance at which Chase → Attack fires. Default 1.8m.")]
-        [SerializeField] private float _attackRange = 1.8f;
+        [Tooltip("Distance at which Chase → Attack fires. Default 1.3m. " +
+                 "Tuned post-M11 — original 1.8m placed Dummy beyond the " +
+                 "EnemyWeaponHitbox arc reach (~1.2m forward of Dummy pivot " +
+                 "at peak swing); swings landed in air. 1.3m gives 0.5m " +
+                 "capsule-edge overlap at peak swing for consistent hits.")]
+        [SerializeField] private float _attackRange = 1.3f;
 
         [Tooltip("Distance at which Chase → Idle fires (player escaped). Default 15m.")]
         [SerializeField] private float _leashRange = 15.0f;
@@ -65,8 +69,8 @@ namespace LevelGen.Combat
 
         [Tooltip("NavMeshAgent.stoppingDistance during Chase. Slightly less " +
                  "than _attackRange so the agent doesn't oscillate at the boundary. " +
-                 "Default 1.5m.")]
-        [SerializeField] private float _stoppingDistance = 1.5f;
+                 "Default 1.0m (post-M11 tune).")]
+        [SerializeField] private float _stoppingDistance = 1.0f;
 
         [Tooltip("Degrees/sec for manual Quaternion.RotateTowards while agent is " +
                  "stopped (Cooldown + Attack). Default 540°/s.")]

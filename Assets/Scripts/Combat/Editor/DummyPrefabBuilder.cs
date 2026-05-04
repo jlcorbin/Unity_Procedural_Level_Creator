@@ -152,7 +152,7 @@ namespace LevelGen.Combat.EditorTools
             agent.speed             = 2.5f;   // matches EnemyAI._chaseSpeed default
             agent.angularSpeed      = 540f;
             agent.acceleration      = 12f;
-            agent.stoppingDistance  = 1.5f;   // matches EnemyAI._stoppingDistance default
+            agent.stoppingDistance  = 1.0f;   // matches EnemyAI._stoppingDistance default (post-M11 tune)
             agent.autoBraking       = true;
             agent.updateRotation    = true;
             agent.updatePosition    = true;
@@ -164,13 +164,28 @@ namespace LevelGen.Combat.EditorTools
             var enemyAI = root.AddComponent<EnemyAI>();
             AssignEnemyAIRefs(enemyAI, animator);
 
-            // ── M10: EnemyAnimationEventAbsorber on the Animator's GO ───────
-            // Attack01 clip carries OnHitboxOpen / OnHitboxClose
-            // AnimationEvents from the Player's M3 hitbox wiring. Without
-            // a receiver on the Animator's GO, Unity logs warnings every
-            // swing (events don't walk parents — M4-A lesson). M11 will
-            // replace this absorber with a real EnemyCombat.
-            character.AddComponent<EnemyAnimationEventAbsorber>();
+            // ── M11: EnemyCombat (sole owner of enemy weapon hitbox) ────────
+            // Replaces the M10 EnemyAnimationEventAbsorber stub. Owns the
+            // hitbox enable/disable + per-swing hit list + damage routing.
+            // The _hitbox SerializeField is wired below after the
+            // EnemyWeaponHitbox child is built.
+            var enemyCombat = root.AddComponent<EnemyCombat>();
+
+            // ── M11: EnemyAnimationEventForwarder on the Animator's GO ──────
+            // Replaces the M10 absorber with a real consumer. Forwards
+            // OnHitboxOpen/Close events from Attack01_SwordAndShiled to
+            // EnemyCombat on the prefab root (Unity dispatches AnimationEvents
+            // to the Animator's GO only — M4-A lesson).
+            var forwarder = character.AddComponent<EnemyAnimationEventForwarder>();
+            AssignForwarderCombatRef(forwarder, enemyCombat);
+
+            // ── M11: EnemyWeaponHitbox child under weapon_r ─────────────────
+            // Mirror of Player's WeaponHitbox setup. Trigger BoxCollider
+            // (default disabled) + kinematic Rigidbody (REQUIRED for
+            // OnTriggerEnter to fire on a moving collider — M3 lesson) +
+            // EnemyHitboxRelay routing into EnemyCombat. Wires
+            // EnemyCombat._hitbox back to this BoxCollider as the final step.
+            BuildEnemyWeaponHitbox(character, enemyCombat);
 
             // ── M6: _AssassinateZone child (interact system) ────────────────
             // Sphere trigger + AssassinateInteractable on a separate child
@@ -206,9 +221,10 @@ namespace LevelGen.Combat.EditorTools
                 $"  CharacterStats_Master: {AssetDatabase.LoadAssetAtPath<CharacterStats>(MasterStatsPath)?.name ?? "(missing)"}\n" +
                 $"  CharacterStats_Dummy:  {dummyStats.name} (HP={dummyStats.maxHP}, Stamina={dummyStats.maxStamina})\n" +
                 $"  Animator controller:   {baseController.name}\n" +
-                $"  Components on root:    CharacterStatsRuntime, Targetable, CapsuleCollider, EnemyHitReaction, EnemyDeath, NavMeshAgent, EnemyAI\n" +
-                $"  Components on child:   EnemyAnimationEventAbsorber (M10 stub for OnHitboxOpen/Close)\n" +
-                $"  Child:                 _AssassinateZone (SphereCollider trigger + AssassinateInteractable)\n" +
+                $"  Components on root:    CharacterStatsRuntime, Targetable, CapsuleCollider, EnemyHitReaction, EnemyDeath, NavMeshAgent, EnemyAI, EnemyCombat\n" +
+                $"  Components on child:   EnemyAnimationEventForwarder (M11; replaced M10 absorber)\n" +
+                $"  Children:              _AssassinateZone (SphereCollider trigger + AssassinateInteractable),\n" +
+                $"                         weapon_r/EnemyWeaponHitbox (trigger BoxCollider + kinematic Rigidbody + EnemyHitboxRelay)\n" +
                 $"  Drop into a scene with a baked NavMesh ('LevelGen ▶ Combat ▶ Bake Test Scene NavMesh') and press Play."
             );
         }
@@ -352,6 +368,122 @@ namespace LevelGen.Combat.EditorTools
             Wire("hitReaction",   hitReaction);
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(death);
+        }
+
+        /// <summary>
+        /// Wires the private <c>_combat</c> SerializeField on the M11
+        /// EnemyAnimationEventForwarder via SerializedObject. The
+        /// Forwarder's Reset() resolves it via GetComponentInParent,
+        /// but Reset doesn't fire on programmatic AddComponent (M6
+        /// lesson) — wire explicitly.
+        /// </summary>
+        private static void AssignForwarderCombatRef(EnemyAnimationEventForwarder forwarder, EnemyCombat combat)
+        {
+            var so = new SerializedObject(forwarder);
+            var prop = so.FindProperty("_combat");
+            if (prop == null)
+            {
+                Debug.LogError("[DummyPrefabBuilder] EnemyAnimationEventForwarder has no '_combat' serialized field.");
+                return;
+            }
+            prop.objectReferenceValue = combat;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(forwarder);
+        }
+
+        // ── M11: EnemyWeaponHitbox child build ──────────────────────────────
+
+        // Mirror of Player WeaponHitbox dimensions (PlayerCombatHitboxBuilder).
+        // Same rig, same weapon mesh — same numbers. If a future enemy uses a
+        // different weapon, fork these per-prefab.
+        private static readonly Vector3 EnemyHitboxSize   = new Vector3(0.15f, 0.15f, 0.8f);
+        private static readonly Vector3 EnemyHitboxCenter = new Vector3(0f, 0f, 0.4f);
+        private const string EnemyHitboxName = "EnemyWeaponHitbox";
+
+        // Same bone-name candidates as Player. SwordAndShield is right-handed.
+        private static readonly string[] WeaponAttachCandidates =
+            { "weapon_r", "weapon_l", "Weapon_R", "Weapon_L" };
+
+        /// <summary>
+        /// Builds the EnemyWeaponHitbox child under the Dummy's weapon_r
+        /// bone: trigger BoxCollider (default disabled), kinematic
+        /// Rigidbody (REQUIRED for OnTriggerEnter to fire on a child
+        /// collider that moves via skeletal animation — M3 lesson),
+        /// EnemyHitboxRelay routing into EnemyCombat. Wires
+        /// EnemyCombat._hitbox back to the BoxCollider as the final step.
+        /// </summary>
+        private static void BuildEnemyWeaponHitbox(GameObject character, EnemyCombat combat)
+        {
+            Transform attach = null;
+            foreach (var candidate in WeaponAttachCandidates)
+            {
+                attach = FindByNameRecursive(character.transform, candidate);
+                if (attach != null) break;
+            }
+            if (attach == null)
+            {
+                Debug.LogError("[DummyPrefabBuilder] Could not find a weapon attach Transform " +
+                               $"in the Dummy's MaleCharacterPBR hierarchy. Looked for: " +
+                               $"{string.Join(", ", WeaponAttachCandidates)}. Aborting hitbox build — " +
+                               "Dummy attacks will swing but produce no damage.");
+                return;
+            }
+
+            var hitboxGO = new GameObject(EnemyHitboxName);
+            hitboxGO.transform.SetParent(attach, worldPositionStays: false);
+            hitboxGO.transform.localPosition = Vector3.zero;
+            hitboxGO.transform.localRotation = Quaternion.identity;
+            hitboxGO.transform.localScale    = Vector3.one;
+
+            // Trigger BoxCollider — default disabled, opened by OnHitboxOpen.
+            var box = hitboxGO.AddComponent<BoxCollider>();
+            box.isTrigger = true;
+            box.enabled   = false;
+            box.size      = EnemyHitboxSize;
+            box.center    = EnemyHitboxCenter;
+
+            // Kinematic Rigidbody — required for OnTriggerEnter on a moving
+            // child collider. CharacterController/CapsuleCollider on the root
+            // doesn't promote deeply-nested child triggers to "moving" status
+            // (M3 PlayerCombat lesson). Without this, no hits register.
+            var rb = hitboxGO.AddComponent<Rigidbody>();
+            rb.isKinematic            = true;
+            rb.useGravity             = false;
+            rb.interpolation          = RigidbodyInterpolation.None;
+            rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
+
+            // EnemyHitboxRelay — wires its _combat ref to the EnemyCombat
+            // on the Dummy root.
+            var relay = hitboxGO.AddComponent<EnemyHitboxRelay>();
+            var relaySo = new SerializedObject(relay);
+            var relayProp = relaySo.FindProperty("_combat");
+            if (relayProp != null)
+            {
+                relayProp.objectReferenceValue = combat;
+                relaySo.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(relay);
+            }
+
+            // EnemyCombat._hitbox → the BoxCollider on the new child.
+            var combatSo = new SerializedObject(combat);
+            var combatProp = combatSo.FindProperty("_hitbox");
+            if (combatProp != null)
+            {
+                combatProp.objectReferenceValue = box;
+                combatSo.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(combat);
+            }
+        }
+
+        private static Transform FindByNameRecursive(Transform t, string name)
+        {
+            if (t.name == name) return t;
+            for (int i = 0; i < t.childCount; i++)
+            {
+                var hit = FindByNameRecursive(t.GetChild(i), name);
+                if (hit != null) return hit;
+            }
+            return null;
         }
 
         /// <summary>

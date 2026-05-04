@@ -145,6 +145,8 @@ GameObject:
   - component: {fileID: 591434831812124673}
   - component: {fileID: 3264592027165444400}
   - component: {fileID: 8290369208630840535}
+  - component: {fileID: 3219087348191161339}
+  - component: {fileID: 8086742987803153890}
   m_Layer: 0
   m_Name: Player_MaleHero
   m_TagString: Player
@@ -188,7 +190,7 @@ CharacterController:
   m_Enabled: 1
   serializedVersion: 3
   m_Height: 1.8
-  m_Radius: 0.3
+  m_Radius: 0.4
   m_SlopeLimit: 45
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
@@ -522,6 +524,30 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 00075b0bb0f0bbe4dab21ea545c1625e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerStamina
+--- !u!114 &3219087348191161339
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6538583370653109147}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9290597d32d0ac94d9475b3547cf3a79, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Combat.Targetable
+--- !u!114 &8086742987803153890
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6538583370653109147}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 159f64e355493d6499062203b1cbef68, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerHitReaction
 --- !u!1001 &6200006254089946178
 PrefabInstance:
   m_ObjectHideFlags: 0

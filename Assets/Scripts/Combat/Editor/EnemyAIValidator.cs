@@ -23,7 +23,10 @@ namespace LevelGen.Combat.EditorTools
     public static class EnemyAIValidator
     {
         private const string EnemyAIPath          = "Assets/Scripts/Combat/EnemyAI.cs";
-        private const string AbsorberPath         = "Assets/Scripts/Combat/EnemyAnimationEventAbsorber.cs";
+        // M11 swap: Absorber path retained as a constant just so the
+        // detail string says something sensible if the script vanishes
+        // (validator now expects the Forwarder; Absorber.cs is gone).
+        private const string AbsorberPath         = "Assets/Scripts/Combat/EnemyAnimationEventForwarder.cs";
         private const string EnemyControllerPath  = "Assets/Animators/Enemy/EnemyBaseController.controller";
         private const string DummyPrefabPath      = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
         private const string AttackClipName       = "Attack01_SwordAndShiled"; // typo preserved per pack swap notes
@@ -89,12 +92,16 @@ namespace LevelGen.Combat.EditorTools
             }
             Check("4 EnemyAI.State enum has Idle/Chase/Attack/Cooldown", ok4, detail4);
 
-            // ── 5: EnemyAnimationEventAbsorber + OnHitboxOpen/Close methods ─
+            // ── 5: EnemyAnimationEventForwarder + OnHitboxOpen/Close methods ─
+            // M11 replaced the M10 Absorber with the Forwarder. The
+            // Absorber.cs file is now deleted; the Forwarder fills the
+            // same Animator-GO-receiver role but routes events to
+            // EnemyCombat instead of discarding them.
             bool ok5 = AssetDatabase.LoadAssetAtPath<MonoScript>(AbsorberPath) != null;
             string detail5 = ok5 ? AbsorberPath : $"missing at {AbsorberPath}";
             if (ok5)
             {
-                var absType = typeof(EnemyAnimationEventAbsorber);
+                var absType = typeof(EnemyAnimationEventForwarder);
                 var openM   = absType.GetMethod("OnHitboxOpen",
                     BindingFlags.Public | BindingFlags.Instance,
                     null, System.Type.EmptyTypes, null);
@@ -106,7 +113,7 @@ namespace LevelGen.Combat.EditorTools
                     ? "OnHitboxOpen + OnHitboxClose both public/parameterless"
                     : $"OnHitboxOpen={openM != null}, OnHitboxClose={closeM != null}";
             }
-            Check("5 EnemyAnimationEventAbsorber present + OnHitboxOpen/Close public", ok5, detail5);
+            Check("5 EnemyAnimationEventForwarder present + OnHitboxOpen/Close public", ok5, detail5);
 
             // ── 6: EnemyBaseController has MoveSpeed (Float) param ──────────
             var enemyController = AssetDatabase.LoadAssetAtPath<AnimatorController>(EnemyControllerPath);
@@ -310,7 +317,10 @@ namespace LevelGen.Combat.EditorTools
             }
             Check("15 Dummy.prefab has EnemyAI with _animator SerializeField wired", ok15, detail15);
 
-            // ── 16: Dummy.prefab MaleCharacterPBR child has Absorber ────────
+            // ── 16: Dummy.prefab MaleCharacterPBR child has Forwarder ───────
+            // M11 swap: child now carries EnemyAnimationEventForwarder
+            // (replaced the M10 Absorber stub). EnemyCombatValidator's
+            // checks 6 + 15 cover the same ground from a different angle.
             bool ok16 = false;
             string detail16 = "Dummy prefab missing — see check 14";
             if (dummyPrefab != null)
@@ -322,15 +332,15 @@ namespace LevelGen.Combat.EditorTools
                 }
                 else
                 {
-                    var abs = animOnChild.GetComponent<EnemyAnimationEventAbsorber>();
-                    ok16 = abs != null;
+                    var fwd = animOnChild.GetComponent<EnemyAnimationEventForwarder>();
+                    ok16 = fwd != null;
                     detail16 = ok16
-                        ? $"EnemyAnimationEventAbsorber on '{animOnChild.gameObject.name}'"
-                        : $"EnemyAnimationEventAbsorber missing on '{animOnChild.gameObject.name}' — " +
+                        ? $"EnemyAnimationEventForwarder on '{animOnChild.gameObject.name}'"
+                        : $"EnemyAnimationEventForwarder missing on '{animOnChild.gameObject.name}' — " +
                           "re-run 'LevelGen ▶ Combat ▶ Build Dummy Prefab'";
                 }
             }
-            Check("16 Dummy.prefab MaleCharacterPBR child has EnemyAnimationEventAbsorber", ok16, detail16);
+            Check("16 Dummy.prefab MaleCharacterPBR child has EnemyAnimationEventForwarder (M11)", ok16, detail16);
 
             Summary(pass, fail);
         }

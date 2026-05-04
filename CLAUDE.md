@@ -2713,6 +2713,221 @@ Pending follow-up:
   player is acceptable in M10 since no damage applies. M11 /
   M13 will revisit.
 
+## M11 — Player takes damage (2026-05-04)
+
+Closes the combat loop. Through M10 the Dummy could swing but
+the Attack-clip AnimationEvents were absorbed by a no-op stub.
+M11 replaces the absorber with real damage routing — the Dummy
+can now hurt and kill the Player. Death loop verified
+end-to-end: Dummy chases → swings → 10 damage per hit → Player
+flinches via M2-B Hit state → HUD red bar drains → 0 HP →
+M5 PlayerDeath fires → "You Died" overlay → Restart reloads.
+
+Architectural decisions (locked):
+- Q1: New `EnemyCombat` script (per-enemy) mirrors PlayerCombat's
+  hitbox+damage path verbatim. Replaces M10's
+  `EnemyAnimationEventAbsorber` on the MaleCharacterPBR child.
+  Pattern duplication accepted (rule of three: defer
+  generalization until ≥3 duplicates exist; today we have one
+  Player + one Enemy).
+- Q2: Player gains `Targetable` on root. Hits route through
+  `targetable.RaiseHit(hitPoint, dmg)`. M8 damage numbers
+  spawn over Player automatically via the static
+  `AnyTargetableHit` event — no DamageNumberSpawner edit
+  required. Bidirectional Targetable seam.
+- Q3: New `PlayerHitReaction` symmetric to `EnemyHitReaction`.
+  Subscribes to its own `Targetable.OnHit` in OnEnable, calls
+  `PlayerCombat.TakeHit()` (which sets the Hit trigger via
+  PlayerAnimator). PlayerCombat remains sole writer to the
+  Hit Animator parameter — single-writer-per-parameter
+  invariant preserved.
+- Q4: NO stagger window on PlayerHitReaction. Souls-like
+  stunlock. With one Dummy on a 1.5s cooldown stunlock isn't
+  a problem; revisit if multi-enemy playtest demands it.
+- Q5: Player CharacterController.radius bumped 0.3 → 0.4 for
+  symmetric combat reach. The CharacterController is the
+  Player's authoritative collision shape — Unity treats it as
+  non-static, so OnTriggerEnter from the Dummy's hitbox fires
+  correctly against it without a separate CapsuleCollider.
+  0.3 was tuned for narrow-gap movement; 0.4 matches the
+  Dummy's CapsuleCollider (also 0.4) and gives the
+  EnemyWeaponHitbox BoxCollider arc enough overlap window to
+  consistently land hits across the Attack01 swing. Tradeoff:
+  marginally more catch-on-corner behavior in tight geometry.
+  Revisit if level-gen environments make movement feel sticky;
+  alternative is to introduce a separate hit-reception
+  CapsuleCollider while keeping CC at 0.3 for movement.
+
+Combat ladder symmetry (post-M11):
+
+  Concept                       Player side                  Enemy side
+  ─────────────────────────────────────────────────────────────────────────────
+  Combat owner                  PlayerCombat                 EnemyCombat
+  Hitbox enable/disable         OnHitboxOpen/Close (P)       OnHitboxOpen/Close (E)
+  Hitbox child                  WeaponHitbox                 EnemyWeaponHitbox
+  Trigger relay                 HitboxRelay                  EnemyHitboxRelay
+  AnimationEvent receiver       AnimationEventForwarder      EnemyAnimationEventForwarder
+  Hittable identity             Targetable                   Targetable
+  Hit reaction script           PlayerHitReaction (M11)      EnemyHitReaction (M4-A)
+  Death pipeline                PlayerDeath (M5)             EnemyDeath (M4-B)
+  Damage default                10                           10 (mirror)
+
+Friendly-fire guard (`stats.CompareTag("Player")` inside
+`EnemyCombat.NotifyHitboxTriggered`): hard-coded "only Player
+gets hit by enemy attacks" filter. Prevents two Dummies in
+melee range from damaging each other (their CapsuleColliders
+carry CharacterStatsRuntime + Targetable too). Future
+M-Factions milestone replaces this with team / faction IDs.
+
+IsDead guard inside `EnemyCombat.NotifyHitboxTriggered`:
+critical for preserving M5's terminal-Death semantic. Without
+it, a dead Player would still receive damage events (no real
+HP harm — clamps at 0) but PlayerHitReaction would re-fire
+GetHit01, interrupting Die01. Stops corpse-flinch.
+
+Single-direction dependency at each call site:
+  EnemyCombat reads animation events + hitbox triggers; writes
+  to nothing player-side except `targetable.RaiseHit` and
+  `stats.ApplyDamage`. The Player receives the hit via its own
+  Targetable.OnHit (M8 event payload) and reacts via
+  PlayerHitReaction → PlayerCombat → PlayerAnimator. One
+  direction.
+
+Single-writer-per-Animator-parameter invariant preserved:
+  PlayerCombat (via PlayerAnimator) writes Attack / Hit / Jump /
+  Death / ComboNext. PlayerCombat.TakeHit now has TWO callers
+  (the existing public API + the new PlayerHitReaction), but
+  the parameter writer is still PlayerCombat.
+
+EnemyCombat.cs (NEW, `LevelGen.Combat`): `[DisallowMultipleComponent]`.
+SerializeFields: `_attackDamage` (int, default 10 — mirror of
+PlayerCombat.attackDamage), `_hitbox` (Collider, wired by builder).
+Public: `OnHitboxOpen()` / `OnHitboxClose()` (animation-event
+endpoints, called via the Forwarder), `NotifyHitboxTriggered(Collider)`
+(called from EnemyHitboxRelay). Per-swing
+`HashSet<Targetable> _currentAttackHitList` cleared on
+OnHitboxOpen/Close. Notify body resolves stats + targetable
+on the hit collider, applies the IsDead guard, applies the
+friendly-fire guard, applies damage, raises RaiseHit with the
+ClosestPoint-on-other-collider hit point.
+
+EnemyHitboxRelay.cs (NEW, `LevelGen.Combat`):
+`[DisallowMultipleComponent]`. SerializeField `_combat`
+(EnemyCombat, auto-resolved on Reset via GetComponentInParent).
+OnTriggerEnter forwards the colliding Collider to
+`_combat.NotifyHitboxTriggered`. Pure relay, no state.
+
+EnemyAnimationEventForwarder.cs (NEW, `LevelGen.Combat`):
+REPLACES the M10 EnemyAnimationEventAbsorber. SerializeField
+`_combat` (EnemyCombat, auto-resolved on Reset). Public
+`OnHitboxOpen()` / `OnHitboxClose()` forward to the same
+methods on `_combat`. Method names exactly match the
+PlayerCombat-side names since the Attack01 clip is shared
+(World Bundle pack, M3 swap).
+
+PlayerHitReaction.cs (NEW, `LevelGen.Player`):
+`[RequireComponent(Targetable)]`, `[DisallowMultipleComponent]`.
+Resolves Targetable + PlayerCombat + CharacterStatsRuntime via
+GetComponent in Awake. OnEnable/OnDisable subscribes /
+unsubscribes `_targetable.OnHit`. HandleHit early-returns on
+`_stats.IsDead` (defense-in-depth — PlayerCombat.TakeHit also
+guards) then calls `_combat.TakeHit()`. The damage param is
+ignored (flinch is binary, doesn't scale). No stagger window
+per Q4.
+
+EnemyAnimationEventAbsorber.cs (DELETED, M10 stub):
+`Assets/Scripts/Combat/EnemyAnimationEventAbsorber.cs` and its
+`.meta` removed. The Forwarder is a strict superset.
+
+DummyPrefabBuilder.cs: extended to add EnemyCombat to root
+after EnemyAI, replace the AddComponent of Absorber with the
+Forwarder on MaleCharacterPBR (with `_combat` SerializedObject-
+wired to the EnemyCombat on root), and build the
+EnemyWeaponHitbox child under weapon_r:
+  - GameObject `EnemyWeaponHitbox` under the bone-name match
+    (weapon_r preferred, falls back to weapon_l / Weapon_R / Weapon_L)
+  - BoxCollider: size (0.15, 0.15, 0.8), center (0, 0, 0.4),
+    isTrigger=true, enabled=false (mirrors Player WeaponHitbox)
+  - Kinematic Rigidbody (isKinematic=true, useGravity=false) —
+    REQUIRED for OnTriggerEnter to fire on a child collider that
+    moves via skeletal animation. M3 lesson; CapsuleCollider on
+    root doesn't promote deeply-nested triggers to "moving" status.
+  - EnemyHitboxRelay with `_combat` SerializedObject-wired to
+    the EnemyCombat on root.
+  - Final step: `EnemyCombat._hitbox` SerializedObject-wired to
+    the BoxCollider on the new child.
+Build summary log line updated to enumerate the new components.
+New helpers: `BuildEnemyWeaponHitbox`, `AssignForwarderCombatRef`,
+`FindByNameRecursive` (mirror of PlayerCombatHitboxBuilder's
+weapon-attach search).
+
+PlayerTakesDamagePrefabAdder.cs (NEW editor): two menu items
+folded into one file (must run in order — PlayerHitReaction
+RequireComponents Targetable):
+  - `LevelGen ▶ Player ▶ Add Targetable to Player_MaleHero Prefab`
+  - `LevelGen ▶ Player ▶ Add PlayerHitReaction to Player_MaleHero Prefab`
+Both idempotent. LoadPrefabContents → check-and-add →
+SaveAsPrefabAsset. PlayerHitReaction adder bails clearly if
+Targetable or PlayerCombat missing.
+
+Validators:
+- `EnemyCombatValidator.cs` (NEW): menu
+  `LevelGen ▶ Combat ▶ Validate Enemy Combat`. 17 read-only
+  checks covering EnemyCombat / EnemyHitboxRelay /
+  EnemyAnimationEventForwarder presence + surface; IsDead +
+  friendly-fire literal-stub source matches; absorber file
+  deleted; PlayerHitReaction presence + RequireComponent +
+  sub/unsub + TakeHit-call literal-stub matches; Player prefab
+  Targetable + PlayerHitReaction + tag; Dummy prefab EnemyCombat
+  + Forwarder on child + EnemyWeaponHitbox child fully wired
+  (BoxCollider trigger+disabled, kinematic Rigidbody,
+  EnemyHitboxRelay._combat); Player CharacterController.radius
+  >= 0.35 (Q5 regression check).
+- `EnemyAIValidator.cs` (UPDATED): check 5 + check 16 retargeted
+  to expect the Forwarder instead of the deleted Absorber.
+
+Files:
+- Assets/Scripts/Combat/EnemyCombat.cs (NEW)
+- Assets/Scripts/Combat/EnemyHitboxRelay.cs (NEW)
+- Assets/Scripts/Combat/EnemyAnimationEventForwarder.cs (NEW)
+- Assets/Scripts/Combat/EnemyAnimationEventAbsorber.cs (DELETED)
+- Assets/Scripts/Combat/Editor/EnemyCombatValidator.cs (NEW)
+- Assets/Scripts/Combat/Editor/EnemyAIValidator.cs (Forwarder swap)
+- Assets/Scripts/Combat/Editor/DummyPrefabBuilder.cs
+  (EnemyCombat fold-in, Forwarder swap, EnemyWeaponHitbox
+   child build + SerializedObject wiring)
+- Assets/Scripts/Player/PlayerHitReaction.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerTakesDamagePrefabAdder.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerCapsuleTuner.cs (NEW; Q5 — bumps
+  CharacterController.radius 0.3 → 0.4 via SerializedObject;
+  idempotent)
+- Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab
+  (gains Targetable + PlayerHitReaction via the two adder menus;
+  CharacterController.radius bumped 0.3 → 0.4 via PlayerCapsuleTuner)
+- Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab
+  (rebuilt by `Build Dummy Prefab`; gains EnemyCombat,
+   Forwarder replaces Absorber, EnemyWeaponHitbox child wired)
+
+No modifications to: Targetable.cs, CharacterStatsRuntime.cs,
+PlayerCombat.cs, PlayerAnimator.cs, PlayerBaseController.controller,
+EnemyBaseController.controller, any UI/HUD, M5 PlayerDeath,
+M8 DamageNumberSpawner, M10 EnemyAI.
+
+Pending follow-up:
+- WeaponStats SO with per-weapon damage (deferred from
+  campaign list — the "weapon variety" milestone)
+- Knockback / impact direction
+- Stagger-window on PlayerHitReaction if multi-enemy
+  stunlock becomes a problem in playtest
+- Block / dodge / parry mechanics
+- Damage type / element / resistance
+- Enemy-vs-enemy damage: remove the friendly-fire guard,
+  introduce factions / team IDs (M-Factions)
+- EnemyAI doesn't subscribe to PlayerDeath; chasing a dead
+  player still applies (no damage now thanks to the IsDead
+  guard, but cosmetically odd) — revisit when player-death
+  needs to stop enemy aggression scene-wide.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
