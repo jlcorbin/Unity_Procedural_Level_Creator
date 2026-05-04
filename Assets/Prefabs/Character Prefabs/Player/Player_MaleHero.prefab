@@ -144,6 +144,7 @@ GameObject:
   - component: {fileID: 7928440748514757523}
   - component: {fileID: 591434831812124673}
   - component: {fileID: 3264592027165444400}
+  - component: {fileID: 8290369208630840535}
   m_Layer: 0
   m_Name: Player_MaleHero
   m_TagString: Player
@@ -509,6 +510,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c79870acd66c427419c408896af79438, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerInteractor
+--- !u!114 &8290369208630840535
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6538583370653109147}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00075b0bb0f0bbe4dab21ea545c1625e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerStamina
 --- !u!1001 &6200006254089946178
 PrefabInstance:
   m_ObjectHideFlags: 0

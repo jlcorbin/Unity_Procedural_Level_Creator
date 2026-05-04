@@ -16,6 +16,14 @@ namespace LevelGen.Combat
     /// to <= 0. <see cref="Heal"/> has no caller yet; it'll get one
     /// when potions / regen ship. Heal does NOT revive — death is
     /// one-way for now.
+    ///
+    /// <see cref="SpendStamina"/> / <see cref="RegenStamina"/> are the
+    /// stamina mutation entry points (M9). Stored internally as float
+    /// so per-frame deltas (drainRate * Time.deltaTime ≈ 0.4 at 25/s
+    /// and 60fps) accumulate cleanly. <see cref="CurrentStamina"/> is
+    /// reported as <c>Mathf.CeilToInt</c> so PlayerHUD's int display
+    /// shows "1/100" while any stamina remains, and "0/100" only at
+    /// true zero — preserving the "sprintable while non-zero" semantic.
     /// </remarks>
     [DisallowMultipleComponent]
     public class CharacterStatsRuntime : MonoBehaviour
@@ -24,8 +32,10 @@ namespace LevelGen.Combat
         [Tooltip("Template this character pulls its max values from. Required.")]
         private CharacterStats stats;
 
-        [HideInInspector] [SerializeField] private int currentHP;
-        [HideInInspector] [SerializeField] private int currentStamina;
+        [HideInInspector] [SerializeField] private int   currentHP;
+        // M9: stamina is stored as float so sub-1 per-frame drain ticks
+        // accumulate without rounding-to-zero each frame.
+        [HideInInspector] [SerializeField] private float currentStamina;
 
         private bool _hasDied;
 
@@ -39,7 +49,9 @@ namespace LevelGen.Combat
 
         public CharacterStats Stats          => stats;
         public int            CurrentHP      => currentHP;
-        public int            CurrentStamina => currentStamina;
+        // CeilToInt: any stamina > 0.0 reports as >= 1, so PlayerHUD
+        // shows non-zero while sprintable; only true zero reports as 0.
+        public int            CurrentStamina => Mathf.CeilToInt(currentStamina);
         public int            MaxHP          => stats != null ? stats.maxHP      : 0;
         public int            MaxStamina     => stats != null ? stats.maxStamina : 0;
         public string         DisplayName    => stats != null ? stats.displayName : name;
@@ -60,7 +72,7 @@ namespace LevelGen.Combat
             currentStamina = stats.maxStamina;
 
             Debug.Log($"[CharacterStatsRuntime] {name} initialized as {DisplayName} " +
-                      $"(HP={currentHP}/{MaxHP}, Stamina={currentStamina}/{MaxStamina})");
+                      $"(HP={currentHP}/{MaxHP}, Stamina={CurrentStamina}/{MaxStamina})");
         }
 
         /// <summary>
@@ -98,6 +110,32 @@ namespace LevelGen.Combat
             int prev = currentHP;
             currentHP = Mathf.Clamp(currentHP + amount, 0, MaxHP);
             Debug.Log($"[CharacterStatsRuntime] {DisplayName} HP {prev} -> {currentHP}");
+        }
+
+        /// <summary>
+        /// Reduce current stamina by <paramref name="amount"/>, clamped to
+        /// >= 0. No-op if amount &lt;= 0. Mutates the underlying float
+        /// directly — callers can pass per-frame deltas like
+        /// <c>drainRate * Time.deltaTime</c> without rounding artifacts.
+        /// Sole writer: PlayerStamina (M9).
+        /// </summary>
+        public void SpendStamina(float amount)
+        {
+            if (stats == null) return;
+            if (amount <= 0f) return;
+            currentStamina = Mathf.Max(0f, currentStamina - amount);
+        }
+
+        /// <summary>
+        /// Increase current stamina by <paramref name="amount"/>, clamped
+        /// to maxStamina. No-op if amount &lt;= 0. Mutates the float
+        /// directly. Sole writer: PlayerStamina (M9).
+        /// </summary>
+        public void RegenStamina(float amount)
+        {
+            if (stats == null) return;
+            if (amount <= 0f) return;
+            currentStamina = Mathf.Min(MaxStamina, currentStamina + amount);
         }
 
         // TODO removeMe-after-stamina-and-heal-sources-exist: Inspector

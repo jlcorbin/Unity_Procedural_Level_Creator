@@ -15,5 +15,7 @@ MonoBehaviour:
   displayName: Dummy
   maxHP: 50
   maxStamina: 100
-  description: "Stationary target practice. Dies on the 2nd hit of a 2nd combo
-    (full 3-hit combo = 30 dmg) so the M4-B death sequence triggers organically."
+  description: Stationary target practice. Dies on the 2nd hit of a 2nd combo (full
+    3-hit combo = 30 dmg) so the M4-B death sequence triggers organically.
+  _staminaDrainPerSecond: 0
+  _staminaRegenPerSecond: 0

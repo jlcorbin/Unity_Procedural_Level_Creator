@@ -141,6 +141,17 @@ namespace LevelGen.Player.Editor
             // refs to wire here.
             root.AddComponent<PlayerInteractor>();
 
+            // M9: PlayerStamina — owns per-frame drain/regen for sprint.
+            // Resolves CharacterStatsRuntime + PlayerController + (optional)
+            // PlayerDeath via GetComponent in Awake; no SerializeField
+            // refs to wire here. CharacterStatsRuntime is added to the
+            // Player by `LevelGen ▶ UI ▶ Add CharacterStatsRuntime to
+            // Player_MaleHero` (PlayerHUDBuilder), so PlayerStamina's
+            // [RequireComponent(CharacterStatsRuntime)] expects that step
+            // to have been run before the next rebuild — re-run that
+            // menu after rebuilding if Inspector flags it missing.
+            root.AddComponent<PlayerStamina>();
+
             // ── Wire UnityEvent persistent listeners (TASK 3) ────────────────
             // We rebuild m_ActionEvents directly via SerializedObject because
             // PlayerInput's runtime code does NOT auto-populate that array on

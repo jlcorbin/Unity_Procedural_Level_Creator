@@ -55,7 +55,18 @@ namespace LevelGen.Player
         private PlayerInputReader _input;
         private PlayerAnimator _anim;
         private PlayerCombat _combat;        // optional — null tolerated (gate disabled)
+        private PlayerStamina _stamina;      // optional — null tolerated (sprint always allowed)
         private float _verticalVelocity;
+
+        /// <summary>
+        /// True the frame the player is actually moving at sprint speed
+        /// (input held + forward-mostly input + stamina permits). Distinct
+        /// from <see cref="PlayerInputReader.IsSprinting"/>, which is just
+        /// "is Shift held" — the input may be held but stamina-empty, which
+        /// gates this property false. PlayerStamina reads this to decide
+        /// whether to drain or regen.
+        /// </summary>
+        public bool IsSprintingNow { get; private set; }
 
         // ── Jump / grounded state ───────────────────────────────────────────
         // Resolved lazily — sibling Awake order is non-deterministic, so
@@ -79,6 +90,7 @@ namespace LevelGen.Player
             _input = GetComponent<PlayerInputReader>();
             _anim = GetComponent<PlayerAnimator>();
             _combat = GetComponent<PlayerCombat>();   // optional — null tolerated
+            _stamina = GetComponent<PlayerStamina>(); // optional — null tolerated (sprint always allowed if missing)
 
             if (cameraTransform == null)
             {
@@ -139,10 +151,13 @@ namespace LevelGen.Player
 
             // 4) Compose horizontal motion. Sprint multiplier kicks in when:
             //    - the player is holding Sprint, AND
-            //    - input is mostly forward (matches Animator gate of MoveZ > 0.7)
-            float currentSpeed = walkSpeed;
-            if (_input.IsSprinting && input.y > 0.7f)
-                currentSpeed *= sprintMultiplier;
+            //    - input is mostly forward (matches Animator gate of MoveZ > 0.7), AND
+            //    - stamina permits (M9; null-tolerant — sprint always allowed if PlayerStamina missing)
+            bool wantSprint = _input.IsSprinting
+                              && input.y > 0.7f
+                              && (_stamina == null || _stamina.CanSprint);
+            IsSprintingNow = wantSprint;
+            float currentSpeed = walkSpeed * (wantSprint ? sprintMultiplier : 1f);
             Vector3 motion = moveDirXZ * currentSpeed;
 
             // 4.5) Root in place during Attack / Hit. Animator MoveX/MoveZ
@@ -187,7 +202,10 @@ namespace LevelGen.Player
 
             // 9) Push sprint bool to animator. Read by the
             //    Locomotion → Sprint and Sprint → Locomotion transitions.
-            _anim.SetSprinting(_input.IsSprinting);
+            //    Pass IsSprintingNow (post-stamina-gate), not raw input —
+            //    otherwise the Animator would play Sprint clip while
+            //    physically walking (stamina-empty case).
+            _anim.SetSprinting(IsSprintingNow);
         }
 
         // ── Private helpers ─────────────────────────────────────────────────

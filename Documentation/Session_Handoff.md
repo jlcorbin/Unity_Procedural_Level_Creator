@@ -293,7 +293,7 @@ For a damage-routing change (WeaponStats SO, damage numbers):
 ## Things to leave alone
 
 - M1 + M2-A + M2-B + M2-C + M3 + M4-A + M4-B + M5 + M6 + M7 +
-  M8 — verified working, do not refactor.
+  M8 + M9 — verified working, do not refactor.
 - The 7 V1 cleanup commits and their history — done, merged,
   stable.
 - `Assets/Scripts/Experimental/` — dormant, don't reference
@@ -331,6 +331,23 @@ For a damage-routing change (WeaponStats SO, damage numbers):
   paired with `OnEnable += / OnDisable -=` in every subscriber.
   Static event lifetime survives domain reloads; missing
   unsubscribes leak across Play sessions.
+- M9 — Stamina gameplay — done, validators green (12/12), do
+  not refactor. CharacterStats SO carries per-character drain +
+  regen rates — adding more rate fields requires updating
+  CharacterStats_*.asset (via CharacterStatsAssetUpdater),
+  OnValidate clamps, and PlayerStamina Update logic; weigh
+  cost before adding more.
+- `CharacterStatsRuntime.currentStamina` is a float internally
+  (M9). Public `CurrentStamina` (int) returns
+  `Mathf.CeilToInt(currentStamina)` so PlayerHUD's int display
+  reads sensibly while sub-1 stamina remains. Don't change the
+  field type back to int without revisiting the per-frame drain
+  granularity (25/s × 0.016 = 0.4/frame would round to 0 each
+  frame, stamina would never move).
+- `PlayerController.IsSprintingNow` is the post-stamina-gate
+  sprint state. The Animator (step 9) reads this, NOT
+  `_input.IsSprinting` — passing raw input would play Sprint
+  clip while physically walking when stamina is empty.
 
 ---
 

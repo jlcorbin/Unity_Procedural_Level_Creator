@@ -2352,6 +2352,180 @@ Deferred:
 - Per-actor RaiseHit-Y-offset to avoid numbers spawning at
   ground level when hit point is on a low collider.
 
+## M9 — Stamina gameplay (2026-05-04)
+
+Stamina drains while sprinting, regenerates otherwise. Sprint
+becomes unavailable at 0 stamina; the player drops to walk
+even if Shift is still held. Re-engages once regen lifts
+stamina above 0. Mostly *connecting* the existing data layer
+to gameplay rather than building new architecture — the HUD's
+yellow bar already polled `currentStamina` since the
+Dummy+CharacterStats foundation milestone.
+
+Architectural decisions (locked):
+- Sprint-only stamina cost. Attack and Jump remain free. Future
+  per-action costs will require their own milestone with
+  explicit per-action SerializeFields on either CharacterStats
+  or a new StaminaCost SO.
+- Simple immediate model. Sprint stops at 0; regen happens any
+  time stamina is not actively spent. No exhausted state, no
+  delayed regen, no lockout window.
+- Per-character drain + regen rates live as SerializeFields on
+  the CharacterStats SO. Per-character tunable from day one.
+  Defaults 25/s drain, 33/s regen — 4s full→empty, ~3s
+  empty→full at maxStamina=100. Asymmetric (regen faster than
+  drain) on purpose — modern action-game convention.
+- Stored internally as float on CharacterStatsRuntime so per-
+  frame deltas (drainRate * Time.deltaTime ≈ 0.4 at 25/s and
+  60fps) accumulate cleanly. CurrentStamina is reported as
+  `Mathf.CeilToInt` so PlayerHUD's int display shows "1/100"
+  while any stamina remains, "0/100" only at true zero —
+  preserving the "sprintable while non-zero" semantic without
+  changing PlayerHUD.
+- `PlayerStamina` MonoBehaviour on Player root owns the per-
+  frame drain/regen Update. Mirrors the
+  PlayerCombat / PlayerInteractor / PlayerDeath pattern of
+  single-responsibility components on the player.
+- PullCanSprint pattern: PlayerController PULLS
+  `_stamina.CanSprint` from PlayerStamina each frame as part
+  of the sprint-engagement check; PlayerStamina PULLS sprint
+  state from PlayerController (`IsSprintingNow`). One source
+  of truth in each direction. No events — events fire once on
+  state change, but CanSprint is queried every frame anyway.
+
+Invariants preserved:
+- Single-direction dependency at each call site:
+  PlayerController → reads CanSprint → engages sprint;
+  PlayerStamina → reads IsSprintingNow → drains/regens.
+  Never the reverse at either site.
+- Single-writer-to-stamina-value: CharacterStatsRuntime is the
+  only writer to `currentStamina` (via SpendStamina /
+  RegenStamina). PlayerStamina calls those methods; it does
+  not touch the field directly.
+- HUD pattern unchanged: PlayerHUD continues to be a passive
+  observer reading CurrentStamina each frame. No event
+  subscription added; no PlayerHUD modifications at all.
+
+CharacterStats.cs: extended with two SerializeFields
+(`_staminaDrainPerSecond`, `_staminaRegenPerSecond`) +
+matching read-only public accessors
+(`StaminaDrainPerSecond`, `StaminaRegenPerSecond`). OnValidate
+extended to clamp both to >= 0 (negative regen would be a bug;
+negative drain semantically inverts the system).
+
+CharacterStatsRuntime.cs: `currentStamina` field type changed
+from int → float (M9). Public `CurrentStamina` (int) accessor
+changed from direct field return → `Mathf.CeilToInt(currentStamina)`.
+Two new public methods: `SpendStamina(float amount)` and
+`RegenStamina(float amount)`, both no-op on amount<=0, both
+mutate the float with Mathf.Max/Min clamps. Awake's debug log
+updated to use the int accessor (was the raw int field).
+
+PlayerStamina.cs (NEW, `LevelGen.Player`):
+`[RequireComponent(CharacterStatsRuntime)]`,
+`[RequireComponent(PlayerController)]`,
+`[DisallowMultipleComponent]`. `public bool CanSprint` (default
+true). Awake resolves siblings via GetComponent (no SerializeFields
+to wire). OnEnable/OnDisable subscribes to PlayerDeath.OnPlayerDied
+(belt-and-suspenders cleanup). Update reads
+`PlayerController.IsSprintingNow`; if sprinting + stamina>0,
+calls SpendStamina(drain*dt) and flips CanSprint=false on
+hitting 0. Otherwise calls RegenStamina(regen*dt) and flips
+CanSprint=true once stamina rises above 0.
+
+PlayerController.cs: cached `_stamina = GetComponent<PlayerStamina>()`
+in Awake (null-tolerant — sprint always allowed if missing).
+New public auto-property `IsSprintingNow { get; private set; }`
+— set inside Update from the `wantSprint` boolean. Sprint
+engagement gained one clause:
+`(_stamina == null || _stamina.CanSprint)`. Step 9 (animator
+SetSprinting) now passes `IsSprintingNow` instead of raw
+`_input.IsSprinting` — otherwise the Animator would play
+Sprint clip while physically walking (stamina-empty case).
+
+Player_MaleHero.prefab: gains PlayerStamina via either
+build path (`Build Player_MaleHero Prefab` — folded in alongside
+PlayerDeath / PlayerInteractor) or standalone adder
+(`PlayerStaminaPrefabAdder.cs` — one-shot menu
+`LevelGen ▶ Player ▶ Add PlayerStamina to Player_MaleHero Prefab`).
+Idempotent. Bails with clear message if CharacterStatsRuntime
+or PlayerController missing (RequireComponent prerequisites).
+
+CharacterStats_Player.asset / Master.asset / Dummy.asset:
+populated via one-shot menu
+`LevelGen ▶ Combat ▶ Set Stamina Rates on CharacterStats Assets`
+(`CharacterStatsAssetUpdater.cs`). Player + Master both get
+drain=25, regen=33; Dummy gets drain=0, regen=0 (Dummy doesn't
+sprint — values harmless but honest). Editor-script preferred
+over YAML edits (CLAUDE.md convention — hand-edited .asset
+files are fragile).
+
+Validator: `Assets/Scripts/Player/Editor/PlayerStaminaValidator.cs`
+(menu `LevelGen ▶ Player ▶ Validate Player Stamina`) — 12
+read-only checks: CharacterStats source declares both rate
+fields (literal-stub matches per M6 lesson #2); both public
+accessors via reflection; CharacterStatsRuntime.SpendStamina +
+RegenStamina via reflection; PlayerStamina presence;
+RequireComponent + DisallowMultiple attributes; CanSprint
+property type check; PlayerController source contains
+`_stamina.CanSprint` (literal-stub); Player_MaleHero.prefab
+has PlayerStamina; CharacterStats_Player.asset has both rates
+> 0 (catches the "asset wasn't run through the updater"
+misconfig). PASS / FAIL / SKIP format mirrors prior validators.
+
+Files:
+- Assets/Scripts/Combat/CharacterStats.cs (two new SerializeFields
+  + accessors + OnValidate clamps)
+- Assets/Scripts/Combat/CharacterStatsRuntime.cs (currentStamina
+  int→float; CurrentStamina returns CeilToInt; two new public
+  mutator methods)
+- Assets/Scripts/Player/PlayerController.cs (cached _stamina ref;
+  new IsSprintingNow public property; sprint engagement clause;
+  animator passthrough swapped to IsSprintingNow)
+- Assets/Scripts/Player/PlayerStamina.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerStaminaPrefabAdder.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerStaminaValidator.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs
+  (PlayerStamina AddComponent fold-in)
+- Assets/Scripts/Combat/Editor/CharacterStatsAssetUpdater.cs (NEW)
+
+No modifications to: PlayerHUD (passive observer pattern
+preserved), any animator controllers, any interactables
+(Assassinate / Open), PlayerCombat (attacks remain free per
+Q1), PlayerAnimator, PlayerInputReader, any FBX, any other
+character prefab (Dummy unchanged — no enemy stamina yet).
+
+Pending follow-up:
+- User runs `LevelGen ▶ Combat ▶ Set Stamina Rates on
+  CharacterStats Assets` (writes 25/33 to Player+Master,
+  0/0 to Dummy).
+- User runs `LevelGen ▶ Player ▶ Add PlayerStamina to
+  Player_MaleHero Prefab` (or rebuilds via Build Player_MaleHero
+  Prefab — both paths work).
+- User runs `LevelGen ▶ Player ▶ Validate Player Stamina` —
+  expect 12 PASS / 0 FAIL.
+- Sanity re-runs of all prior validators — none should
+  regress: DamageRouting 12/12, PlayerHUD 11/11,
+  DummyAndStats 12/12, EnemyHitReaction 14/14, EnemyDeath
+  16/16, MouseLook 7/7, PlayerDeath 16/16, InteractSystem
+  16/16, OpenInteractable 12/12, DamageNumbers 14/14.
+- Play-mode smoke test: HUD shows 100/100; hold W → walk, no
+  drain; hold W+Shift → sprint, bar drains over ~4s; hits 0
+  → drops to walk; bar refills; spam Shift at low stamina →
+  micro-sprints; release Shift mid-sprint → walk + regen;
+  combat + jump while sprinting → no stamina change.
+
+Deferred:
+- Attack stamina cost (locked Q1 — sprint-only model)
+- Jump stamina cost (locked Q1)
+- Exhausted state / lockout / delayed regen (locked Q2)
+- Stamina depletion VFX / SFX (HUD already shows the change)
+- Per-equipment / per-armor stamina modifiers
+- Enemy stamina (Dummy and future enemies could use the same
+  SO fields; no consumer wired yet)
+- Stamina-locked combos / blocking systems
+- WeaponStats SO with per-weapon stamina costs
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
