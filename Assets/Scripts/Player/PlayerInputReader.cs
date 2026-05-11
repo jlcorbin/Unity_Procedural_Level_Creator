@@ -57,6 +57,13 @@ namespace LevelGen.Player
         /// </summary>
         public event System.Action InteractPressed;
 
+        /// <summary>
+        /// Raised once per Dodge button press (button-down edge,
+        /// ctx.started). Subscribed to by PlayerDodge. Not raised on
+        /// hold or release.
+        /// </summary>
+        public event System.Action DodgePressed;
+
         // ── UnityEvent endpoints ─────────────────────────────────────────────
         // Wired in the inspector to UnityEngine.InputSystem.PlayerInput's
         // per-action UnityEvents. Value-type actions (Move, Look) read every
@@ -129,6 +136,18 @@ namespace LevelGen.Player
         public void OnNext(InputAction.CallbackContext ctx)
         {
             if (ctx.performed) Debug.Log("[PlayerInputReader] Next");
+        }
+
+        /// <summary>
+        /// Dodge action endpoint. Raises <see cref="DodgePressed"/> on
+        /// the started phase (the literal moment the button goes down)
+        /// rather than performed — single press only, immune to any
+        /// future Hold/Tap interactions added to the binding.
+        /// Consumed by PlayerDodge.
+        /// </summary>
+        public void OnDodge(InputAction.CallbackContext ctx)
+        {
+            if (ctx.started) DodgePressed?.Invoke();
         }
     }
 }

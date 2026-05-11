@@ -59,6 +59,7 @@ namespace LevelGen.Player.Editor
             ("Previous", "OnPrevious"),
             ("Next",     "OnNext"),
             ("Sprint",   "OnSprint"),
+            ("Dodge",    "OnDodge"),
         };
 
         // ════════════════════════════════════════════════════════════════════
@@ -151,6 +152,16 @@ namespace LevelGen.Player.Editor
             // to have been run before the next rebuild — re-run that
             // menu after rebuilding if Inspector flags it missing.
             root.AddComponent<PlayerStamina>();
+
+            // M12: PlayerDodge — owns the directional 4-way roll.
+            // Resolves CharacterController + CharacterStatsRuntime +
+            // PlayerInputReader (RequireComponent) + (optional)
+            // PlayerCombat / PlayerAnimator / PlayerDeath via
+            // GetComponent in Awake. No SerializeField refs to wire
+            // here. Like PlayerStamina, depends on CharacterStatsRuntime
+            // being present — re-run the Add CharacterStatsRuntime
+            // menu after rebuild if Inspector flags missing.
+            root.AddComponent<PlayerDodge>();
 
             // ── Wire UnityEvent persistent listeners (TASK 3) ────────────────
             // We rebuild m_ActionEvents directly via SerializedObject because

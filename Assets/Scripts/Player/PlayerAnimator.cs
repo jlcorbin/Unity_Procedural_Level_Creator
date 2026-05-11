@@ -30,6 +30,8 @@ namespace LevelGen.Player
         private const string ParamIsGrounded  = "IsGrounded";
         private const string ParamComboNext   = "ComboNext";
         private const string ParamDeath       = "Death";
+        private const string ParamDodgeTrigger   = "DodgeTrigger";
+        private const string ParamDodgeDirection = "DodgeDirection";
 
         // ── Cached state ────────────────────────────────────────────────────
         private Animator _animator;
@@ -43,6 +45,8 @@ namespace LevelGen.Player
         private int _hashIsGrounded;
         private int _hashComboNext;
         private int _hashDeath;
+        private int _hashDodgeTrigger;
+        private int _hashDodgeDirection;
         private bool _ready;
 
         // ── Public API ──────────────────────────────────────────────────────
@@ -172,6 +176,34 @@ namespace LevelGen.Player
             _animator.SetTrigger(_hashDeath);
         }
 
+        /// <summary>
+        /// Writes the DodgeDirection int (0=FWD, 1=BWD, 2=LFT, 3=RGT)
+        /// to the Animator. Called by PlayerDodge immediately before
+        /// <see cref="SetDodgeTrigger"/> so the AnyState→Roll{X}
+        /// transitions evaluate their direction condition correctly.
+        /// Single-writer-per-parameter invariant: only PlayerDodge
+        /// drives this through here. Safe to call before Awake.
+        /// </summary>
+        /// <param name="direction">0=FWD, 1=BWD, 2=LFT, 3=RGT.</param>
+        public void SetDodgeDirection(int direction)
+        {
+            if (!_ready) return;
+            _animator.SetInteger(_hashDodgeDirection, direction);
+        }
+
+        /// <summary>
+        /// Fires the DodgeTrigger. With DodgeDirection set, the
+        /// Animator picks one of AnyState→RollFWD/BWD/LFT/RGT and
+        /// plays that clip; auto-clears within one Animator update
+        /// if not consumed. Safe to call before Awake — silently
+        /// dropped if the Animator is not yet resolved.
+        /// </summary>
+        public void SetDodgeTrigger()
+        {
+            if (!_ready) return;
+            _animator.SetTrigger(_hashDodgeTrigger);
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -193,6 +225,8 @@ namespace LevelGen.Player
             _hashIsGrounded  = Animator.StringToHash(ParamIsGrounded);
             _hashComboNext   = Animator.StringToHash(ParamComboNext);
             _hashDeath       = Animator.StringToHash(ParamDeath);
+            _hashDodgeTrigger   = Animator.StringToHash(ParamDodgeTrigger);
+            _hashDodgeDirection = Animator.StringToHash(ParamDodgeDirection);
             _ready = true;
         }
     }

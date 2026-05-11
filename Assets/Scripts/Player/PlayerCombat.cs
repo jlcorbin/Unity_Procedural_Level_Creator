@@ -227,6 +227,23 @@ namespace LevelGen.Player
             OnAttackPressed();
         }
 
+        /// <summary>
+        /// Forcibly drops any in-flight attack state. Clears the
+        /// buffered next-combo press, empties the per-swing hit list,
+        /// and disables the weapon hitbox. Does NOT touch the Animator
+        /// directly — single-writer-per-parameter invariant preserved.
+        /// The visual interruption is expected to come from a higher-
+        /// priority Animator transition (e.g. AnyState → RollFWD from
+        /// PlayerDodge) so the Attack clip blends out as the new state
+        /// blends in. Idempotent. Used by PlayerDodge (M12).
+        /// </summary>
+        public void CancelAttack()
+        {
+            _attackBuffered = false;
+            _currentAttackHitList.Clear();
+            if (hitbox != null) hitbox.enabled = false;
+        }
+
         // ── Public damage entry point ───────────────────────────────────────
 
         /// <summary>

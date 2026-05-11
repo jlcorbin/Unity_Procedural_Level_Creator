@@ -56,6 +56,7 @@ namespace LevelGen.Player
         private PlayerAnimator _anim;
         private PlayerCombat _combat;        // optional — null tolerated (gate disabled)
         private PlayerStamina _stamina;      // optional — null tolerated (sprint always allowed)
+        private PlayerDodge _dodge;          // optional — null tolerated (no dodge gate)
         private float _verticalVelocity;
 
         /// <summary>
@@ -91,6 +92,7 @@ namespace LevelGen.Player
             _anim = GetComponent<PlayerAnimator>();
             _combat = GetComponent<PlayerCombat>();   // optional — null tolerated
             _stamina = GetComponent<PlayerStamina>(); // optional — null tolerated (sprint always allowed if missing)
+            _dodge   = GetComponent<PlayerDodge>();   // optional — null tolerated (no dodge gate if missing)
 
             if (cameraTransform == null)
             {
@@ -165,6 +167,13 @@ namespace LevelGen.Player
             //      stays primed; only the CharacterController translation is
             //      gated. Gravity still applies so the player doesn't float.
             if (_combat != null && _combat.IsActionLocked)
+                motion = Vector3.zero;
+            // 4.6) Same gate during a M12 dodge — PlayerDodge.RollCoroutine
+            //      drives horizontal displacement via its own _cc.Move call
+            //      in Update, so this Update's horizontal motion must yield.
+            //      Two cc.Move calls per frame is well-defined in Unity;
+            //      each call updates position before the next reads it.
+            if (_dodge != null && _dodge.IsDodging)
                 motion = Vector3.zero;
 
             // 5) Apply gravity (sticky-grounded).

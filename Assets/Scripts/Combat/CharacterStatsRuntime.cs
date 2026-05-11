@@ -59,6 +59,21 @@ namespace LevelGen.Combat
         /// <summary>True after OnDied has been raised. Stays true even if Heal restores HP.</summary>
         public bool           IsDead         => _hasDied;
 
+        /// <summary>
+        /// True while incoming damage is being suppressed (M12 dodge
+        /// i-frames). <see cref="ApplyDamage"/> returns early with no
+        /// HP change and no <see cref="OnDied"/> emission while this
+        /// is true. Sole writer: <see cref="SetInvulnerable"/>.
+        /// </summary>
+        public bool           IsInvulnerable { get; private set; }
+
+        /// <summary>
+        /// Toggles the i-frame flag. M12 PlayerDodge holds this true
+        /// for the i-frame window. Generic so future systems (e.g.
+        /// post-hit invuln, scripted cinematic invuln) can call too.
+        /// </summary>
+        public void SetInvulnerable(bool value) => IsInvulnerable = value;
+
         void Awake()
         {
             if (stats == null)
@@ -84,6 +99,10 @@ namespace LevelGen.Combat
         public void ApplyDamage(int amount)
         {
             if (stats == null) return;
+            // M12: i-frames. Discard the entire damage event (no HP
+            // delta, no OnDied) while invulnerable. Sole gate point —
+            // do not duplicate this check elsewhere; route through here.
+            if (IsInvulnerable) return;
             int prev = currentHP;
             currentHP = Mathf.Clamp(currentHP - amount, 0, MaxHP);
             Debug.Log($"[CharacterStatsRuntime] {DisplayName} HP {prev} -> {currentHP}");

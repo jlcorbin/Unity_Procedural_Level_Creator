@@ -2936,6 +2936,285 @@ Pending follow-up:
   guard, but cosmetically odd) — revisit when player-death
   needs to stop enemy aggression scene-wide.
 
+## M12 — Player dodge (2026-05-11)
+
+Directional 4-way dodge. V key triggers a roll in the current
+movement direction (or forward if no input), consuming 25 stamina,
+granting 0.5s of i-frames, and enforcing an 0.8s cooldown. Cancels
+any in-flight attack via the new `PlayerCombat.CancelAttack()`
+public method. Movement is driven by a scripted impulse on the
+CharacterController inside a coroutine — no root motion.
+
+Architectural decisions (locked):
+- I-frames are a single flag on `CharacterStatsRuntime` — new
+  `IsInvulnerable` bool + `SetInvulnerable(bool)` mutator. The
+  `ApplyDamage` gate is the SOLE i-frame check point (added at the
+  top after the `stats == null` guard). Damage events are discarded
+  entirely when invulnerable — no HP delta, no `OnDied` emission.
+  Generic design: `SetInvulnerable` is callable by any future
+  system (post-hit invuln, cinematic invuln) without changes.
+- Scripted impulse pattern: `PlayerDodge.RollCoroutine` calls
+  `cc.Move(worldDir * _rollSpeed * Time.deltaTime)` each frame for
+  the roll duration. PlayerController suppresses ONLY its horizontal
+  motion during the roll (new step 4.6 mirroring step 4.5's
+  Attack/Hit gate) so two `cc.Move` calls per frame combine cleanly:
+  PlayerController applies gravity-Y, PlayerDodge applies horizontal.
+  Both calls update position in order — well-defined in Unity.
+- Sub-state-machine `Dodge` containing four states `RollFWD`,
+  `RollBWD`, `RollLFT`, `RollRGT`. Each Roll state's motion = the
+  matching `Roll{DIR}_Battle_InPlace_SwordAndShield` clip from the
+  World Bundle pack. InPlace variants chosen since script drives
+  displacement (matches M2-B InPlace convention).
+- Animator wiring: `DodgeTrigger` (Trigger) + `DodgeDirection`
+  (Int 0/1/2/3 mapping FWD/BWD/LFT/RGT). Four `AnyState→Roll{X}`
+  transitions, each conditioned on `DodgeTrigger AND
+  DodgeDirection == directionValue` with
+  `canTransitionToSelf=false`, fixed dur 0.05. Each Roll → Locomotion
+  exit transition with `exitTime=1.0`, no condition, fixed dur 0.10.
+  `PlayerDodge` calls `SetDodgeDirection` THEN `SetDodgeTrigger`
+  in that order so the AnyState transition evaluates with the
+  right Int.
+- Direction selection: input-vector axis-bucket (no `Mathf.Atan2`).
+  Forward = `input.y >= |input.x|, input.y >= 0`. Backward =
+  `input.y < -|input.x|`. Right = `input.x > |input.y|`. Left =
+  symmetric. Below dead-zone (`sqrMagnitude < 0.01`) defaults to
+  forward relative to body. World-space direction derived from
+  `transform.forward / right` (body yaw locked to camera yaw every
+  frame via SnapBodyToCameraYaw), with a defensive fallback to
+  `Camera.main` forward if available.
+- Re-entry guards (three independent, any-failure drops silently):
+  `_isDodging` (already rolling), `CurrentStamina < _staminaCost`
+  (insufficient), `Time.time - _lastDodgeTime < _cooldown`
+  (cooldown). Stamina is spent BEFORE setting `_isDodging`/animator
+  params so a same-frame double-press also fails the stamina gate.
+  `_lastDodgeTime = -999f` initial value ensures the first press
+  always passes the cooldown gate.
+- Attack cancel: `PlayerCombat.CancelAttack()` is purely local —
+  clears `_attackBuffered`, empties `_currentAttackHitList`,
+  disables the hitbox. Does NOT touch the Animator (single-writer-
+  per-parameter invariant preserved). The visual interruption comes
+  from `AnyState → Roll{X}` overriding the Attack state.
+- PlayerDeath integration: `PlayerDodge` subscribes to
+  `PlayerDeath.OnPlayerDied`; on death, stops all coroutines,
+  clears `_isDodging`, sets `IsInvulnerable = false`, disables
+  itself. Belt-and-suspenders cleanup so a death mid-dodge doesn't
+  leave the player permanently invulnerable.
+- Hit during dodge: `AnyState → Hit` (M2-B) still wins because Hit
+  has its own AnyState transition; in practice the i-frame gate
+  inside `ApplyDamage` swallows the damage, so `Targetable.OnHit`
+  doesn't fire, so `PlayerHitReaction.HandleHit` doesn't run, so
+  no Hit trigger gets set. Effectively: i-frame dodge ignores
+  incoming hits cleanly.
+
+Single-direction dependencies preserved:
+  PlayerInputReader → (event DodgePressed) → PlayerDodge →
+    (call) PlayerCombat.CancelAttack  +
+    (call) PlayerAnimator.SetDodgeDirection / SetDodgeTrigger +
+    (call) CharacterStatsRuntime.SpendStamina / SetInvulnerable +
+    (call) CharacterController.Move
+  PlayerDodge is the ONLY writer to DodgeTrigger and DodgeDirection
+  (via PlayerAnimator). PlayerCombat never reaches into the Animator
+  directly. PlayerController reads `_dodge.IsDodging` to gate its
+  own horizontal motion (the existing _combat.IsActionLocked sibling
+  pattern).
+
+CharacterStatsRuntime.cs: added `IsInvulnerable` bool property
+  (auto-prop with private setter) + `SetInvulnerable(bool)` mutator.
+  `ApplyDamage` early-returns on `IsInvulnerable` at the top, after
+  the `stats == null` guard. Other entry points unchanged
+  (`Heal`, `SpendStamina`, `RegenStamina` not i-frame-gated;
+  invuln only blocks damage).
+
+PlayerInputReader.cs: added `event System.Action DodgePressed` +
+  `public void OnDodge(InputAction.CallbackContext ctx)` endpoint.
+  Raises on `ctx.started` (the press-down edge, immune to future
+  Hold/Tap interactions). M1-stub log NOT added (Dodge has a real
+  consumer from day one). Mirrors AttackPressed / JumpPressed /
+  InteractPressed pattern.
+
+PlayerCombat.cs: added `public void CancelAttack()` — clears
+  `_attackBuffered`, empties `_currentAttackHitList`, disables
+  `hitbox` collider. Idempotent. NO Animator parameter writes.
+  Existing methods unchanged.
+
+PlayerAnimator.cs: added two parameter name constants
+  (`ParamDodgeTrigger`, `ParamDodgeDirection`), two hash fields
+  (`_hashDodgeTrigger`, `_hashDodgeDirection`), Awake hash
+  assignment, and two public methods (`SetDodgeTrigger`,
+  `SetDodgeDirection(int)`). All `_ready`-gated like the other
+  trigger setters.
+
+PlayerController.cs: added optional `_dodge` sibling ref (null-
+  tolerant, same pattern as `_combat` / `_stamina`). New step 4.6
+  in Update: `if (_dodge != null && _dodge.IsDodging) motion =
+  Vector3.zero` — mirrors the existing step 4.5 Attack/Hit gate.
+  Gravity still applies via `ApplyGravity` (step 5) so
+  PlayerDodge's horizontal-only `cc.Move` plus PlayerController's
+  vertical-only `cc.Move` compose into the full motion. No
+  refactoring of existing step numbering.
+
+PlayerDodge.cs (NEW, `LevelGen.Player`):
+  `[RequireComponent(CharacterController)]`,
+  `[RequireComponent(CharacterStatsRuntime)]`,
+  `[RequireComponent(PlayerInputReader)]`,
+  `[DisallowMultipleComponent]`.
+  SerializeFields (header-grouped):
+    Roll Motion:     `_rollSpeed = 8f`, `_rollDuration = 0.35s`
+    I-Frames:        `_iFrameDuration = 0.5s`
+    Cost / Cooldown: `_cooldown = 0.8s`, `_staminaCost = 25f`
+  Cached refs: CharacterController, CharacterStatsRuntime,
+    PlayerInputReader (RequireComponent — never null at runtime),
+    PlayerCombat / PlayerAnimator / PlayerDeath (optional —
+    null-tolerant). Camera.main.transform cached at Awake for
+    direction fallback.
+  Public surface: `bool IsDodging` (read-only). Read by
+    PlayerController step 4.6.
+  Internal direction constants: `DirFWD=0`, `DirBWD=1`,
+    `DirLFT=2`, `DirRGT=3` — match the DodgeDirection int values
+    that the Animator's AnyState transitions check.
+
+PlayerBaseControllerDodgeExtender.cs (NEW, editor):
+  Idempotent additive extender (mirrors M5's
+  PlayerBaseControllerExtender pattern). Loads existing controller,
+  adds:
+    - DodgeTrigger (Trigger) + DodgeDirection (Int) parameters
+    - `Dodge` sub-state-machine
+    - Four states inside the sub-SM: RollFWD/BWD/LFT/RGT (each
+      with the matching InPlace clip motion, writeDefaultValues=1,
+      speed=1)
+    - Four AnyState→Roll{X} transitions on the root SM (each
+      conditioned on DodgeTrigger + DodgeDirection==value,
+      canTransitionToSelf=false, fixedDuration=true, dur 0.05)
+    - Four Roll{X}→Locomotion exit transitions (exitTime=1.0,
+      no conditions, fixedDuration=true, dur 0.10)
+  Each addition presence-checked and skipped if already wired.
+  Re-runnable; all-skipped output is the green idempotent state.
+  Menu: `LevelGen ▶ Player ▶ Extend PlayerBaseController (M12 Dodge)`.
+
+PlayerDodgePrefabAdder.cs (NEW, editor):
+  `LevelGen ▶ Player ▶ Add PlayerDodge to Player_MaleHero Prefab`.
+  Adds PlayerDodge if not already present; no SerializeField refs
+  to wire (PlayerDodge resolves all siblings via GetComponent in
+  Awake). Warns clearly if any RequireComponent prerequisite is
+  missing from the prefab.
+
+PlayerPrefabBuilder.cs (modified):
+  - s_Bindings array extended with `("Dodge", "OnDodge")` —
+    UnityEvents wiring picks it up automatically on rebuild.
+  - PlayerDodge AddComponent folded into the BuildPlayerMaleHeroPrefab
+    sequence after PlayerStamina. No SerializeObject refs to wire.
+
+InputSystem_Actions.inputactions (edited):
+  Added Dodge action (Button) to the Player map's actions array
+  (post-Sprint position to match s_Bindings tail order). Added
+  V key binding under `<Keyboard>/v` in the Player map's bindings
+  array, group `Keyboard&Mouse`. Stable GUIDs (a2c7d4e1... for
+  the action, b3d8e5f2... for the binding) so future re-merges
+  remain idempotent. The prompt referenced
+  `Assets/Input/PlayerInputActions.inputactions` which doesn't
+  exist in this project — the canonical InputSystem asset is
+  `Assets/InputSystem_Actions.inputactions`. Path-correction noted.
+
+PlayerDodgeValidator.cs (NEW, editor):
+  `LevelGen ▶ Player ▶ Validate Player Dodge`. 17 read-only
+  checks: PlayerDodge.cs presence, three RequireComponent
+  attributes, CharacterStatsRuntime.IsInvulnerable + SetInvulnerable
+  + ApplyDamage signature, PlayerInputReader.DodgePressed event,
+  PlayerCombat.CancelAttack method, DodgeTrigger + DodgeDirection
+  parameters, Roll{FWD,BWD,LFT,RGT} states present (walks sub-SM
+  via recursive search), AnyState transitions with DodgeTrigger
+  condition + canTransitionToSelf=false, Roll→Locomotion exits
+  with exitTime=1.0, prefab has PlayerDodge component, prefab
+  has all RequireComponent prereqs, prefab has PlayerCombat (for
+  CancelAttack delegate target). Format mirrors PlayerDeathValidator.
+
+Files:
+- Assets/Scripts/Combat/CharacterStatsRuntime.cs (IsInvulnerable
+  property + SetInvulnerable mutator + ApplyDamage early-return guard)
+- Assets/Scripts/Player/PlayerInputReader.cs (DodgePressed event +
+  OnDodge endpoint)
+- Assets/Scripts/Player/PlayerCombat.cs (CancelAttack public method)
+- Assets/Scripts/Player/PlayerAnimator.cs (DodgeTrigger/Direction
+  hash + param constants + Awake assignment + SetDodgeTrigger +
+  SetDodgeDirection methods)
+- Assets/Scripts/Player/PlayerController.cs (cached _dodge sibling
+  ref + step 4.6 horizontal-motion gate)
+- Assets/Scripts/Player/PlayerDodge.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerBaseControllerDodgeExtender.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerDodgePrefabAdder.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerDodgeValidator.cs (NEW)
+- Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs (s_Bindings +
+  PlayerDodge AddComponent fold-in)
+- Assets/InputSystem_Actions.inputactions (Dodge action + V binding)
+- Assets/Animators/Player/PlayerBaseController.controller (will be
+  extended in place by PlayerBaseControllerDodgeExtender — DodgeTrigger
+  + DodgeDirection params, Dodge sub-SM, four Roll states, eight
+  transitions added; existing M2-B/M2-C/M5 work preserved verbatim)
+- Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab
+  (will gain PlayerDodge via either build path or standalone adder)
+
+No modifications to: PlayerDeath, PlayerDeathOverlay, PlayerHUD,
+PlayerInteractor, PlayerStamina, PlayerHitReaction, Targetable,
+EnemyAI, EnemyCombat, EnemyDeath, EnemyHitReaction, MouseLook,
+DamageNumber*, Interactable / AssassinateInteractable /
+OpenInteractable.
+
+Pending follow-up (Jason runs after CC completes):
+1. `LevelGen ▶ Player ▶ Extend PlayerBaseController (M12 Dodge)`
+   — adds DodgeTrigger / DodgeDirection params, Dodge sub-SM,
+   four Roll states, eight transitions to the controller in place.
+2. `LevelGen ▶ Player ▶ Add PlayerDodge to Player_MaleHero Prefab`
+   — OR rebuild the prefab via `Build Player_MaleHero Prefab` (both
+   paths work; rebuild is preferred since it also re-runs the
+   UnityEvent wiring with the new Dodge → OnDodge binding).
+3. `LevelGen ▶ Player ▶ Validate Player Dodge` — expect 17 PASS /
+   0 FAIL.
+4. Sanity re-runs all prior validators — none should regress:
+   DamageRouting 12/12, PlayerHUD 11/11, DummyAndStats 12/12,
+   EnemyHitReaction 14/14, EnemyDeath 16/16, MouseLook 7/7,
+   PlayerDeath 16/16, InteractSystem 16/16, OpenInteractable
+   12/12, DamageNumbers 14/14, PlayerStamina 12/12, EnemyAI 16/16,
+   EnemyCombat 17/17.
+5. Play-mode smoke test: Play scene → press V while running
+   forward → player rolls forward over ~0.35s + plays RollFWD
+   clip + visually displaces ~2.8m. Stamina bar drops by 25.
+   Pressing V again immediately drops silently (cooldown OR
+   stamina); after 0.8s stamina has refilled enough and the
+   cooldown has elapsed, V works again. Hold W+D and press V →
+   rolls forward (forward bucket wins because |y| >= |x|). Hold
+   only D and press V → rolls right. Mid-combo press V → attack
+   cancels, roll fires (visually the swing aborts, hitbox stays
+   disabled, no double-damage on the swing-frame target).
+   Stand still + press V → rolls forward. Have Dummy attack you
+   AND press V the same frame → 0 damage taken, GetHit01 does NOT
+   play (i-frames swallow the hit cleanly).
+
+Deferred:
+- Dodge VFX / SFX / dust particle / motion blur
+- Camera shake on dodge / camera dolly tweak
+- Animation-event-driven i-frame window (currently coroutine-
+  driven, fixed 0.5s; could later trigger on clip frame N for
+  per-clip tuning)
+- Knockback on hit-during-dodge (currently no-op)
+- Enemy dodge
+- Dodge during target lock (M13 territory — assumes target-lock
+  system exists)
+- Dodge attack / dodge-into-roll-attack combo
+- Per-armor / per-equipment dodge cost / cooldown modifiers
+- WeaponStats SO with per-weapon dodge stats
+- Stunlock check: M11 Q4 left PlayerHitReaction without a stagger
+  window (Souls-like). Combined with dodge i-frames this should
+  feel correct, but multi-enemy playtest might need re-tuning.
+
+Lesson logged for this milestone:
+- Project's InputSystem asset path is canonical at
+  `Assets/InputSystem_Actions.inputactions` — there is no
+  `Assets/Input/PlayerInputActions.inputactions`. Prompts that
+  reference the latter should be re-anchored to the former.
+- `CharacterStatsRuntime` stamina API is `SpendStamina(float)`
+  (not `ApplyStaminaCost`); float internally (M9), so dodge cost
+  passes through cleanly without rounding.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
