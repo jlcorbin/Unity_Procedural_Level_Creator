@@ -3215,6 +3215,79 @@ Lesson logged for this milestone:
   (not `ApplyStaminaCost`); float internally (M9), so dodge cost
   passes through cleanly without rounding.
 
+## Post-rebuild checklist for Player_MaleHero.prefab
+
+`LevelGen ▶ Player ▶ Build Player_MaleHero Prefab` rebuilds the
+prefab FROM SCRATCH — anything added by a separate
+`Add X to Player_MaleHero` adder (or by an "extender" that mutates
+an external asset) is dropped from the new prefab AND any active
+scene's instance becomes a refreshed clone that loses bound scene-
+side references. Run these in order after every rebuild:
+
+1. `LevelGen ▶ UI ▶ Add CharacterStatsRuntime to Player_MaleHero`
+   — adds the HP/Stamina runtime instance pointing at
+   CharacterStats_Player.asset.
+2. `LevelGen ▶ Player ▶ Add PlayerCombat to Player_MaleHero Prefab`
+   — adds the combat owner.
+3. `LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_MaleHero`
+   — adds WeaponHitbox child under `weapon_r` with BoxCollider +
+   kinematic Rigidbody + HitboxRelay, then wires PlayerCombat.hitbox.
+   Run AFTER step 2 (HitboxRelay needs PlayerCombat present).
+4. `LevelGen ▶ Player ▶ Add Targetable to Player_MaleHero Prefab`
+   (M11) — adds the publisher of OnHit / AnyTargetableHit.
+5. `LevelGen ▶ Player ▶ Add PlayerHitReaction to Player_MaleHero
+   Prefab` (M11) — subscribes to its own Targetable.OnHit.
+   Requires step 4.
+6. `LevelGen ▶ Player ▶ Tune CharacterController for Hit Reception`
+   (M11 Q5) — bumps CharacterController.radius 0.3 → 0.4.
+7. `LevelGen ▶ Player ▶ Add PlayerDeath to Player_MaleHero Prefab`
+   — **re-run even though PlayerDeath was folded into the build**.
+   The build added the component but `_combat` is null because
+   PlayerCombat wasn't present at AddComponent time. Re-running the
+   adder re-wires `_combat` to the now-present PlayerCombat.
+
+Scene-side re-bindings (separate from the prefab):
+
+8. Re-bind `CM Follow Camera` in the test scene. The new prefab's
+   `CameraTarget` child has a different fileID, so the scene's
+   CinemachineCamera Follow + LookAt references resolve to the
+   old (dead) transform. Two fixes:
+   - **Manual (preferred)**: select `CM Follow Camera`, drag
+     `Player_MaleHero/CameraTarget` from the Hierarchy into both
+     the Follow and LookAt slots, save scene. Preserves OrbitalFollow
+     axes, Reader Gain ±10, Deoccluder, etc.
+   - **Nuke + rebuild**: delete `CM Brain Camera` + `CM Follow Camera`
+     GameObjects, run `LevelGen ▶ Player ▶ Add Cinemachine Follow
+     Camera to Active Scene`. Restores M2-A defaults.
+9. Verify `_MouseLock` GameObject is present in the scene (M-CursorLock).
+   If missing: `LevelGen ▶ Input ▶ Place _MouseLock in Active Scene`.
+
+Validators (sanity sweep after the cascade):
+- `LevelGen ▶ Combat ▶ Validate Damage Routing` → 12/12
+- `LevelGen ▶ Combat ▶ Validate Enemy Combat` → 17/17
+- `LevelGen ▶ Player ▶ Validate Player Death` → 16/16
+- `LevelGen ▶ Player ▶ Validate Player Dodge` → 17/17
+- `LevelGen ▶ Combat ▶ Validate Player HUD` → 11/11
+- `LevelGen ▶ UI ▶ Validate Damage Numbers` → 14/14
+- `LevelGen ▶ Player ▶ Validate Player Stamina` → 12/12
+- `LevelGen ▶ Combat ▶ Validate Combat Foundation` → 12/12
+- `LevelGen ▶ Interaction ▶ Validate Interact System` → 16/16
+- `LevelGen ▶ Interaction ▶ Validate OpenInteractable` → 12/12
+- `LevelGen ▶ Combat ▶ Validate EnemyHitReaction` → 14/14
+- `LevelGen ▶ Combat ▶ Validate EnemyDeath` → 16/16
+- `LevelGen ▶ Input ▶ Validate MouseLook` → 7/7 (or 6/7 + SKIP in edit mode)
+
+Why isn't this folded into Build? Two reasons. (1) The "Add X"
+adders carry external asset dependencies (FBX AnimationEvents,
+audio clips, CharacterStats SO refs) that aren't owned by the
+Player prefab — folding them into the prefab builder couples
+unrelated subsystems. (2) Several adders (PlayerCombat,
+PlayerHUD's stats wiring, M11 hit-reception bump) were authored
+in different milestones with different ownership boundaries; the
+"adder per concern" pattern keeps each milestone's prefab change
+auditable and revertable. Rebuild is the heavy hammer; adders
+are the surgical follow-up.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
