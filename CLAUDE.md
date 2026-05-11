@@ -3288,6 +3288,378 @@ in different milestones with different ownership boundaries; the
 auditable and revertable. Rebuild is the heavy hammer; adders
 are the surgical follow-up.
 
+> **Superseded by M12-R (2026-05-11).** The 7-step prefab-adder
+> cascade above is no longer needed — `PlayerHeroBuilder` consolidates
+> every component AddComponent + ref wiring into a single idempotent
+> menu. Steps 8–9 (scene-side CM camera rebind + `_MouseLock`)
+> remain valid since they're scene-side, not prefab-side. The
+> validator list under "Validators (sanity sweep)" is replaced by
+> the single `LevelGen ▶ Player ▶ Validate Player_Hero` menu.
+
+## M12-R — Player Hero refactor (2026-05-11)
+
+Refactor milestone. Consolidates ~13 per-milestone "Add X to
+Player_MaleHero Prefab" editor scripts and 3 milestone-specific
+validators into a single root manifest component
+(`PlayerHero`), a single idempotent builder
+(`PlayerHeroBuilder`), and a single consolidated validator
+(`PlayerHeroValidator`). Renames the prefab GUID-preservingly
+from `Player_MaleHero.prefab` to `Player_Hero.prefab`.
+
+Architectural decisions (locked):
+- `PlayerHero` is a MANIFEST: declares every required sibling
+  via `[RequireComponent]`, holds a SerializeField ref to each,
+  exposes a public read-only property per ref. NO Update, NO
+  gameplay logic, NO Animator writes. Sole purpose: contract
+  + lookup table.
+- Every per-milestone "Add X to Player_MaleHero Prefab" adder
+  is replaced by the single `LevelGen ▶ Player ▶ Build Player_Hero
+  Prefab` menu. Builder is idempotent: re-runnable with no
+  side effects, logs ADDED / ALREADY PRESENT per component.
+- 3 per-milestone validators (`PlayerStaminaValidator`,
+  `PlayerDeathValidator`, `PlayerDodgeValidator`) replaced by
+  one `PlayerHeroValidator` with 50 checks covering: prefab
+  structure (1-3), every required root component (4-17),
+  no duplicates (18), every PlayerHero SerializeField ref
+  (19-32), CharacterStatsRuntime/InputReader/Combat/Dodge
+  API surface (33-42), Animator parameter + state shape
+  (43-48 — Dodge + Death regression + Attack/Hit regression),
+  PlayerDeath event (49), and a script-presence sanity check
+  (50). Per-milestone Animator/Combat/Combo/Jump/Runtime
+  validators NOT in the explicit delete list remain — they
+  test cross-cutting concerns broader than the Player prefab
+  manifest.
+- Prefab rename is GUID-preserving via
+  `AssetDatabase.RenameAsset` at the top of `PlayerHeroBuilder`.
+  Scene references resolve automatically because Unity tracks
+  prefab refs by GUID, not by filename. One-shot rename — once
+  `Player_Hero.prefab` exists, subsequent builder runs skip the
+  rename step.
+
+Spec deviations / interpretation notes:
+- `[RequireComponent(typeof(Animator))]` on PlayerHero was
+  intentionally OMITTED. The Animator lives on the
+  `MaleCharacterPBR` child by design (humanoid FBX rig);
+  forcing one on the root would auto-add a second, controller-
+  less Animator that would conflict with the child rig and
+  break `PlayerAnimator.GetComponentInChildren<Animator>`.
+- `[RequireComponent(typeof(UnityEngine.InputSystem.PlayerInput))]`
+  was ADDED to PlayerHero even though the M12-R locked list
+  didn't include it. Without PlayerInput, PlayerInputReader
+  receives zero callbacks (UnityEvent dispatch source).
+- `PlayerController` ↔ `PlayerStamina` cannot both
+  `[RequireComponent]` each other (Unity rejects circular
+  attrs). `PlayerStamina → PlayerController` is the canonical
+  direction (it already had it); `PlayerController._stamina`
+  remains null-tolerant in script. PlayerHero's manifest carries
+  both, satisfying the root-level contract.
+- `PlayerDodge → PlayerDeath` cannot be `[RequireComponent]`'d
+  because `PlayerController` now requires `PlayerDodge`, and
+  `PlayerDeath` requires `PlayerController` — adding the
+  `PlayerDodge → PlayerDeath` edge closes a cycle through three
+  scripts. `PlayerDodge._death` remains null-tolerant.
+- `WeaponHitbox` child build (under `weapon_r`) is NOT folded
+  into `PlayerHeroBuilder` — kept in `PlayerCombatHitboxBuilder`
+  because it requires deep bone-tree surgery (search the
+  imported FBX skeleton for a named bone, parent a trigger
+  collider under it). Different responsibility than the
+  root-component manifest. The M12-R validator still checks
+  for the WeaponHitbox child (check 41) but doesn't build it.
+- AnimationEvent edits on Attack01-03 FBX clips are likewise
+  NOT folded into PlayerHeroBuilder — `PlayerCombatHitboxBuilder
+  ▶ Add Animation Events to Attack Clips` retains that
+  responsibility (FBX-side .meta edits, not prefab-side).
+- CharacterStats rate-setting (`CharacterStatsAssetUpdater`) was
+  in the delete list. Stamina drain/regen rates (25/33 on the
+  Player asset) are now manually-authored ScriptableObject
+  values; they only need to be set once on
+  `CharacterStats_Player.asset` and persist via the .asset file.
+  If a future milestone needs to bulk-set rates across many
+  CharacterStats assets, a replacement utility goes alongside
+  the new feature.
+
+RequireComponent chains extended on each script (audit-driven):
+
+  Script              Existing                          Added (M12-R)
+  ─────────────────────────────────────────────────────────────────────
+  PlayerCombat        InputReader, Animator             CharacterStatsRuntime
+  PlayerStamina       CharacterStatsRuntime, Controller PlayerDeath
+  PlayerInteractor    InputReader                       PlayerDeath
+  PlayerHitReaction   Targetable                        PlayerCombat,
+                                                        CharacterStatsRuntime
+  PlayerDodge         CC, Stats, InputReader            PlayerCombat,
+                                                        PlayerAnimator
+  PlayerDeath         CharacterStatsRuntime             PlayerAnimator,
+                                                        PlayerController,
+                                                        PlayerCombat
+  PlayerController    CC, InputReader, Animator         PlayerCombat,
+                                                        PlayerDodge
+                                                        (NOT PlayerStamina
+                                                         — cycle)
+
+PlayerHero declares ALL 14 root components (Animator excluded
+as noted; PlayerInput added as noted):
+
+  CharacterController, UnityEngine.InputSystem.PlayerInput,
+  CharacterStatsRuntime, Targetable, PlayerInputReader,
+  PlayerAnimator, PlayerController, PlayerCombat, PlayerStamina,
+  PlayerDodge, PlayerHitReaction, PlayerDeath, PlayerInteractor,
+  MouseLook.
+
+`MouseLook` migration: moved from scene-side `_MouseLock`
+singleton GameObject to the Player_Hero prefab root. The script
+itself is unchanged — Awake/OnEnable locks, OnDisable unlocks.
+Per-scene `LevelGen ▶ Input ▶ Place _MouseLock in Active Scene`
+menu still exists but is now redundant on scenes that contain a
+Player_Hero instance. If both an `_MouseLock` GameObject AND
+Player_Hero coexist in a scene, MouseLookValidator's "exactly
+one active MouseLook" check fails — delete the scene-side
+`_MouseLock` to resolve.
+
+Files DELETED (13, per spec):
+- Assets/Scripts/Player/Editor/PlayerPrefabBuilder.cs
+- Assets/Scripts/Player/Editor/PlayerDodgePrefabAdder.cs
+- Assets/Scripts/Player/Editor/PlayerStaminaPrefabAdder.cs
+- Assets/Scripts/Player/Editor/PlayerTakesDamagePrefabAdder.cs
+- Assets/Scripts/Player/Editor/PlayerDeathPrefabAdder.cs
+- Assets/Scripts/Player/Editor/PlayerInteractorPrefabAdder.cs
+- Assets/Scripts/Player/Editor/PlayerBaseControllerExtender.cs
+- Assets/Scripts/Player/Editor/PlayerBaseControllerDodgeExtender.cs
+- Assets/Scripts/Player/Editor/PlayerCapsuleTuner.cs
+- Assets/Scripts/Player/Editor/PlayerStaminaValidator.cs
+- Assets/Scripts/Player/Editor/PlayerDeathValidator.cs
+- Assets/Scripts/Player/Editor/PlayerDodgeValidator.cs
+- Assets/Scripts/Combat/Editor/CharacterStatsAssetUpdater.cs
+
+Files NOT deleted (per strict reading of the explicit delete
+list, even though the Goal text mentions "all individual adder
+scripts"):
+- Assets/Scripts/Player/Editor/PlayerCombatPrefabAdder.cs
+  (M2-B adder; now redundant with PlayerHeroBuilder but still
+  functional with path strings updated to Player_Hero)
+- Assets/Scripts/Combat/Editor/PlayerCombatHitboxBuilder.cs
+  (WeaponHitbox + AnimationEvents authoring; specialized
+  bone-tree work that isn't appropriate for PlayerHeroBuilder)
+- Assets/Scripts/Player/Editor/PlayerCombatValidator.cs
+- Assets/Scripts/Player/Editor/PlayerCombatAnimatorValidator.cs
+- Assets/Scripts/Player/Editor/PlayerComboAnimatorValidator.cs
+- Assets/Scripts/Player/Editor/PlayerComboRuntimeValidator.cs
+- Assets/Scripts/Player/Editor/PlayerJumpAnimatorValidator.cs
+- Assets/Scripts/Player/Editor/PlayerJumpRuntimeValidator.cs
+  (Animator-graph / runtime-behavior validators — they test
+  cross-cutting concerns beyond the Player prefab manifest;
+  worth keeping as regression guards. Strings updated to
+  Player_Hero.)
+
+Files updated for the prefab rename (Player_MaleHero →
+Player_Hero string replacements in code constants, Debug.Log
+messages, and Tooltip docstrings):
+- Assets/Scripts/Combat/Editor/DamageRoutingValidator.cs
+- Assets/Scripts/Combat/Editor/EnemyCombatValidator.cs
+- Assets/Scripts/Combat/Editor/PlayerCombatHitboxBuilder.cs
+- Assets/Scripts/Combat/AnimationEventForwarder.cs (comment)
+- Assets/Scripts/Combat/HitboxRelay.cs (comment)
+- Assets/Scripts/Interaction/Editor/InteractSystemValidator.cs
+- Assets/Scripts/Interaction/Interactable.cs (Tooltip)
+- Assets/Scripts/Player/Editor/PlayerCombatPrefabAdder.cs
+- Assets/Scripts/Player/Editor/PlayerCombatValidator.cs
+- Assets/Scripts/Player/Editor/PlayerJumpRuntimeValidator.cs
+- Assets/Scripts/Player/Editor/M3_02A_PackSwapExecutor.cs
+- Assets/Scripts/Player/Editor/M3_03B_DuoReimportVerifier.cs
+- Assets/Scripts/Player/Editor/M4_SampleSceneSetup.cs
+- Assets/Scripts/Player/Editor/M5_FallingDiagnosis.cs
+- Assets/Scripts/Player/PlayerCombat.cs (Debug.LogError msg)
+- Assets/Scripts/Player/PlayerSpawner.cs (Tooltip)
+- Assets/Scripts/UI/Editor/PlayerHUDBuilder.cs
+- Assets/Scripts/UI/Editor/PlayerHUDValidator.cs
+- Assets/Scripts/UI/PlayerHUD.cs (Debug.LogWarning msg)
+- Assets/Scripts/UI/PlayerDeathOverlay.cs (header comment +
+  Debug.LogWarning msg)
+
+Files created:
+- Assets/Scripts/Player/PlayerHero.cs
+- Assets/Scripts/Player/Editor/PlayerHeroBuilder.cs
+- Assets/Scripts/Player/Editor/PlayerHeroValidator.cs
+
+Player scripts modified (RequireComponent chain extensions):
+- Assets/Scripts/Player/PlayerCombat.cs
+- Assets/Scripts/Player/PlayerStamina.cs
+- Assets/Scripts/Player/PlayerInteractor.cs
+- Assets/Scripts/Player/PlayerHitReaction.cs
+- Assets/Scripts/Player/PlayerDodge.cs
+- Assets/Scripts/Player/PlayerDeath.cs
+- Assets/Scripts/Player/PlayerController.cs (with explanatory
+  comment about the PlayerStamina cycle exception)
+
+Prefab path:
+- OLD: Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab
+- NEW: Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab
+  (rename happens GUID-preservingly inside
+   `PlayerHeroBuilder.RenameOldPrefabIfNeeded` on first run;
+   scene references auto-resolve)
+
+Pending follow-up (Jason runs after CC completes):
+1. `LevelGen ▶ Player ▶ Build Player_Hero Prefab` — performs
+   the rename (if needed), ensures all 14 components are
+   present, wires all PlayerHero SerializeField refs, wires
+   PlayerInputReader UnityEvent bindings (10 actions).
+   Expect log lines: prefab status (CREATED or REWIRED),
+   components added/already, 10/10 UnityEvent bindings.
+2. `LevelGen ▶ Player ▶ Validate Player_Hero` — expect
+   50 PASS / 0 FAIL.
+3. If WeaponHitbox child is missing (validator check 41
+   FAIL):
+   `LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_Hero`
+4. If Attack01-03 AnimationEvents missing (validator
+   check is in DamageRoutingValidator):
+   `LevelGen ▶ Combat ▶ Add Animation Events to Attack Clips`
+5. Open the test scene that previously had Player_MaleHero
+   placed — confirm the prefab instance shows as Player_Hero
+   in the Hierarchy (GUID auto-resolved).
+6. Re-bind `CM Follow Camera`'s Follow + LookAt to the new
+   prefab instance's `CameraTarget` child (M2-A scene-side
+   step — see post-rebuild checklist above for the manual
+   re-bind procedure).
+7. If both `_MouseLock` GameObject AND Player_Hero coexist
+   in the scene — delete `_MouseLock` (MouseLook now lives
+   on Player_Hero root).
+8. Sanity re-runs:
+   - `LevelGen ▶ Combat ▶ Validate Damage Routing` → 12/12
+   - `LevelGen ▶ Combat ▶ Validate Enemy Combat` → 17/17
+   - `LevelGen ▶ Combat ▶ Validate EnemyHitReaction` → 14/14
+   - `LevelGen ▶ Combat ▶ Validate EnemyDeath` → 16/16
+   - `LevelGen ▶ Combat ▶ Validate Enemy AI` → 16/16
+   - `LevelGen ▶ Combat ▶ Validate Combat Foundation` → 12/12
+   - `LevelGen ▶ UI ▶ Validate Damage Numbers` → 14/14
+   - `LevelGen ▶ UI ▶ Validate PlayerHUD` → 11/11
+   - `LevelGen ▶ Interaction ▶ Validate Interact System` → 16/16
+   - `LevelGen ▶ Interaction ▶ Validate OpenInteractable` → 12/12
+   - `LevelGen ▶ Input ▶ Validate MouseLook` → 7/7 (or 6/7 + SKIP
+     in edit mode)
+9. Play-mode smoke test: movement, sprint, jump, attack combo
+   (3-hit), hit reactions, death + overlay + restart, dodge
+   (V key, 4 directions), i-frames during dodge, stamina cost,
+   cooldown, interactables (Assassinate behind Dummy +
+   OpenInteractable on TestDoor).
+
+Deferred / not in M12-R scope:
+- Enemy-side `EnemyBase` equivalent manifest (separate
+  milestone — enemy domain has different concerns).
+- Folding `PlayerCombatPrefabAdder` and
+  `PlayerCombatHitboxBuilder` into `PlayerHeroBuilder` (left
+  alone per strict reading of explicit delete list).
+- Replacement for `CharacterStatsAssetUpdater` (rates now
+  manually authored on the .asset; bulk-set utility can return
+  if needed later).
+- Cleanup of older milestone validators that test Animator-only
+  / runtime-only concerns (PlayerComboAnimatorValidator etc.)
+  — still useful as regression guards; consolidating them into
+  PlayerHeroValidator would require duplicating a lot of
+  Animator-graph traversal logic. Left as a follow-up cleanup.
+
+Lessons logged for this milestone:
+- Unity rejects circular `[RequireComponent]` attributes
+  (verified by reasoning: PlayerController ↔ PlayerStamina,
+  PlayerDodge ↔ PlayerDeath via PlayerController would form
+  cycles). Resolution: the manifest at the root level
+  (PlayerHero) carries all the components; per-script
+  RequireComponent chains follow one direction only. Document
+  the exception with an inline comment so future readers know
+  why a "missing" RequireComponent isn't an oversight.
+- `[RequireComponent]` enforces same-GameObject only — a
+  component on a child cannot satisfy a root-level
+  RequireComponent. The Animator-on-child constraint (humanoid
+  FBX rig structure) is a hard architectural reality; the
+  manifest must omit it and the per-script
+  `GetComponentInChildren` lookup carries that responsibility.
+- `AssetDatabase.RenameAsset` preserves GUID. Scene references
+  by GUID resolve to the renamed asset automatically — no
+  scene edits needed. The internal asset name (used for
+  display in the Inspector and Project window) updates to
+  match the new filename on next AssetDatabase refresh.
+- "Adder per concern" was a deliberate ownership pattern
+  through M2-B–M12, traded for "every milestone touches one
+  file" auditability. M12-R consolidates because the prefab
+  is now mature enough that re-running 10+ adders sequentially
+  after every rebuild was burning more time than the
+  per-milestone auditability gained. Future milestones should
+  decide which side of this tradeoff they fall on: small,
+  contained changes can still ship a one-shot adder; large
+  architectural shifts should fold into PlayerHeroBuilder.
+
+### M12-R post-ship: camera-rig restoration + runtime auto-bind
+
+Two issues surfaced during M12-R verification that prompted
+follow-up work:
+
+**1. Lost camera-to-player binding after prefab rebuild.**
+The same pattern that bit M12 (scene's `CinemachineCamera.Follow`
++ `LookAt` resolve to a dead `CameraTarget` transform after a
+rebuild) re-occurred in M12-R. Fixed structurally rather than
+with another manual rebind by adding a runtime auto-bind component.
+
+`Assets/Scripts/Player/CinemachineAutoBind.cs` (NEW):
+  Sits on the `CinemachineCamera` GameObject. On `Start`, runs
+  a retry coroutine (poll every 0.25s, give up after 10s) that
+  finds the GameObject tagged `Player`, locates its `CameraTarget`
+  child by name, and writes both `vcam.Follow` and `vcam.LookAt`.
+  `[DefaultExecutionOrder(200)]` ensures it runs after the
+  Player's Awake. Single-fire — once bound, the coroutine exits.
+  Handles three scenarios that scene-saved-by-hand bindings fail at:
+  (a) prefab rebuild orphans the scene-side ref, (b) Player_Hero
+  spawns deferred at runtime, (c) new scene with a CM rig but
+  no manual hand-binding yet.
+
+`Assets/Scripts/Player/Editor/CinemachineAutoBindAdder.cs` (NEW):
+  One-shot menu `LevelGen ▶ Player ▶ Add Cinemachine Auto-Bind to
+  Active Scene`. Idempotent — adds `CinemachineAutoBind` to the
+  scene's `CinemachineCamera` if not already present. For
+  retrofitting auto-bind onto an existing CM rig.
+
+**2. M2-A camera-setup menu was a casualty of M12-R deletes.**
+`PlayerPrefabBuilder.cs` (deleted) contained the
+`Add Cinemachine Follow Camera to Active Scene` menu —
+the canonical way to set up the CM rig in a fresh test scene.
+After M12-R, scenes without a CM rig had no way to create one,
+and `PlayerController.Awake` logged `Camera.main is null` since
+no MainCamera-tagged GameObject existed.
+
+`Assets/Scripts/Player/Editor/CinemachineRigBuilder.cs` (NEW):
+  Restores the menu `LevelGen ▶ Player ▶ Add Cinemachine Follow
+  Camera to Active Scene` as a standalone editor file. Lifted
+  from git history of the deleted `PlayerPrefabBuilder.cs` with
+  one fold-in: `CinemachineAutoBind` is now auto-added to the
+  new vcam GameObject as part of the standard rig build, so
+  no future scene-setup ever needs the manual rebind step.
+  All M2-A tuning preserved: OrbitalFollow Sphere R=4,
+  HorizontalAxis (-180,180) wrap, VerticalAxis (-10,70) init=15°,
+  RotationComposer, Deoccluder MinDistance=1.0, Reader Gain
+  ±10 (Y inverted) on Player/Look.
+
+Combined effect: after running `Add Cinemachine Follow Camera to
+Active Scene` once per test scene, future prefab rebuilds never
+break the camera. Pressing Play binds the camera automatically
+via the embedded `CinemachineAutoBind`. The "no display camera"
+class of bug should be retired.
+
+**Updated post-M12-R post-rebuild checklist:**
+The "Re-bind CM Follow Camera" manual step (step 6 in M12-R
+pending follow-up) is now obsolete — `CinemachineAutoBind`
+handles it on Play. Step 6 retained in the milestone history
+above for context, but new sessions should skip it.
+
+Lesson logged:
+- Scene-saved component references to prefab children are fragile
+  across prefab rebuilds. The "drag the child into the slot"
+  scene-author workflow looks robust until the prefab is rebuilt
+  and the child's fileID changes — Unity silently keeps the dead
+  reference. Pattern fix: a small runtime auto-bind component on
+  the consumer side that resolves the reference by tag + name on
+  `Start`. Cheap (one tag lookup + one Transform.Find at startup),
+  resilient to all prefab churn. Worth applying to other scene→
+  prefab references that have caused friction (PlayerHUD, etc.)
+  if they ever break the same way.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

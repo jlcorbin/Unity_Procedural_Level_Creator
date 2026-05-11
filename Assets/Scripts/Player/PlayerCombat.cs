@@ -24,6 +24,7 @@ namespace LevelGen.Player
     /// </summary>
     [RequireComponent(typeof(PlayerInputReader))]
     [RequireComponent(typeof(PlayerAnimator))]
+    [RequireComponent(typeof(CharacterStatsRuntime))]
     public class PlayerCombat : MonoBehaviour
     {
         // ── Tunables ────────────────────────────────────────────────────────
@@ -281,7 +282,7 @@ namespace LevelGen.Player
             if (hitbox == null)
             {
                 Debug.LogError("[PlayerCombat] OnHitboxOpen fired but 'hitbox' is unassigned. " +
-                               "Run 'LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_MaleHero'.", this);
+                               "Run 'LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_Hero'.", this);
                 return;
             }
             _currentAttackHitList.Clear();

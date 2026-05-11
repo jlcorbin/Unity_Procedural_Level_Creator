@@ -1,7 +1,7 @@
 // PlayerDeathOverlay.cs — passive observer of PlayerDeath.OnPlayerDied.
 //
 // Lives on the prefab root of PlayerDeathOverlay.prefab. Finds
-// Player_MaleHero once at Start (with a polling retry coroutine
+// Player_Hero once at Start (with a polling retry coroutine
 // for deferred-spawn scenarios — same pattern as PlayerHUD), then
 // subscribes to its PlayerDeath.OnPlayerDied event.
 //
@@ -204,7 +204,7 @@ namespace LevelGen.UI
             if (death == null)
             {
                 Debug.LogWarning($"[PlayerDeathOverlay] '{player.name}' has no PlayerDeath. " +
-                                 "Run 'LevelGen ▶ Player ▶ Add PlayerDeath to Player_MaleHero Prefab' " +
+                                 "Run 'LevelGen ▶ Player ▶ Build Player_Hero Prefab' " +
                                  "to wire it.", this);
                 return false;
             }

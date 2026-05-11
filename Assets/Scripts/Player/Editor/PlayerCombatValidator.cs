@@ -8,7 +8,7 @@
 //   2. PlayerAnimator.SetHitTrigger() exists & public.
 //   3. PlayerInputReader.AttackPressed event exists & public.
 //   4. PlayerCombat type exists; TakeHit() public; ContextMenu attribute present.
-//   5. Player_MaleHero.prefab has PlayerCombat on root.
+//   5. Player_Hero.prefab has PlayerCombat on root.
 //   6. Prefab root also has PlayerInputReader, PlayerAnimator, PlayerController,
 //      CharacterController (sanity).
 //
@@ -26,7 +26,7 @@ namespace LevelGen.Player.EditorTools
 {
     public static class PlayerCombatValidator
     {
-        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
 
         [MenuItem("LevelGen/Player/Validate PlayerCombat Wiring (M2-B Step 3)")]
         public static void Run()
@@ -79,8 +79,8 @@ namespace LevelGen.Player.EditorTools
             else
             {
                 var combat = prefab.GetComponent<PlayerCombat>();
-                Check("5 PlayerCombat on Player_MaleHero prefab root", combat != null,
-                    combat != null ? "present" : "missing — run 'Add PlayerCombat to Player_MaleHero Prefab' menu item");
+                Check("5 PlayerCombat on Player_Hero prefab root", combat != null,
+                    combat != null ? "present" : "missing — run 'Add PlayerCombat to Player_Hero Prefab' menu item");
 
                 // ── 6: sibling components for sanity ────────────────────────
                 Check("6a PlayerInputReader on prefab root",

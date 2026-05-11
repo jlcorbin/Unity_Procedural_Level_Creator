@@ -25,6 +25,7 @@ namespace LevelGen.Player
     /// the prompt clears before the death overlay covers it.
     /// </summary>
     [RequireComponent(typeof(PlayerInputReader))]
+    [RequireComponent(typeof(PlayerDeath))]
     [DisallowMultipleComponent]
     public class PlayerInteractor : MonoBehaviour
     {

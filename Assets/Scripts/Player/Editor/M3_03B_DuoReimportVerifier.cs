@@ -6,7 +6,7 @@
 // Run AFTER the 11 Duo assets have been file-copied into
 // Assets/AssetPacks/RPG Tiny Hero Duo/. This script does:
 //   ⑤ AssetDatabase.Refresh + verify all 11 GUIDs resolve.
-//   ⑥ Verify Player_MaleHero.prefab's MaleCharacterPBR PrefabInstance
+//   ⑥ Verify Player_Hero.prefab's MaleCharacterPBR PrefabInstance
 //      auto-relinks (no missing-prefab warning).
 //   ⑦ Run all 6 M2-B validators via ExecuteMenuItem.
 //
@@ -27,7 +27,7 @@ namespace LevelGen.Player.EditorTools
     public static class M3_03B_DuoReimportVerifier
     {
         private const string DuoTargetRoot       = "Assets/AssetPacks/RPG Tiny Hero Duo";
-        private const string PlayerPrefabPath    = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PlayerPrefabPath    = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
         private const string MaleCharacterGuid   = "2dfbb63c9cdf7504faf4ff26b0581598";
         private const string FemaleCharacterGuid = "cc91c8ba8b9a34f4d99e70d721f60b64";
 
@@ -102,14 +102,14 @@ namespace LevelGen.Player.EditorTools
             }
             Debug.Log($"[M3-03B] All 11 GUIDs resolved to expected paths.");
 
-            // ── Step ⑥: Verify Player_MaleHero PrefabInstance auto-relink.
+            // ── Step ⑥: Verify Player_Hero PrefabInstance auto-relink.
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
             if (playerPrefab == null)
             {
-                Check("Player_MaleHero.prefab loadable", false, $"not found at {PlayerPrefabPath}");
+                Check("Player_Hero.prefab loadable", false, $"not found at {PlayerPrefabPath}");
                 return;
             }
-            Check("Player_MaleHero.prefab loadable", true, "loaded");
+            Check("Player_Hero.prefab loadable", true, "loaded");
 
             // Walk root's children and find the MaleCharacterPBR PrefabInstance.
             Transform malePrefabInstance = null;
@@ -121,7 +121,7 @@ namespace LevelGen.Player.EditorTools
             }
 
             // MaleCharacterPBR child existence
-            Check("MaleCharacterPBR child present in Player_MaleHero", malePrefabInstance != null,
+            Check("MaleCharacterPBR child present in Player_Hero", malePrefabInstance != null,
                 malePrefabInstance != null
                     ? "found in hierarchy"
                     : "NOT found — auto-relink may have failed");

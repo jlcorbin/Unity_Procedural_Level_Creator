@@ -1,7 +1,7 @@
 // PlayerCombatHitboxBuilder.cs — damage-routing prefab + animation authoring.
 //
 // Three menu items:
-//   LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_MaleHero
+//   LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_Hero
 //   LevelGen ▶ Combat ▶ Add Collider to Dummy
 //   LevelGen ▶ Combat ▶ Add Animation Events to Attack Clips
 //
@@ -20,7 +20,7 @@ namespace LevelGen.Combat.EditorTools
     public static class PlayerCombatHitboxBuilder
     {
         // ── Paths ───────────────────────────────────────────────────────────
-        private const string PlayerPrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PlayerPrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
         private const string DummyPrefabPath  = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
         private const string AttackClipsFolder =
             "Assets/AssetPacks/RPG Tiny Hero World Bundle/RPGTinyHeroWavePBR/Animation/SwordAndShield";
@@ -56,10 +56,10 @@ namespace LevelGen.Combat.EditorTools
         private const string EventCloseName = "OnHitboxClose";
 
         // ════════════════════════════════════════════════════════════════════
-        // Menu item: add weapon hitbox to Player_MaleHero
+        // Menu item: add weapon hitbox to Player_Hero
         // ════════════════════════════════════════════════════════════════════
 
-        [MenuItem("LevelGen/Combat/Add Weapon Hitbox to Player_MaleHero")]
+        [MenuItem("LevelGen/Combat/Add Weapon Hitbox to Player_Hero")]
         private static void AddWeaponHitboxToPlayer()
         {
             var prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
@@ -75,8 +75,8 @@ namespace LevelGen.Combat.EditorTools
                 var combat = contents.GetComponent<PlayerCombat>();
                 if (combat == null)
                 {
-                    Debug.LogError("[HitboxBuilder] Player_MaleHero has no PlayerCombat. Run " +
-                                   "'LevelGen ▶ Player ▶ Add PlayerCombat to Player_MaleHero Prefab' first.");
+                    Debug.LogError("[HitboxBuilder] Player_Hero has no PlayerCombat. Run " +
+                                   "'LevelGen ▶ Player ▶ Add PlayerCombat to Player_Hero Prefab' first.");
                     return;
                 }
 
@@ -84,7 +84,7 @@ namespace LevelGen.Combat.EditorTools
                 if (attach == null)
                 {
                     Debug.LogError("[HitboxBuilder] Could not find a weapon attach Transform in " +
-                                   $"Player_MaleHero hierarchy. Looked for: {string.Join(", ", WeaponAttachCandidates)}.");
+                                   $"Player_Hero hierarchy. Looked for: {string.Join(", ", WeaponAttachCandidates)}.");
                     return;
                 }
 
@@ -162,7 +162,7 @@ namespace LevelGen.Combat.EditorTools
                 var animator = contents.GetComponentInChildren<Animator>(includeInactive: true);
                 if (animator == null)
                 {
-                    Debug.LogError("[HitboxBuilder] No Animator found in Player_MaleHero — " +
+                    Debug.LogError("[HitboxBuilder] No Animator found in Player_Hero — " +
                                    "AnimationEventForwarder cannot be placed. " +
                                    "AnimationEvents will not reach PlayerCombat.");
                 }
@@ -183,7 +183,7 @@ namespace LevelGen.Combat.EditorTools
                 }
 
                 PrefabUtility.SaveAsPrefabAsset(contents, PlayerPrefabPath);
-                Debug.Log($"[HitboxBuilder] WeaponHitbox wired on Player_MaleHero. " +
+                Debug.Log($"[HitboxBuilder] WeaponHitbox wired on Player_Hero. " +
                           $"Parent='{attach.name}', size={HitboxSize}, center={HitboxCenter}, " +
                           "isTrigger=true, enabled=false (default). " +
                           "PlayerCombat.hitbox + HitboxRelay.combat both assigned.");

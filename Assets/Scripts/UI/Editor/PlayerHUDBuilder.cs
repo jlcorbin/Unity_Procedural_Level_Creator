@@ -3,7 +3,7 @@
 // Three menu items:
 //   LevelGen ▶ UI ▶ Build PlayerHUD Prefab
 //   LevelGen ▶ UI ▶ Place PlayerHUD in Active Scene
-//   LevelGen ▶ UI ▶ Add CharacterStatsRuntime to Player_MaleHero
+//   LevelGen ▶ UI ▶ Add CharacterStatsRuntime to Player_Hero
 //
 // Build is idempotent — overwrite-confirmed. Player stats SO is created
 // on first run; Add menu attaches the runtime component to the Player
@@ -25,7 +25,7 @@ namespace LevelGen.UI.EditorTools
         // ── Paths ───────────────────────────────────────────────────────────
         private const string HUDPrefabPath    = "Assets/Prefabs/UI/PlayerHUD.prefab";
         private const string PlayerStatsPath  = "Assets/Data/CharacterStats/CharacterStats_Player.asset";
-        private const string PlayerPrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PlayerPrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
 
         // ── Colors ──────────────────────────────────────────────────────────
         private static readonly Color BgColor       = new Color(0.10f, 0.10f, 0.10f, 0.85f);
@@ -192,10 +192,10 @@ namespace LevelGen.UI.EditorTools
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // Menu item: add CharacterStatsRuntime to Player_MaleHero
+        // Menu item: add CharacterStatsRuntime to Player_Hero
         // ════════════════════════════════════════════════════════════════════
 
-        [MenuItem("LevelGen/UI/Add CharacterStatsRuntime to Player_MaleHero")]
+        [MenuItem("LevelGen/UI/Add CharacterStatsRuntime to Player_Hero")]
         private static void AddStatsRuntimeToPlayer()
         {
             var playerStats = EnsurePlayerStats();
@@ -220,7 +220,7 @@ namespace LevelGen.UI.EditorTools
 
                     if (assigned == playerStats)
                     {
-                        Debug.Log("[PlayerHUDBuilder] CharacterStatsRuntime already on Player_MaleHero with " +
+                        Debug.Log("[PlayerHUDBuilder] CharacterStatsRuntime already on Player_Hero with " +
                                   "CharacterStats_Player assigned — no change.");
                         return;
                     }
@@ -254,7 +254,7 @@ namespace LevelGen.UI.EditorTools
                 }
 
                 PrefabUtility.SaveAsPrefabAsset(contents, PlayerPrefabPath);
-                Debug.Log($"[PlayerHUDBuilder] Added CharacterStatsRuntime to Player_MaleHero. " +
+                Debug.Log($"[PlayerHUDBuilder] Added CharacterStatsRuntime to Player_Hero. " +
                           $"stats=CharacterStats_Player (HP={playerStats.maxHP}, " +
                           $"Stamina={playerStats.maxStamina}).");
             }

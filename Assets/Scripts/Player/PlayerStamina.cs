@@ -28,6 +28,7 @@ namespace LevelGen.Player
     /// </summary>
     [RequireComponent(typeof(CharacterStatsRuntime))]
     [RequireComponent(typeof(PlayerController))]
+    [RequireComponent(typeof(PlayerDeath))]
     [DisallowMultipleComponent]
     public class PlayerStamina : MonoBehaviour
     {

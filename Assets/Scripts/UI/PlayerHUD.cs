@@ -1,6 +1,6 @@
 // PlayerHUD.cs — passive observer of CharacterStatsRuntime on the Player.
 //
-// Lives on the Canvas root of PlayerHUD.prefab. Finds Player_MaleHero
+// Lives on the Canvas root of PlayerHUD.prefab. Finds Player_Hero
 // once at Start (with a polling retry coroutine for deferred-spawn
 // scenarios), then per-frame mirrors HP / Stamina onto two Filled
 // Images plus TMP labels.
@@ -142,7 +142,7 @@ namespace LevelGen.UI
             if (runtime == null)
             {
                 Debug.LogWarning($"[PlayerHUD] '{player.name}' has no CharacterStatsRuntime. " +
-                                 "Run 'LevelGen ▶ UI ▶ Add CharacterStatsRuntime to Player_MaleHero' " +
+                                 "Run 'LevelGen ▶ UI ▶ Add CharacterStatsRuntime to Player_Hero' " +
                                  "to wire it.", this);
                 return false;
             }

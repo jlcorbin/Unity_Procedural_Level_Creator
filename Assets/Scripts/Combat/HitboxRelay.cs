@@ -1,7 +1,7 @@
 // HitboxRelay.cs — bridge from a child trigger collider to PlayerCombat.
 //
 // Lives on the same GameObject as the trigger collider (the WeaponHitbox
-// child of Player_MaleHero). Forwards OnTriggerEnter to the parent
+// child of Player_Hero). Forwards OnTriggerEnter to the parent
 // prefab root's PlayerCombat. No state, no Update — pure relay.
 
 using UnityEngine;

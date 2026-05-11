@@ -10,7 +10,7 @@
 //   - PlayerCombat new public surface (override field, setter,
 //     RequestAttack, IsBusy)
 //   - AssassinateInteractable subclass shape
-//   - Player_MaleHero.prefab tag + PlayerInteractor component
+//   - Player_Hero.prefab tag + PlayerInteractor component
 //   - Dummy.prefab _AssassinateZone child wiring
 
 #if UNITY_EDITOR
@@ -32,7 +32,7 @@ namespace LevelGen.Interaction.EditorTools
         private const string PlayerInteractorPath      = "Assets/Scripts/Player/PlayerInteractor.cs";
         private const string PlayerInputReaderSrc      = "Assets/Scripts/Player/PlayerInputReader.cs";
         private const string PlayerCombatSrc           = "Assets/Scripts/Player/PlayerCombat.cs";
-        private const string PlayerPrefabPath          = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PlayerPrefabPath          = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
         private const string DummyPrefabPath           = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
 
         [MenuItem("LevelGen/Interaction/Validate Interact System")]
@@ -173,23 +173,23 @@ namespace LevelGen.Interaction.EditorTools
             Check("10 AssassinateInteractable has [RequireComponent(typeof(SphereCollider))]", requireSphere,
                 requireSphere ? "attribute present" : "attribute missing");
 
-            // ── 11: Player_MaleHero.prefab has tag 'Player' ─────────────────
+            // ── 11: Player_Hero.prefab has tag 'Player' ─────────────────
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
             bool ok11 = playerPrefab != null && playerPrefab.CompareTag("Player");
-            Check("11 Player_MaleHero.prefab has tag 'Player'", ok11,
+            Check("11 Player_Hero.prefab has tag 'Player'", ok11,
                 playerPrefab == null
                     ? $"prefab missing at {PlayerPrefabPath}"
                     : (ok11 ? "tag='Player'" : $"tag='{playerPrefab.tag}' (expected 'Player')"));
 
-            // ── 12: Player_MaleHero.prefab has PlayerInteractor ─────────────
+            // ── 12: Player_Hero.prefab has PlayerInteractor ─────────────
             PlayerInteractor interactor = null;
             if (playerPrefab != null) interactor = playerPrefab.GetComponent<PlayerInteractor>();
-            Check("12 Player_MaleHero.prefab has PlayerInteractor on root", interactor != null,
+            Check("12 Player_Hero.prefab has PlayerInteractor on root", interactor != null,
                 playerPrefab == null
                     ? "prefab missing — see check 11"
                     : (interactor != null
                         ? "found on prefab root"
-                        : "missing — run 'LevelGen ▶ Player ▶ Add PlayerInteractor to Player_MaleHero Prefab'"));
+                        : "missing — run 'LevelGen ▶ Player ▶ Add PlayerInteractor to Player_Hero Prefab'"));
 
             // ── 13: Dummy.prefab _AssassinateZone child + AssassinateInteractable ──
             var dummyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DummyPrefabPath);

@@ -6,7 +6,7 @@
 // 11 checks covering:
 //   - PlayerHUD type in LevelGen.UI
 //   - CharacterStats_Player.asset values
-//   - Player_MaleHero prefab (CharacterStatsRuntime + stats + tag)
+//   - Player_Hero prefab (CharacterStatsRuntime + stats + tag)
 //   - PlayerHUD.prefab (Canvas, component, four refs, Filled-Image setup, TMP labels)
 //
 // Pattern mirrors DummyAndStatsValidator.cs.
@@ -25,7 +25,7 @@ namespace LevelGen.UI.EditorTools
     {
         private const string HUDPrefabPath    = "Assets/Prefabs/UI/PlayerHUD.prefab";
         private const string PlayerStatsPath  = "Assets/Data/CharacterStats/CharacterStats_Player.asset";
-        private const string PlayerPrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PlayerPrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
 
         [MenuItem("LevelGen/UI/Validate PlayerHUD")]
         public static void Run()
@@ -62,30 +62,30 @@ namespace LevelGen.UI.EditorTools
                     $"maxStamina={playerStats.maxStamina} (expected 'Player', 100, 100)");
             }
 
-            // ── 3-5: Player_MaleHero prefab ─────────────────────────────────
+            // ── 3-5: Player_Hero prefab ─────────────────────────────────
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
             CharacterStatsRuntime playerRuntime = null;
             if (playerPrefab == null)
             {
-                Check("3 Player_MaleHero has CharacterStatsRuntime",
+                Check("3 Player_Hero has CharacterStatsRuntime",
                     false, $"prefab missing at {PlayerPrefabPath}");
-                Check("4 Player_MaleHero CharacterStatsRuntime references CharacterStats_Player",
+                Check("4 Player_Hero CharacterStatsRuntime references CharacterStats_Player",
                     false, "prefab missing — see check 3");
-                Check("5 Player_MaleHero has tag 'Player'",
+                Check("5 Player_Hero has tag 'Player'",
                     false, "prefab missing — see check 3");
             }
             else
             {
                 playerRuntime = playerPrefab.GetComponent<CharacterStatsRuntime>();
-                Check("3 Player_MaleHero has CharacterStatsRuntime",
+                Check("3 Player_Hero has CharacterStatsRuntime",
                     playerRuntime != null,
                     playerRuntime != null
                         ? "present"
-                        : "missing — run 'LevelGen ▶ UI ▶ Add CharacterStatsRuntime to Player_MaleHero'");
+                        : "missing — run 'LevelGen ▶ UI ▶ Add CharacterStatsRuntime to Player_Hero'");
 
                 if (playerRuntime == null)
                 {
-                    Check("4 Player_MaleHero CharacterStatsRuntime references CharacterStats_Player",
+                    Check("4 Player_Hero CharacterStatsRuntime references CharacterStats_Player",
                         false, "component missing — see check 3");
                 }
                 else
@@ -94,7 +94,7 @@ namespace LevelGen.UI.EditorTools
                     var prop = so.FindProperty("stats");
                     var assigned = prop != null ? prop.objectReferenceValue as CharacterStats : null;
                     bool ok = assigned != null && assigned == playerStats;
-                    Check("4 Player_MaleHero CharacterStatsRuntime references CharacterStats_Player",
+                    Check("4 Player_Hero CharacterStatsRuntime references CharacterStats_Player",
                         ok,
                         assigned != null
                             ? $"stats='{assigned.name}' (expected 'CharacterStats_Player')"
@@ -102,7 +102,7 @@ namespace LevelGen.UI.EditorTools
                 }
 
                 bool tagOk = playerPrefab.CompareTag("Player");
-                Check("5 Player_MaleHero has tag 'Player'", tagOk,
+                Check("5 Player_Hero has tag 'Player'", tagOk,
                     tagOk ? "tag='Player'" : $"tag='{playerPrefab.tag}'");
             }
 

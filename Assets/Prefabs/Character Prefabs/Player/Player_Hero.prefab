@@ -117,8 +117,10 @@ GameObject:
   - component: {fileID: 7119616269663664075}
   - component: {fileID: 8984199153369416035}
   - component: {fileID: 4163399805207047792}
+  - component: {fileID: 700607533112611545}
+  - component: {fileID: 5210536101866667839}
   m_Layer: 0
-  m_Name: Player_MaleHero
+  m_Name: Player_Hero
   m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -511,6 +513,44 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 159f64e355493d6499062203b1cbef68, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerHitReaction
+--- !u!114 &700607533112611545
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4475946285068610722}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f797b8d394913ea4cb0c366ee3a7b9ea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Input.MouseLook
+--- !u!114 &5210536101866667839
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4475946285068610722}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 13274cc81b61d3c43853cc10631f7d51, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerHero
+  _characterController: {fileID: 5847254314397901611}
+  _stats: {fileID: 2271876486046543205}
+  _targetable: {fileID: 8984199153369416035}
+  _playerInput: {fileID: 6163141385868671428}
+  _input: {fileID: 3466405732630974326}
+  _mouseLook: {fileID: 700607533112611545}
+  _controller: {fileID: 392053944117954139}
+  _animator: {fileID: 1024233679820422337}
+  _stamina: {fileID: 2507254229941295110}
+  _dodge: {fileID: 9062520267024008279}
+  _combat: {fileID: 7119616269663664075}
+  _hitReaction: {fileID: 4163399805207047792}
+  _death: {fileID: 1115029209863257410}
+  _interactor: {fileID: 372145876249854902}
 --- !u!1 &8263107797383945181
 GameObject:
   m_ObjectHideFlags: 0

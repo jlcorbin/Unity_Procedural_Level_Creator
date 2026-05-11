@@ -21,9 +21,17 @@ namespace LevelGen.Player
     /// and forwards body-relative locomotion intent to
     /// <see cref="PlayerAnimator"/>.
     /// </summary>
+    // Note: PlayerStamina is intentionally NOT [RequireComponent]'d here
+    // even though we read it in Awake — PlayerStamina has the inverse
+    // [RequireComponent(PlayerController)] for its `_controller` ref,
+    // and bidirectional [RequireComponent] is rejected by Unity.
+    // PlayerHero's manifest carries both, satisfying the contract from
+    // the root level. The `_stamina` ref here remains null-tolerant.
     [RequireComponent(typeof(CharacterController))]
     [RequireComponent(typeof(PlayerInputReader))]
     [RequireComponent(typeof(PlayerAnimator))]
+    [RequireComponent(typeof(PlayerCombat))]
+    [RequireComponent(typeof(PlayerDodge))]
     public class PlayerController : MonoBehaviour
     {
         [Header("Movement")]

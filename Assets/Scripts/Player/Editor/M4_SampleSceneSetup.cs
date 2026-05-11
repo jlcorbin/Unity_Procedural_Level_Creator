@@ -6,8 +6,8 @@
 // Prepares Assets/Scenes/SampleScene.unity for press-Play-and-it-works:
 //   ②a Open SampleScene (single mode, prompt to save active first)
 //   ②b Cleanup pass — remove legacy Main Camera + any leftover spawners /
-//      stale Player_MaleHero / CM Brain Camera / CinemachineCamera
-//   ②c Drop Player_MaleHero.prefab at world (5, 0, -5)
+//      stale Player_Hero / CM Brain Camera / CinemachineCamera
+//   ②c Drop Player_Hero.prefab at world (5, 0, -5)
 //   ②d Save scene, then invoke
 //      "LevelGen/Player/Add Cinemachine Follow Camera to Active Scene"
 //   ②e Final scene save
@@ -33,7 +33,7 @@ namespace LevelGen.Player.EditorTools
     public static class M4_SampleSceneSetup
     {
         private const string ScenePath  = "Assets/Scenes/SampleScene.unity";
-        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
         private const string CmMenuPath = "LevelGen/Player/Add Cinemachine Follow Camera to Active Scene";
 
         private static readonly Vector3 PlayerSpawnPos = new Vector3(5f, 0f, -5f);
@@ -61,8 +61,8 @@ namespace LevelGen.Player.EditorTools
             // ── ②b · Cleanup pass ──────────────────────────────────────────
             int removed = 0;
             removed += RemoveRootByName("PlayerSpawner",                "leftover spawner — replaced by direct prefab placement");
-            removed += RemoveRootByName("Player_MaleHero (Spawned)",    "leftover runtime-spawn instance");
-            removed += RemoveRootByName("Player_MaleHero",              "stale prefab instance — replacing with fresh");
+            removed += RemoveRootByName("Player_Hero (Spawned)",    "leftover runtime-spawn instance");
+            removed += RemoveRootByName("Player_Hero",              "stale prefab instance — replacing with fresh");
             removed += RemoveRootByName("CinemachineCamera",            "stale CM vcam — recreating");
             removed += RemoveRootByName("CM Follow Camera",             "stale CM vcam — recreating");
             removed += RemoveRootByName("CM Brain Camera",              "stale CM brain — recreating");
@@ -82,21 +82,21 @@ namespace LevelGen.Player.EditorTools
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
             if (playerPrefab == null)
             {
-                Debug.LogError($"[SampleScene Setup] Player_MaleHero.prefab not found at {PrefabPath}. Aborting.");
+                Debug.LogError($"[SampleScene Setup] Player_Hero.prefab not found at {PrefabPath}. Aborting.");
                 return;
             }
 
             var playerInstance = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
             playerInstance.transform.SetPositionAndRotation(PlayerSpawnPos, Quaternion.identity);
             EditorUtility.SetDirty(playerInstance);
-            Debug.Log($"[SampleScene Setup] Placed Player_MaleHero at {PlayerSpawnPos}.");
+            Debug.Log($"[SampleScene Setup] Placed Player_Hero at {PlayerSpawnPos}.");
 
             // Sanity: CameraTarget child must exist on the placed instance
             // (the CM menu item depends on it).
             var camTargetCheck = playerInstance.transform.Find("CameraTarget");
             if (camTargetCheck == null)
             {
-                Debug.LogError("[SampleScene Setup] Placed Player_MaleHero has no CameraTarget child. Aborting before CM step.");
+                Debug.LogError("[SampleScene Setup] Placed Player_Hero has no CameraTarget child. Aborting before CM step.");
                 return;
             }
 
@@ -132,20 +132,20 @@ namespace LevelGen.Player.EditorTools
                 active.path == ScenePath,
                 $"path = '{active.path}'");
 
-            // (2) Player_MaleHero placement
+            // (2) Player_Hero placement
             // Re-fetch via SceneManager — the cached Scene struct from
             // OpenScene() can go stale across SaveScene + ExecuteMenuItem.
             GameObject playerRoot = null;
             int playerCount = 0;
             foreach (var go in active.GetRootGameObjects())
             {
-                if (go.name == "Player_MaleHero")
+                if (go.name == "Player_Hero")
                 {
                     playerRoot = go;
                     playerCount++;
                 }
             }
-            Check("exactly one Player_MaleHero at scene root",
+            Check("exactly one Player_Hero at scene root",
                 playerCount == 1,
                 $"count = {playerCount}");
 
@@ -205,7 +205,7 @@ namespace LevelGen.Player.EditorTools
                 Transform followT = vcam.Follow;
                 var expectedTarget = playerRoot.transform.Find("CameraTarget");
                 bool trackingOk = followT != null && followT == expectedTarget;
-                Check("CinemachineCamera Tracking Target → Player_MaleHero/CameraTarget",
+                Check("CinemachineCamera Tracking Target → Player_Hero/CameraTarget",
                     trackingOk,
                     followT != null
                         ? $"resolved to '{followT.name}' (matches expected = {followT == expectedTarget})"

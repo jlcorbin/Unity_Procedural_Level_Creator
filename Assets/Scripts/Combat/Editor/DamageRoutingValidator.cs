@@ -7,7 +7,7 @@
 //   - HitboxRelay type
 //   - PlayerCombat new public methods + serialized fields
 //   - CharacterStatsRuntime visibility promotion
-//   - Player_MaleHero WeaponHitbox (BoxCollider trigger + HitboxRelay + wiring)
+//   - Player_Hero WeaponHitbox (BoxCollider trigger + HitboxRelay + wiring)
 //   - PlayerCombat.hitbox field assignment
 //   - Dummy collider
 //   - Attack01-03 AnimationEvents (best-effort; warn-skip on missing FBX)
@@ -23,7 +23,7 @@ namespace LevelGen.Combat.EditorTools
 {
     public static class DamageRoutingValidator
     {
-        private const string PlayerPrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PlayerPrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
         private const string DummyPrefabPath  = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
         private const string AttackClipsFolder =
             "Assets/AssetPacks/RPG Tiny Hero World Bundle/RPGTinyHeroWavePBR/Animation/SwordAndShield";
@@ -86,11 +86,11 @@ namespace LevelGen.Combat.EditorTools
                 healM != null,
                 healM != null ? "found" : "missing or non-public (still internal?)");
 
-            // ── 6-9: Player_MaleHero WeaponHitbox wiring ────────────────────
+            // ── 6-9: Player_Hero WeaponHitbox wiring ────────────────────
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
             if (playerPrefab == null)
             {
-                Check("6 Player_MaleHero has a WeaponHitbox child", false,
+                Check("6 Player_Hero has a WeaponHitbox child", false,
                     $"prefab missing at {PlayerPrefabPath}");
                 Check("7 WeaponHitbox BoxCollider trigger=true, enabled=false", false,
                     "prefab missing — see check 6");
@@ -102,11 +102,11 @@ namespace LevelGen.Combat.EditorTools
             else
             {
                 var hitboxRelay = playerPrefab.GetComponentInChildren<HitboxRelay>(includeInactive: true);
-                Check("6 Player_MaleHero has a WeaponHitbox child", hitboxRelay != null,
+                Check("6 Player_Hero has a WeaponHitbox child", hitboxRelay != null,
                     hitboxRelay != null
                         ? $"found at '{GetPath(playerPrefab.transform, hitboxRelay.transform)}'"
                         : "no HitboxRelay anywhere in hierarchy — run " +
-                          "'LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_MaleHero'");
+                          "'LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_Hero'");
 
                 if (hitboxRelay == null)
                 {

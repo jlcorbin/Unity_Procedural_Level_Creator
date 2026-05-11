@@ -7,7 +7,7 @@
 //
 // Run them in order. Each step prints PASS / FAIL and aborts on error.
 // After all three pass, the swap is complete on the asset side; the
-// player rig (MaleCharacterPBR child of Player_MaleHero.prefab) will
+// player rig (MaleCharacterPBR child of Player_Hero.prefab) will
 // be in a "missing prefab" state — that's M3-02B's concern.
 //
 // This file can be safely deleted after the swap completes; it is
@@ -365,7 +365,7 @@ namespace LevelGen.Player.EditorTools
             report.Add("");
             report.Add("---");
             report.Add("");
-            report.Add("**Next step:** M3-02B — replace the broken `MaleCharacterPBR` PrefabInstance under `Player_MaleHero.prefab` with a chosen MC* prefab from the new pack.");
+            report.Add("**Next step:** M3-02B — replace the broken `MaleCharacterPBR` PrefabInstance under `Player_Hero.prefab` with a chosen MC* prefab from the new pack.");
 
             WriteReport(report);
 

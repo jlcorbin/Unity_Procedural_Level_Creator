@@ -26,6 +26,8 @@ namespace LevelGen.Player
     /// window (Q4 — Player flinches on every hit).
     /// </summary>
     [RequireComponent(typeof(Targetable))]
+    [RequireComponent(typeof(PlayerCombat))]
+    [RequireComponent(typeof(CharacterStatsRuntime))]
     [DisallowMultipleComponent]
     public class PlayerHitReaction : MonoBehaviour
     {

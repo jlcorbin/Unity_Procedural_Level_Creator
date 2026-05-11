@@ -16,7 +16,7 @@ namespace LevelGen.Player
     public class PlayerSpawner : MonoBehaviour
     {
         [Header("Spawn")]
-        [Tooltip("Player prefab to instantiate at Start. Assign Player_MaleHero.prefab.")]
+        [Tooltip("Player prefab to instantiate at Start. Assign Player_Hero.prefab.")]
         [SerializeField] private GameObject playerPrefab;
 
         [Tooltip("Spawn point. Defaults to this transform if null.")]

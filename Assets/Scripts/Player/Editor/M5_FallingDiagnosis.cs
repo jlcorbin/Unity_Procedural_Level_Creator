@@ -59,7 +59,7 @@ namespace LevelGen.Player.EditorTools
             GameObject vcamRoot   = null;
             foreach (var go in scene.GetRootGameObjects())
             {
-                if (go.name == "Player_MaleHero")     playerRoot = go;
+                if (go.name == "Player_Hero")     playerRoot = go;
                 else if (go.name == "CM Brain Camera") brainRoot  = go;
                 else if (go.name == "CM Follow Camera") vcamRoot  = go;
             }
@@ -69,11 +69,11 @@ namespace LevelGen.Player.EditorTools
             sb.AppendLine();
             if (playerRoot == null)
             {
-                sb.AppendLine("**FAIL — no GameObject named `Player_MaleHero` at scene root.**");
+                sb.AppendLine("**FAIL — no GameObject named `Player_Hero` at scene root.**");
                 sb.AppendLine("Aborting diagnosis. Run the SampleScene Setup before re-running.");
                 File.WriteAllText(OutputPath, sb.ToString());
                 AssetDatabase.Refresh();
-                Debug.LogError("[M5] Player_MaleHero missing — diagnosis aborted.");
+                Debug.LogError("[M5] Player_Hero missing — diagnosis aborted.");
                 return;
             }
 
@@ -106,7 +106,7 @@ namespace LevelGen.Player.EditorTools
             // ── ③ Every collider in scene (excluding player + CM rigs) ──
             sb.AppendLine("## Step ③ — All scene colliders");
             sb.AppendLine();
-            sb.AppendLine("Excludes colliders under `Player_MaleHero`, `CM Brain Camera`, `CM Follow Camera`.");
+            sb.AppendLine("Excludes colliders under `Player_Hero`, `CM Brain Camera`, `CM Follow Camera`.");
             sb.AppendLine();
 
             var excludeRoots = new HashSet<GameObject>();

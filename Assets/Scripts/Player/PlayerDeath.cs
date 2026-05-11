@@ -28,6 +28,9 @@ namespace LevelGen.Player
     /// <see cref="OnPlayerDied"/> for UI subscribers.
     /// </summary>
     [RequireComponent(typeof(CharacterStatsRuntime))]
+    [RequireComponent(typeof(PlayerAnimator))]
+    [RequireComponent(typeof(PlayerController))]
+    [RequireComponent(typeof(PlayerCombat))]
     [DisallowMultipleComponent]
     public class PlayerDeath : MonoBehaviour
     {

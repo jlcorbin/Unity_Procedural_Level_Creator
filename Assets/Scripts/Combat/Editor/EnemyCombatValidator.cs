@@ -11,7 +11,7 @@
 //   - EnemyAnimationEventAbsorber.cs deleted as part of M11 cleanup
 //   - PlayerHitReaction.cs present + RequireComponent + sub/unsub +
 //     TakeHit call (literal-stub matches)
-//   - Player_MaleHero.prefab gains Targetable + PlayerHitReaction + tag
+//   - Player_Hero.prefab gains Targetable + PlayerHitReaction + tag
 //   - Dummy.prefab gains EnemyCombat + Forwarder on child + EnemyWeaponHitbox
 
 #if UNITY_EDITOR
@@ -30,7 +30,7 @@ namespace LevelGen.Combat.EditorTools
         private const string EnemyForwarderSrcPath     = "Assets/Scripts/Combat/EnemyAnimationEventForwarder.cs";
         private const string EnemyAbsorberSrcPath      = "Assets/Scripts/Combat/EnemyAnimationEventAbsorber.cs";
         private const string PlayerHitReactionSrcPath  = "Assets/Scripts/Player/PlayerHitReaction.cs";
-        private const string PlayerPrefabPath          = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PlayerPrefabPath          = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
         private const string DummyPrefabPath           = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
         private const string EnemyHitboxName           = "EnemyWeaponHitbox";
 
@@ -190,7 +190,7 @@ namespace LevelGen.Combat.EditorTools
             }
             Check("10 PlayerHitReaction.cs contains '_combat.TakeHit()' call", ok10, detail10);
 
-            // ── 11: Player_MaleHero.prefab has Targetable component ─────────
+            // ── 11: Player_Hero.prefab has Targetable component ─────────
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabPath);
             bool ok11 = false;
             string detail11 = $"prefab missing at {PlayerPrefabPath}";
@@ -199,11 +199,11 @@ namespace LevelGen.Combat.EditorTools
                 ok11 = playerPrefab.GetComponent<Targetable>() != null;
                 detail11 = ok11
                     ? "Targetable on Player root"
-                    : "Targetable missing — run 'LevelGen ▶ Player ▶ Add Targetable to Player_MaleHero Prefab'";
+                    : "Targetable missing — run 'LevelGen ▶ Player ▶ Add Targetable to Player_Hero Prefab'";
             }
-            Check("11 Player_MaleHero.prefab has Targetable on root", ok11, detail11);
+            Check("11 Player_Hero.prefab has Targetable on root", ok11, detail11);
 
-            // ── 12: Player_MaleHero.prefab has PlayerHitReaction ────────────
+            // ── 12: Player_Hero.prefab has PlayerHitReaction ────────────
             bool ok12 = false;
             string detail12 = $"prefab missing at {PlayerPrefabPath}";
             if (playerPrefab != null)
@@ -211,11 +211,11 @@ namespace LevelGen.Combat.EditorTools
                 ok12 = playerPrefab.GetComponent<PlayerHitReaction>() != null;
                 detail12 = ok12
                     ? "PlayerHitReaction on Player root"
-                    : "PlayerHitReaction missing — run 'LevelGen ▶ Player ▶ Add PlayerHitReaction to Player_MaleHero Prefab'";
+                    : "PlayerHitReaction missing — run 'LevelGen ▶ Player ▶ Add PlayerHitReaction to Player_Hero Prefab'";
             }
-            Check("12 Player_MaleHero.prefab has PlayerHitReaction on root", ok12, detail12);
+            Check("12 Player_Hero.prefab has PlayerHitReaction on root", ok12, detail12);
 
-            // ── 13: Player_MaleHero.prefab has tag 'Player' ─────────────────
+            // ── 13: Player_Hero.prefab has tag 'Player' ─────────────────
             bool ok13 = false;
             string detail13 = $"prefab missing at {PlayerPrefabPath}";
             if (playerPrefab != null)
@@ -225,7 +225,7 @@ namespace LevelGen.Combat.EditorTools
                     ? "tag='Player'"
                     : $"tag='{playerPrefab.tag}' (expected 'Player' — friendly-fire guard would block all hits)";
             }
-            Check("13 Player_MaleHero.prefab tag = 'Player'", ok13, detail13);
+            Check("13 Player_Hero.prefab tag = 'Player'", ok13, detail13);
 
             // ── 14: Dummy.prefab has EnemyCombat ────────────────────────────
             var dummyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DummyPrefabPath);
@@ -297,7 +297,7 @@ namespace LevelGen.Combat.EditorTools
             }
             Check("16 Dummy.prefab EnemyWeaponHitbox child fully wired (BoxCollider + Rigidbody + Relay)", ok16, detail16);
 
-            // ── 17: Player_MaleHero.prefab CharacterController.radius >= 0.35 ──
+            // ── 17: Player_Hero.prefab CharacterController.radius >= 0.35 ──
             // Q5: bumped 0.3 → 0.4 in M11 for symmetric combat reach with the
             // Dummy's CapsuleCollider (also 0.4). Loose lower bound (0.35)
             // catches "someone reset it to the 0.3 default" without locking
@@ -309,7 +309,7 @@ namespace LevelGen.Combat.EditorTools
                 var cc = playerPrefab.GetComponent<CharacterController>();
                 if (cc == null)
                 {
-                    detail17 = "Player_MaleHero has no CharacterController";
+                    detail17 = "Player_Hero has no CharacterController";
                 }
                 else
                 {
@@ -320,7 +320,7 @@ namespace LevelGen.Combat.EditorTools
                           "run 'LevelGen ▶ Player ▶ Tune CharacterController for Hit Reception'";
                 }
             }
-            Check("17 Player_MaleHero.prefab CharacterController.radius >= 0.35 (M11 Q5)", ok17, detail17);
+            Check("17 Player_Hero.prefab CharacterController.radius >= 0.35 (M11 Q5)", ok17, detail17);
 
             Summary(pass, fail);
         }

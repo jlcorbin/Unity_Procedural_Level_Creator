@@ -8,7 +8,7 @@
 //   2. PlayerAnimator.SetGrounded(bool) public, void, single bool param.
 //   3. PlayerInputReader has public event JumpPressed.
 //   4. PlayerController has private method OnJumpPressed.
-//   5. Player_MaleHero.prefab has all four player components on its root.
+//   5. Player_Hero.prefab has all four player components on its root.
 //
 // Read-only — does not modify any asset. Each check prints PASS or FAIL
 // with detail; final SUMMARY line.
@@ -27,7 +27,7 @@ namespace LevelGen.Player.EditorTools
 {
     public static class PlayerJumpRuntimeValidator
     {
-        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
 
         [MenuItem("LevelGen/Player/Validate Jump Runtime (M2-B Step 5)")]
         public static void Run()

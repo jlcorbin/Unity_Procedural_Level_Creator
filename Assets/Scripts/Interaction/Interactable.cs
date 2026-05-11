@@ -64,7 +64,7 @@ namespace LevelGen.Interaction
         [SerializeField] protected Transform _promptAnchor;
 
         [Tooltip("Tag the trigger looks for to identify the player. " +
-                 "Default 'Player' — must match Player_MaleHero.prefab tag.")]
+                 "Default 'Player' — must match Player_Hero.prefab tag.")]
         [SerializeField] protected string _playerTag = "Player";
 
         // ── Runtime state ──────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 // PlayerCombatPrefabAdder.cs — M2-B Step 3 prefab wiring.
 //
 // Single menu item:
-//   LevelGen ▶ Player ▶ Add PlayerCombat to Player_MaleHero Prefab
+//   LevelGen ▶ Player ▶ Add PlayerCombat to Player_Hero Prefab
 //
 // Idempotent — adds PlayerCombat to the prefab root iff it isn't already
 // there. Inspector defaults from PlayerCombat's SerializeField values are
@@ -15,9 +15,9 @@ namespace LevelGen.Player.Editor
 {
     public static class PlayerCombatPrefabAdder
     {
-        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string PrefabPath = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
 
-        [MenuItem("LevelGen/Player/Add PlayerCombat to Player_MaleHero Prefab")]
+        [MenuItem("LevelGen/Player/Add PlayerCombat to Player_Hero Prefab")]
         public static void Run()
         {
             var prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
@@ -32,7 +32,7 @@ namespace LevelGen.Player.Editor
             {
                 if (contents.GetComponent<PlayerCombat>() != null)
                 {
-                    Debug.Log("[PlayerCombatPrefabAdder] PlayerCombat already present on Player_MaleHero — no change.");
+                    Debug.Log("[PlayerCombatPrefabAdder] PlayerCombat already present on Player_Hero — no change.");
                     return;
                 }
 

@@ -4,7 +4,7 @@
 // Why this exists: Unity dispatches AnimationEvents via SendMessage to
 // the Animator's own GameObject — it does NOT walk the hierarchy. Our
 // Animator lives on the MaleCharacterPBR child, but PlayerCombat lives
-// on the Player_MaleHero root. Without this forwarder, AnimationEvents
+// on the Player_Hero root. Without this forwarder, AnimationEvents
 // log "no receiver! Are you missing a component?" for every fire.
 
 using UnityEngine;

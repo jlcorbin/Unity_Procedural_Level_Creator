@@ -36,6 +36,8 @@ namespace LevelGen.Player
     [RequireComponent(typeof(CharacterController))]
     [RequireComponent(typeof(CharacterStatsRuntime))]
     [RequireComponent(typeof(PlayerInputReader))]
+    [RequireComponent(typeof(PlayerCombat))]
+    [RequireComponent(typeof(PlayerAnimator))]
     [DisallowMultipleComponent]
     public class PlayerDodge : MonoBehaviour
     {
