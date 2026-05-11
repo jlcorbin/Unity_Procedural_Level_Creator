@@ -30,6 +30,7 @@ namespace LevelGen.Combat
     /// <c>LevelGen.Player.PlayerCombat</c>'s hitbox path. Friendly-fire
     /// is hard-blocked: only Player-tagged targets receive damage.
     /// </summary>
+    [RequireComponent(typeof(CharacterStatsRuntime))]
     [DisallowMultipleComponent]
     public class EnemyCombat : MonoBehaviour
     {
@@ -49,6 +50,19 @@ namespace LevelGen.Combat
         // Prevents double-hits when the collider re-enters the same trigger
         // (capsules can drift in/out of the BoxCollider arc).
         private readonly HashSet<Targetable> _currentAttackHitList = new HashSet<Targetable>();
+
+        /// <summary>
+        /// M13-EnemyBase entry point. Pushes EnemyData-driven damage value
+        /// into this script's <c>_attackDamage</c> SerializeField. Called
+        /// by <see cref="LevelGen.Enemy.EnemyBase"/> at Awake. Cast from
+        /// float (EnemyData) → int (EnemyCombat); fractional damage is a
+        /// future-scope concern.
+        /// </summary>
+        public void InitFromEnemyData(EnemyData data)
+        {
+            if (data == null) return;
+            _attackDamage = Mathf.RoundToInt(data.attackDamage);
+        }
 
         // ── AnimationEvent endpoints (called via EnemyAnimationEventForwarder) ─
 

@@ -97,6 +97,25 @@ namespace LevelGen.Combat
         /// <summary>Read-only FSM state for inspector / validators.</summary>
         public State CurrentState => _state;
 
+        /// <summary>
+        /// M13-EnemyBase entry point. Pushes EnemyData-driven AI tunables
+        /// into this script's SerializeFields. Called by
+        /// <see cref="LevelGen.Enemy.EnemyBase"/> at Awake (execution order
+        /// -50) before this script's Awake (order 0); when EnemyAI.Awake
+        /// then reads <c>_chaseSpeed</c> / <c>_stoppingDistance</c> they
+        /// already carry the EnemyData values.
+        /// </summary>
+        public void InitFromEnemyData(EnemyData data)
+        {
+            if (data == null) return;
+            _detectionRange   = data.detectionRange;
+            _attackRange      = data.attackRange;
+            _leashRange       = data.leashRange;
+            _chaseSpeed       = data.moveSpeed;
+            _stoppingDistance = data.stoppingDistance;
+            _attackCooldown   = data.attackCooldown;
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Reset()

@@ -25,6 +25,7 @@ namespace LevelGen.Combat
     /// </summary>
     [RequireComponent(typeof(CharacterStatsRuntime))]
     [RequireComponent(typeof(Targetable))]
+    [RequireComponent(typeof(EnemyHitReaction))]
     [DisallowMultipleComponent]
     public class EnemyDeath : MonoBehaviour
     {

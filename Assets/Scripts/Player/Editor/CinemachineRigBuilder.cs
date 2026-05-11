@@ -34,6 +34,7 @@ namespace LevelGen.Player.Editor
         private const string ActionsAssetPath = "Assets/InputSystem_Actions.inputactions";
 
         [MenuItem("LevelGen/Player/Add Cinemachine Follow Camera to Active Scene")]
+        [MenuItem("LevelGen/Input/Add Cinemachine Follow Camera to Active Scene")]
         public static void Build()
         {
             // ── Preflight ────────────────────────────────────────────────────

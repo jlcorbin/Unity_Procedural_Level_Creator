@@ -29,8 +29,17 @@ namespace LevelGen.Combat
     public class CharacterStatsRuntime : MonoBehaviour
     {
         [SerializeField]
-        [Tooltip("Template this character pulls its max values from. Required.")]
+        [Tooltip("CharacterStats template (player path). Required if no EnemyData " +
+                 "is pushed via InitFromEnemyData. Can be left null on enemy " +
+                 "prefabs where EnemyBase pushes the values from an EnemyData asset.")]
         private CharacterStats stats;
+
+        // M13-EnemyBase: when set, this runtime instance derives its
+        // MaxHP / DisplayName from EnemyData instead of the CharacterStats
+        // SO. Pushed by EnemyBase.Awake before this script's Awake fires
+        // (EnemyBase runs at DefaultExecutionOrder(-50); this script
+        // runs at the default 0).
+        [HideInInspector] [SerializeField] private EnemyData _enemyData;
 
         [HideInInspector] [SerializeField] private int   currentHP;
         // M9: stamina is stored as float so sub-1 per-frame drain ticks
@@ -52,9 +61,16 @@ namespace LevelGen.Combat
         // CeilToInt: any stamina > 0.0 reports as >= 1, so PlayerHUD
         // shows non-zero while sprintable; only true zero reports as 0.
         public int            CurrentStamina => Mathf.CeilToInt(currentStamina);
-        public int            MaxHP          => stats != null ? stats.maxHP      : 0;
+        // MaxHP / DisplayName: prefer EnemyData when present (enemy path),
+        // fall back to CharacterStats (player path). MaxStamina has no
+        // EnemyData counterpart yet — enemies don't sprint.
+        public int            MaxHP          => _enemyData != null
+                                                  ? _enemyData.maxHP
+                                                  : (stats != null ? stats.maxHP : 0);
         public int            MaxStamina     => stats != null ? stats.maxStamina : 0;
-        public string         DisplayName    => stats != null ? stats.displayName : name;
+        public string         DisplayName    => _enemyData != null
+                                                  ? _enemyData.enemyName
+                                                  : (stats != null ? stats.displayName : name);
 
         /// <summary>True after OnDied has been raised. Stays true even if Heal restores HP.</summary>
         public bool           IsDead         => _hasDied;
@@ -74,12 +90,38 @@ namespace LevelGen.Combat
         /// </summary>
         public void SetInvulnerable(bool value) => IsInvulnerable = value;
 
+        /// <summary>
+        /// M13-EnemyBase entry point. Pushes an <see cref="EnemyData"/>
+        /// asset into this runtime, overriding the <see cref="CharacterStats"/>
+        /// values for HP and DisplayName. Called by
+        /// <see cref="LevelGen.Enemy.EnemyBase"/> at its Awake (execution
+        /// order -50), which runs before this script's Awake (order 0).
+        /// Awake then reads <c>_enemyData</c> and initializes <c>currentHP</c>
+        /// from it.
+        /// </summary>
+        public void InitFromEnemyData(EnemyData data)
+        {
+            _enemyData = data;
+        }
+
         void Awake()
         {
+            // M13-EnemyBase: if EnemyBase has pushed an EnemyData, init from it.
+            // Stamina has no EnemyData equivalent — fall back to stats SO if
+            // present, else 0 (enemies don't sprint).
+            if (_enemyData != null)
+            {
+                currentHP      = _enemyData.maxHP;
+                currentStamina = stats != null ? stats.maxStamina : 0;
+                Debug.Log($"[CharacterStatsRuntime] {name} initialized as {DisplayName} " +
+                          $"from EnemyData (HP={currentHP}/{MaxHP}, Stamina={CurrentStamina}/{MaxStamina})");
+                return;
+            }
+
             if (stats == null)
             {
-                Debug.LogError($"[CharacterStatsRuntime] '{name}' has no CharacterStats asset assigned. " +
-                               $"Skipping init.", this);
+                Debug.LogError($"[CharacterStatsRuntime] '{name}' has no CharacterStats asset assigned " +
+                               $"and no EnemyData was pushed by an EnemyBase. Skipping init.", this);
                 return;
             }
 

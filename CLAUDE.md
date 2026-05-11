@@ -3660,6 +3660,454 @@ Lesson logged:
   prefab references that have caused friction (PlayerHUD, etc.)
   if they ever break the same way.
 
+## M-MenuCleanup — LevelGen menu consolidation (2026-05-11)
+
+Cleanup milestone. Collapses the LevelGen menu from 8 submenus +
+scattered items into a production-oriented set. Removes the
+Diagnostics, Pack Swap, Scene Setup, and top-level Validate
+submenus. Consolidates 8 per-milestone validators into 2 new
+consolidated validators (`ValidateEnemy`, `ValidateInteraction`).
+Adds an Input-submenu duplicate of the Cinemachine rig-builder
+menu for discoverability.
+
+Architectural decisions (locked):
+- Two new consolidated validators replace 8 deleted per-milestone
+  validators. The per-milestone "validate this exact step's
+  wiring" pattern is retired in favor of domain-level "validate
+  this entire subsystem" validators that survive milestone churn.
+- Test scripts in `Assets/Scripts/LevelEditor/Editor/` (Doorway,
+  EdgeSolver, RoomPiece, ShapeStamp) that produced console-dump
+  smoke tests are deleted. They had no ongoing production value
+  — pure milestone scaffolding from the V1→V2 cell-map refactor.
+- The 5 M3/M4/M5/M6 one-off scaffolding scripts (Pack Swap
+  executor + verifier, sample-scene setup, falling diagnosis,
+  floor-collider stopgap) that drove the Diagnostics / Pack Swap
+  / Scene Setup submenus are deleted. They were marked
+  "one-off scaffolding, can be deleted" in their own headers
+  back when they were written — M-MenuCleanup is the cleanup
+  that always lurked next on the deletion queue.
+- `CinemachineRigBuilder.Build` now carries TWO `[MenuItem]`
+  attributes (Player + Input submenus). Same method, two
+  invocation paths. Lets the user find the menu from either
+  the input-system mental model OR the player-camera mental
+  model.
+- The target menu spec listed fewer items per submenu than
+  the actual end state. The "Do not touch" file list in the
+  spec is the authority — files like `EnemyBaseControllerBuilder`,
+  `PlayerCombatHitboxBuilder`, `TestDoorBuilder`, the M2-B
+  Animator/Runtime validators, etc. retain their menus because
+  the files themselves are protected. Treat the target menu
+  spec as aspirational; "Do not touch" supersedes "everything
+  not in list is deleted".
+
+Two new validators:
+
+`Assets/Scripts/Combat/Editor/ValidateEnemy.cs` (NEW):
+  Menu: `LevelGen ▶ Combat ▶ Validate Enemy`.
+  32 checks. Consolidates the 6 deleted enemy-side validators
+  (DummyAndStats, EnemyHitReaction, EnemyDeath, DamageRouting,
+  EnemyAI, EnemyCombat). Covers:
+    - CharacterStats_Dummy asset existence + CharacterStatsRuntime
+      on Dummy root + IsInvulnerable / SetInvulnerable / ApplyDamage
+      API (checks 1-5)
+    - Targetable on Dummy root + OnHit / AnyTargetableHit / RaiseHit
+      surface with correct signatures (checks 6-9)
+    - EnemyHitReaction component + RequireComponent(Targetable) +
+      DisallowMultipleComponent + HandleHit(Vector3, float)
+      (checks 10-13)
+    - EnemyDeath component + CharacterStatsRuntime.OnDied event +
+      IsDead property (checks 14-16)
+    - EnemyBaseController asset + Dummy Animator references it (not
+      PlayerBaseController) + Hit / Death / MoveSpeed / Attack
+      parameters present + AnyState→Hit canTransitionToSelf=false +
+      Death state is terminal (checks 17-24)
+    - EnemyCombat component + EnemyWeaponHitbox child under
+      weapon_r + EnemyAnimationEventForwarder on MaleCharacterPBR
+      child + friendly-fire CompareTag("Player") source scan
+      (checks 25-28)
+    - EnemyAI component + NavMeshAgent component + _attackRange > 0
+      + _detectionRange > 0 (checks 29-32)
+  Format mirrors PlayerHeroValidator: `[Validator] PASS / FAIL`
+  per check, summary line at end.
+
+`Assets/Scripts/Interaction/Editor/ValidateInteraction.cs` (NEW):
+  Menu: `LevelGen ▶ Interaction ▶ Validate Interaction`.
+  16 checks. Consolidates InteractSystemValidator (M6) +
+  OpenInteractableValidator (M7). Covers:
+    - Interactable.cs presence + abstract base shape with
+      IsEligible(GameObject) + Execute(GameObject) abstract methods +
+      RefreshPromptLabel() (checks 1-3)
+    - AssassinateInteractable.cs + subclass relationship +
+      _AssassinateZone child on Dummy.prefab (checks 4-6)
+    - OpenInteractable.cs + subclass relationship + TestDoor.prefab
+      existence (checks 7-9)
+    - PlayerInteractor.cs + component on Player_Hero.prefab +
+      static Instance property surface (checks 10-12)
+    - PlayerInputReader.InteractPressed event + OnInteract
+      endpoint method (checks 13-14)
+    - Dummy AssassinateInteractable on _AssassinateZone + PlayerHero
+      _interactor SerializeField non-null (checks 15-16)
+
+  Two deviations from spec (documented in script header + here):
+  - Spec said abstract methods were `Execute()` + `CanExecute()`.
+    Real API is `IsEligible(GameObject)` + `Execute(GameObject)`.
+    Validator checks the real names.
+  - Spec check 12 said `PlayerInteractor._interactRadius > 0`.
+    Per architecture, PlayerInteractor has no radius field —
+    interaction radii live on each Interactable subclass's
+    SphereCollider. Replaced with a check that PlayerInteractor
+    exposes its singleton `Instance` static property.
+
+Input-submenu Cinemachine entry:
+- `CinemachineRigBuilder.Build()` gained a second `[MenuItem]`
+  attribute: `LevelGen/Input/Add Cinemachine Follow Camera to
+  Active Scene`. Same method, two menu paths. The Player
+  submenu copy remains.
+
+Files DELETED (18):
+
+LevelEditor test scripts (4):
+- Assets/Scripts/LevelEditor/Editor/Doorway_Test.cs
+- Assets/Scripts/LevelEditor/Editor/EdgeSolver_Test.cs
+- Assets/Scripts/LevelEditor/Editor/RoomPiece_Test.cs
+- Assets/Scripts/LevelEditor/Editor/ShapeStamp_Test.cs
+
+LevelEditor top-level Validate menu source (1):
+- Assets/Scripts/LevelEditor/Editor/RoomBuildValidator.cs
+
+Pack Swap submenu sources (2):
+- Assets/Scripts/Player/Editor/M3_02A_PackSwapExecutor.cs
+- Assets/Scripts/Player/Editor/M3_03B_DuoReimportVerifier.cs
+
+Scene Setup submenu sources (2):
+- Assets/Scripts/Player/Editor/M4_SampleSceneSetup.cs
+- Assets/Scripts/Player/Editor/M6_FloorColliderStopgap.cs
+
+Diagnostics submenu source (1):
+- Assets/Scripts/Player/Editor/M5_FallingDiagnosis.cs
+
+Per-milestone validators replaced by ValidateEnemy (6):
+- Assets/Scripts/Combat/Editor/DummyAndStatsValidator.cs
+- Assets/Scripts/Combat/Editor/EnemyHitReactionValidator.cs
+- Assets/Scripts/Combat/Editor/EnemyAIValidator.cs
+- Assets/Scripts/Combat/Editor/EnemyCombatValidator.cs
+- Assets/Scripts/Combat/Editor/EnemyDeathValidator.cs
+- Assets/Scripts/Combat/Editor/DamageRoutingValidator.cs
+
+Per-milestone validators replaced by ValidateInteraction (2):
+- Assets/Scripts/Interaction/Editor/InteractSystemValidator.cs
+- Assets/Scripts/Interaction/Editor/OpenInteractableValidator.cs
+
+Files created (2):
+- Assets/Scripts/Combat/Editor/ValidateEnemy.cs (32 checks)
+- Assets/Scripts/Interaction/Editor/ValidateInteraction.cs (16 checks)
+
+Files modified (1):
+- Assets/Scripts/Player/Editor/CinemachineRigBuilder.cs
+  (added second [MenuItem] for Input submenu)
+
+Menus kept beyond the target spec (per "Do not touch" + pragmatic
+"don't delete files that aren't in the explicit delete list"):
+
+Combat submenu (target 4 items, actual 8):
+- Build Dummy Prefab ✓ in target
+- Place Dummy in Active Scene ✓ in target
+- Bake Test Scene NavMesh ✓ in target
+- Validate Enemy ✓ in target (new this milestone)
+- Build EnemyBaseController (EnemyBaseControllerBuilder — "Do not touch")
+- Add Weapon Hitbox to Player_Hero (PlayerCombatHitboxBuilder)
+- Add Collider to Dummy (PlayerCombatHitboxBuilder)
+- Add Animation Events to Attack Clips (PlayerCombatHitboxBuilder)
+
+Player submenu (target 3 items, actual 9):
+- Build Player_Hero Prefab ✓ in target
+- Add Cinemachine Follow Camera to Active Scene ✓ in target
+- Validate Player_Hero ✓ in target
+- Add Cinemachine Auto-Bind to Active Scene (CinemachineAutoBindAdder)
+- Add PlayerCombat to Player_Hero Prefab (PlayerCombatPrefabAdder)
+- Validate Combat Animator (M2-B Step 2)
+- Validate PlayerCombat Wiring (M2-B Step 3)
+- Validate Jump Animator (M2-B Step 4)
+- Validate Jump Runtime (M2-B Step 5)
+- Validate Combo Animator (M2-B Step 6)
+- Validate Combo Runtime (M2-B Step 7)
+
+UI submenu (target 4 items, actual 8):
+- Build DamageNumber Prefab ✓ in target
+- Build DamageNumberSpawner Prefab ✓ in target
+- Place DamageNumberSpawner in Active Scene ✓ in target
+- Validate Damage Numbers ✓ in target
+- Build PlayerHUD Prefab + Place PlayerHUD + Add CharacterStatsRuntime
+  to Player_Hero + Validate PlayerHUD (PlayerHUDBuilder, PlayerHUDValidator)
+- Build PlayerDeathOverlay Prefab + Place PlayerDeathOverlay in Active Scene
+  (PlayerDeathOverlayBuilder)
+
+Interaction submenu (target 1 item, actual 3):
+- Validate Interaction ✓ in target (new this milestone)
+- Build TestDoor Prefab + Place TestDoor in Active Scene (TestDoorBuilder)
+
+Input submenu (target 3 items, actual 3):
+- Place _MouseLock in Active Scene ✓ in target
+- Add Cinemachine Follow Camera to Active Scene ✓ in target (NEW path
+  this milestone — duplicate MenuItem on CinemachineRigBuilder)
+- Validate MouseLook ✓ in target
+
+Top-level (target 3 items, actual 3):
+- LVL Configurator ✓ unchanged
+- V2 Level Generator ✓ unchanged
+- Whitebox [Complete] ✓ unchanged (8 sub-menus)
+
+Pending follow-up (Jason runs after CC completes):
+1. Reopen Unity — Diagnostics / Pack Swap / Scene Setup / top-level
+   Validate submenus should be gone. Other extra menus remain as
+   noted above.
+2. `LevelGen ▶ Combat ▶ Validate Enemy` — expect 32 PASS / 0 FAIL.
+3. `LevelGen ▶ Interaction ▶ Validate Interaction` — expect 16 PASS /
+   0 FAIL.
+4. `LevelGen ▶ Player ▶ Validate Player_Hero` — sanity re-run,
+   confirm no regression (50/0).
+5. Play-mode smoke test — all prior behaviors still work (movement,
+   combo, dodge, hit reactions, death, interact, NavMesh-driven AI).
+
+Deferred / not in M-MenuCleanup scope:
+- Folding the M2-B animator/runtime validators (PlayerCombatAnimatorValidator,
+  PlayerCombatValidator, PlayerJumpAnimatorValidator, PlayerJumpRuntimeValidator,
+  PlayerComboAnimatorValidator, PlayerComboRuntimeValidator) into PlayerHeroValidator
+  — would duplicate a lot of Animator-graph traversal logic and these still
+  function as regression guards for the specific M2-B milestones. M12-R deferred
+  this too; M-MenuCleanup defers it further.
+- Folding PlayerCombatPrefabAdder + PlayerCombatHitboxBuilder + PlayerHUDBuilder +
+  PlayerDeathOverlayBuilder into PlayerHeroBuilder — would couple UI builders,
+  prefab adders, and bone-tree surgery into one mega-builder. Per
+  M12-R's "decide which side of this tradeoff you fall on" guideline,
+  these are small-scope additions that work fine as standalone menus.
+
+Lessons logged for this milestone:
+- "One [MenuItem] attribute" is the default; "two [MenuItem]
+  attributes on the same method" is also valid and creates two
+  menu paths. Useful when the same operation belongs to multiple
+  mental models (Camera setup is both a Player concern and an
+  Input concern).
+- Spec-as-prompt vs spec-as-contract: M-MenuCleanup's target menu
+  was a mental model, not a strict deletion contract. The
+  "Do not touch" list was the actual override. Future cleanup
+  milestones should expect this pattern — the "do not touch"
+  list is the precise contract; "everything not in list" is
+  aspirational and applied with judgment.
+- Per-milestone validators have a natural lifecycle: they ship
+  with their milestone (high value at the moment of integration),
+  remain useful as regression guards for ~2-3 follow-up milestones,
+  then become noise. Mass-consolidation into a domain-level
+  validator at the ~5-10 milestone mark is the right pattern.
+  ValidateEnemy (32 checks) replaced 6 per-milestone validators
+  that totaled ~80 checks combined — much of the original check
+  surface was duplicate API-surface assertions that the
+  consolidated validator only needs once.
+
+## M13-EnemyBase — EnemyBase component + Enemy_Grunt archetype (2026-05-11)
+
+Establishes `EnemyBase` as the self-configuring root component for all
+enemies — the enemy equivalent of `PlayerHero`. Promotes the Dummy's
+combat scaffolding into the first concrete enemy archetype, `Enemy_Grunt`,
+built on top of `EnemyBase`. Introduces `EnemyData` as a per-enemy
+ScriptableObject (HP, attack damage, AI ranges, movement speed) replacing
+hardcoded SerializeField defaults at runtime.
+
+Architectural decisions (locked):
+- `EnemyBase` is a MANIFEST: declares every required sibling via
+  `[RequireComponent]`, holds a SerializeField ref to each, exposes a
+  public read-only property per ref. Mirrors PlayerHero pattern.
+  ONE additive behavior: Awake push-down (see below).
+- `EnemyData` ScriptableObject lives in `LevelGen.Combat` namespace
+  (data/combat concern). One asset per enemy archetype. CharacterStats
+  remains the canonical HP/Stamina template for the PLAYER — enemies
+  get the EnemyData path; the player path is unchanged.
+- Single push-down site: only `EnemyBase.Awake` reads `_data` and pushes
+  values into consumers via `InitFromEnemyData(EnemyData)` on
+  `CharacterStatsRuntime` / `EnemyAI` / `EnemyCombat`. Consumers never
+  read `EnemyData` directly — preserves single-direction dependency.
+- `[DefaultExecutionOrder(-50)]` on EnemyBase guarantees its Awake runs
+  BEFORE CharacterStatsRuntime/EnemyAI Awake (both at default 0). Without
+  this, consumers' own Awake would init from their SerializeField
+  defaults before EnemyBase could push EnemyData values.
+- `CharacterStatsRuntime.InitFromEnemyData(EnemyData)` writes to a new
+  `_enemyData` field. Awake then checks `_enemyData != null` FIRST; if
+  set, inits `currentHP = _enemyData.maxHP` and uses EnemyData as the
+  source for `MaxHP` + `DisplayName` getters. Else falls through to the
+  existing CharacterStats SO path (player-side).
+- `EnemyAI.InitFromEnemyData` pushes detection/attack/leash ranges +
+  chaseSpeed + stoppingDistance + attackCooldown into its SerializeField
+  fields. `EnemyCombat.InitFromEnemyData` pushes attackDamage (cast
+  float → int via `Mathf.RoundToInt`).
+- `Dummy.prefab` is left UNTOUCHED. Enemy_Grunt is a fresh production
+  prefab built from scratch via `EnemyBaseBuilder`. Both prefabs share
+  the SAME `EnemyBaseController` (no graph changes this milestone) and
+  the SAME `MaleCharacterPBR` model rig.
+- `EnemyBaseValidator` REPLACES `ValidateEnemy.cs` from M-MenuCleanup
+  (same menu path `LevelGen ▶ Combat ▶ Validate Enemy`). 41 checks:
+  the original 32 (still Dummy-targeted) + 9 new M13-EnemyBase checks
+  targeting Enemy_Grunt + EnemyBase + EnemyData.
+
+Spec deviations from the M13-EnemyBase prompt:
+1. `Animator` is NOT in EnemyBase's `[RequireComponent]` chain because
+   the Animator lives on the `MaleCharacterPBR` child by design (FBX
+   humanoid rig). Forcing one on the root would auto-add a duplicate,
+   controller-less Animator (same lesson as PlayerHero / M12-R).
+   EnemyBase still SerializeField-holds the child Animator ref via
+   `_animator`, resolved by `EnemyBaseBuilder` at build time.
+2. EnemyData defaults match the spec's `EnemyData_Grunt` values, not
+   the field-level defaults (e.g. `detectionRange = 6f` default matches
+   Grunt; spec also mentioned `detectionRange = 6f`). Range OnValidate
+   uses non-strict ordering (`<=`) with auto-bump-up on violation, so
+   misordered values get nudged into validity instead of silently kept.
+
+[RequireComponent] chain audit results:
+  EnemyHitReaction:  Targetable                                  (UNCHANGED)
+  EnemyDeath:        CharacterStatsRuntime, Targetable,
+                     + EnemyHitReaction                          (ADDED)
+  EnemyCombat:       + CharacterStatsRuntime                     (ADDED)
+  EnemyAI:           NavMeshAgent, CharacterStatsRuntime         (UNCHANGED)
+
+`Enemy_Grunt.prefab` hierarchy:
+```
+Enemy_Grunt (root, tag = default)
+  ├── EnemyBase           — manifest, [DefaultExecutionOrder(-50)]
+  ├── NavMeshAgent
+  ├── CapsuleCollider     (radius=0.4, height=1.8, center=(0,0.9,0))
+  ├── CharacterStatsRuntime  (stats=null; EnemyData drives values)
+  ├── Targetable
+  ├── EnemyAI
+  ├── EnemyCombat
+  ├── EnemyHitReaction
+  ├── EnemyDeath
+  └── MaleCharacterPBR (model child)
+        ├── Animator → EnemyBaseController
+        ├── EnemyAnimationEventForwarder (._combat → EnemyCombat)
+        └── weapon_r
+              └── EnemyWeaponHitbox
+                    ├── BoxCollider (trigger, disabled)
+                    ├── Rigidbody (kinematic)
+                    └── EnemyHitboxRelay (._combat → EnemyCombat)
+```
+
+`EnemyData_Grunt.asset` defaults (HP higher than Dummy's 50 to support
+multi-hit combat without the M4-B Dummy convenience):
+```
+enemyName        Grunt
+maxHP            80
+attackDamage     10
+defense          2
+moveSpeed        3.5
+rotationSpeed    10
+detectionRange   6
+attackRange      1.3
+leashRange       10
+stoppingDistance 1.0
+attackCooldown   1.5
+```
+
+Files created:
+- Assets/Scripts/Combat/EnemyData.cs (NEW, ScriptableObject)
+- Assets/Scripts/Enemy/EnemyBase.cs (NEW, manifest)
+- Assets/Scripts/Enemy/Editor/EnemyBaseBuilder.cs (NEW)
+- Assets/Scripts/Enemy/Editor/EnemyBaseValidator.cs (NEW, 41 checks)
+
+Files modified:
+- Assets/Scripts/Combat/CharacterStatsRuntime.cs (added `_enemyData`
+  field + `InitFromEnemyData` method; MaxHP / DisplayName accessors
+  prefer EnemyData when set; Awake reads EnemyData path first)
+- Assets/Scripts/Combat/EnemyAI.cs (added `InitFromEnemyData` method)
+- Assets/Scripts/Combat/EnemyCombat.cs (added `[RequireComponent(
+  CharacterStatsRuntime)]` + `InitFromEnemyData` method)
+- Assets/Scripts/Combat/EnemyDeath.cs (added `[RequireComponent(
+  EnemyHitReaction)]`)
+
+Files deleted:
+- Assets/Scripts/Combat/Editor/ValidateEnemy.cs (interim
+  M-MenuCleanup validator; replaced by EnemyBaseValidator)
+
+Files NOT modified (per "Do not modify" list):
+- Dummy.prefab (sandbox target, untouched)
+- CharacterStats_Dummy.asset (untouched)
+- EnemyBaseController.controller (untouched — Grunt shares with Dummy)
+- PlayerHero.cs (player-side untouched)
+- CLAUDE.md beyond adding this milestone entry
+
+New assets produced by builder on first run:
+- Assets/Data/EnemyData/EnemyData_Grunt.asset (M13-EnemyBase defaults)
+- Assets/Prefabs/Character Prefabs/Enemy/Enemy_Grunt.prefab
+
+Pending follow-up (Jason runs after CC completes):
+1. `LevelGen ▶ Combat ▶ Build Enemy_Grunt Prefab` — creates
+   `EnemyData_Grunt.asset` (if missing) and `Enemy_Grunt.prefab` from
+   scratch with all components wired.
+2. `LevelGen ▶ Combat ▶ Validate Enemy` — expect 41 PASS / 0 FAIL.
+   (Note: this is the same menu path the old ValidateEnemy used —
+   Unity will pick up the new EnemyBaseValidator after compile.)
+3. `LevelGen ▶ Combat ▶ Place Enemy_Grunt in Active Scene` — drops
+   a Grunt at world (4, 0, 4).
+4. Sanity re-run `LevelGen ▶ Player ▶ Validate Player_Hero` — should
+   stay at 50 PASS / 0 FAIL (player-side completely untouched).
+5. Play-mode smoke test in test scene (must have baked NavMesh):
+   - Grunt detects Player at ≤6m → enters Chase
+   - Closes to ≤1.3m → swings (Attack01) on 1.5s cooldown
+   - Player takes damage on hit (10/hit), HUD HP bar drops
+   - Grunt HP=80 → Player needs ~3 full 3-hit combos to kill it
+   - Grunt dies → Die01 plays, despawns after 5s
+   - Player can be killed by Grunt swings (HP=100 → 10 hits to die)
+   - Player death overlay appears; Restart reloads scene
+   - Dummy still works independently (place via M4 menu; combat
+     loop unchanged from M4-M11)
+6. Inspector verification: select `Enemy_Grunt` in Project; the root
+   shows `EnemyBase` component with `_data` slot filled by
+   `EnemyData_Grunt` and all 9 component refs (stats, targetable,
+   ai, combat, hitReaction, death, animator, agent, capsule) wired.
+
+Deferred / out of scope for M13-EnemyBase:
+- Second enemy archetype (Brute, Archer, etc.) — each gets its own
+  EnemyData SO + Enemy_*.prefab via a new builder menu (or by
+  extending EnemyBaseBuilder with a template parameter).
+- Target lock system (separate milestone).
+- Enemy health bar UI (player HUD doesn't auto-extend to enemies).
+- Loot drops on death.
+- Enemy audio / VFX.
+- WeaponStats SO (deferred from earlier milestones; would apply to
+  PlayerCombat too).
+- Damage mitigation via EnemyData.defense (field exists, not yet
+  consumed by ApplyDamage — future scope).
+- EnemyData.rotationSpeed consumption by EnemyAI (field exists,
+  not yet consumed — EnemyAI keeps its `_turnSpeed = 540°/s` default
+  for face-during-cooldown / face-during-attack).
+- Folding Dummy.prefab onto the EnemyBase manifest. Dummy stays as
+  the legacy / sandbox prefab — the rule-of-three threshold for
+  consolidation hasn't been crossed yet (currently 1 production
+  enemy + 1 sandbox).
+- Enemy taking damage from other enemies (friendly-fire guard
+  remains hard-coded — M-Factions milestone).
+
+Lessons logged for this milestone:
+- Push-down via Awake at `[DefaultExecutionOrder(-50)]` is the right
+  pattern for "one component pushes config into siblings". Avoids
+  consumer-side coupling to the data source (siblings expose generic
+  `InitFromEnemyData(EnemyData)` methods, EnemyBase calls them in
+  the right order). The execution order is load-bearing — without
+  the `-50` attribute, sibling Awakes at order 0 could run first
+  and overwrite the push-down values with their own SerializeField
+  defaults.
+- ScriptableObject getter-overrides on a MonoBehaviour are clean if
+  the data source is a separate field. `MaxHP => _enemyData != null
+  ? _enemyData.maxHP : (stats != null ? stats.maxHP : 0)` lets one
+  runtime instance support two data paths (CharacterStats for
+  player, EnemyData for enemy) without forking the script. Adding
+  a third path (e.g. WeaponStats overriding attackDamage) would
+  follow the same template.
+- Consolidated validators are the canonical evolution after 5-10
+  per-milestone validators accumulate. M-MenuCleanup's ValidateEnemy
+  (32 checks) consolidated 6 enemy validators; M13-EnemyBase's
+  EnemyBaseValidator (41 checks) extends it by 9 more. The pattern
+  is additive — older check numbers stay stable across consolidations
+  so log diffs remain readable.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
