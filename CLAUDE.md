@@ -3389,3 +3389,51 @@ Pure geometry pass — no catalogue, no RoomPiece, no ExitPoints.
   - RoomPiece bounds stamping
   - ExitPoint placement (door workflow)
   - Inward (concave) corners for L-shapes and notches
+
+## Studio Agents (CCGS)
+
+Installed 2026-05-11 from
+https://github.com/Donchitos/Claude-Code-Game-Studios.
+
+Provides **39 specialist subagents** (Unity stack — Godot and Unreal
+variants stripped during install), **72 skills**, **12 hooks** (inert
+until wired in settings.json), and **11 rule docs**.
+
+### Layout
+- `.claude/agents/` — 39 specialist subagents (e.g. `unity-specialist`,
+  `gameplay-programmer`, `qa-lead`, `level-designer`).
+- `.claude/skills/` — 72 workflow skills (e.g. `code-review`,
+  `design-review`, `playtest-report`, `gate-check`).
+- `.claude/hooks/` — 12 shell-script hooks. **Not active.** None are
+  referenced from `.claude/settings.json` yet.
+- `.claude/rules/` — 11 coding/design rule docs (`engine-code.md`,
+  `gameplay-code.md`, `ui-code.md`, etc.).
+- `Documentation/CCGS/` — CCGS framework documentation:
+  `WORKFLOW-GUIDE.md`, `COLLABORATIVE-DESIGN-PRINCIPLE.md`,
+  design templates, session examples, `workflow-catalog.yaml`,
+  Unity engine reference.
+
+### Collaboration Protocol (CCGS convention)
+**User-driven collaboration, not autonomous execution.**
+Every task follows: **Question → Options → Decision → Draft → Approval**
+
+- Subagents MUST ask "May I write this to [filepath]?" before using
+  Write/Edit tools.
+- Subagents MUST show drafts or summaries before requesting approval.
+- Multi-file changes require explicit approval for the full changeset.
+- No commits without user instruction.
+
+Full protocol and examples: `Documentation/CCGS/COLLABORATIVE-DESIGN-PRINCIPLE.md`.
+
+> **First CCGS session?** Run `/start` for the guided onboarding flow
+> (CCGS skill, lives under `.claude/skills/start/`).
+
+### Notes for this project
+- Engine context (Unity 6.4 URP, IL2CPP, ARM64) is already declared
+  at the top of this file — the CCGS engine-stack placeholders are
+  not used.
+- `.claude/settings.json` was NOT merged from CCGS — your existing
+  settings remain canonical. Hooks are inert until you reference them
+  explicitly from settings.
+- The Godot and Unreal specialist agents and engine references were
+  deleted at install time; only the Unity stack is present.
