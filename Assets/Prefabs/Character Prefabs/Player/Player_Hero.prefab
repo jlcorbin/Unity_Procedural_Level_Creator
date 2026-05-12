@@ -119,6 +119,7 @@ GameObject:
   - component: {fileID: 4163399805207047792}
   - component: {fileID: 700607533112611545}
   - component: {fileID: 5210536101866667839}
+  - component: {fileID: 8326192862227759673}
   m_Layer: 0
   m_Name: Player_Hero
   m_TagString: Player
@@ -414,6 +415,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Combat.CharacterStatsRuntime
   stats: {fileID: 11400000, guid: 8b436a0160601884b8c2d356d2267690, type: 2}
+  _enemyData: {fileID: 0}
   currentHP: 0
   currentStamina: 0
 --- !u!114 &1115029209863257410
@@ -551,6 +553,29 @@ MonoBehaviour:
   _hitReaction: {fileID: 4163399805207047792}
   _death: {fileID: 1115029209863257410}
   _interactor: {fileID: 372145876249854902}
+--- !u!136 &8326192862227759673
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4475946285068610722}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Radius: 0.4
+  m_Height: 1.8
+  m_Direction: 1
+  m_Center: {x: 0, y: 0.9, z: 0}
 --- !u!1 &8263107797383945181
 GameObject:
   m_ObjectHideFlags: 0

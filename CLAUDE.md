@@ -4304,6 +4304,12 @@ Recent changes:
 - DamageNumberSpawner: added _spawnYOffset (default 1.5f) to lift
   numbers above collider contact height. Resolves deferred per-actor
   Y-offset issue.
+- EnemyBaseBuilder: added menu item to stamp OnHitboxOpen/Close events onto Attack01_SwordAndShiled clip at 0.35/0.65 normalizedTime. Fixes enemy hits not registering.
+- Removed diagnostic logs from EnemyCombat + EnemyAnimationEventForwarder.
+  Player CapsuleCollider (IsTrigger=true) required on Player_Hero root
+  for enemy hitbox detection — CharacterController alone does not
+  receive OnTriggerEnter. Add to EnemyBaseBuilder pending follow-up.
+- Session_Handoff.md written for 2026-05-11 night session.
 
 The M14 conversion of `defense` to a `[SerializeField] private` field
 silently broke `EnemyBaseBuilder.EnsureGruntData`, which set the field

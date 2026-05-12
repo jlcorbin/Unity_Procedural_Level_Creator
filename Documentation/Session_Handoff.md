@@ -1,172 +1,120 @@
-# Session Handoff — 2026-05-11
+# Session Handoff — 2026-05-11 (Night)
 
-## Session summary
+## Section 1 — Session Summary
 
-A high-productivity session. No new gameplay milestones shipped but
-significant structural work completed: a game concept was adopted,
-the player character was codified as a self-configuring prefab,
-the enemy foundation was established, the menu was audited and
-cleaned, and three bugs were fixed. The project is in its cleanest
-state to date.
+### What shipped this session
 
----
+**M14 — Enemy health bar (world-space billboard)**
+- `EnemyHealthBar.cs` — world-space bar billboard above enemy head. Lazy-caches `Camera.main`, billboards via `transform.forward = -cam.transform.forward`, fills via `CurrentHP / MaxHP`. Hides on `OnDied` event. Public `SetVisible(bool)` for external drivers.
+- `EnemyHealthBarProximityDriver.cs` — `InvokeRepeating`-based distance check (poll interval 0.2s, show radius 12m). Drives `EnemyHealthBar.SetVisible`. Self-disables if player not found at Start (config bug surfacing, not silent retry).
+- `EnemyBaseValidator.cs` extended with checks 41-44 covering `EnemyData_Grunt.Defense >= 0`, `CharacterStatsRuntime.Defense` getter, `SetDefense(float)` method, and component presence checks for `EnemyHealthBar` + `EnemyHealthBarProximityDriver` in `Enemy_Grunt` hierarchy.
+- Editor wiring of `EnemyHealthBar` onto `Enemy_Grunt.prefab` is deferred — scripts compile-ready but component placement requires manual Unity editor work.
 
-## What shipped this session
+**M14 — Defense wired into ApplyDamage (flat reduction)**
+- `EnemyData.cs` — `defense` field encapsulated as `[SerializeField] private float` with public `Defense` property (`get => defense; set => defense = Mathf.Max(0f, value)`). Field name preserved so `EnemyData_Grunt.asset` serialized value survives.
+- `CharacterStatsRuntime.cs` — new `Defense` auto-property + `SetDefense(float)` mutator. `ApplyDamage` applies flat reduction: `int effectiveDamage = Mathf.Max(0, amount - Mathf.RoundToInt(Defense))` after IsInvulnerable guard, before HP delta. Debug log appends `(after Defense N.NN)` when Defense > 0.
+- `EnemyBase.cs` — `Awake` calls `_stats.SetDefense(_data.Defense)` immediately after `_stats.InitFromEnemyData(_data)`. `[DefaultExecutionOrder(-50)]` ordering preserved.
 
-### Game concept adopted
-- `game-concept.md` (Unreal/UE5 origin) reviewed and rewritten as
-  `Documentation/Hub & Hollow — Game Concept Document.md` — fully
-  aligned with Unity 6.4 URP, FDP + World Bundle art, current
-  milestone state, and all decisions made this session.
-- UE5 builder handoff doc reviewed. Delta analysis confirmed:
-  everything built through M11 maps cleanly to the UE5 prototype.
-  Missing systems identified: Dodge (M12, shipped), Target Lock,
-  Enemy health bar, WeaponStats SO, loot, town hub, extraction.
-- Dungeon layout confirmed as a **separate pipeline** — revisit
-  after combat + enemies complete.
+**M14.fix — EnemyData.Defense property fix (CS0200)**
+- M14's `defense` field encapsulation broke `EnemyBaseBuilder.EnsureGruntData` which set the field directly (`asset.defense = 2f`). Fix: reference via `asset.Defense = 2f`. Surfaced CS0200 because the initial `Defense` property was expression-bodied get-only. Promoted to full `{ get; set; }` property with clamped setter.
 
-### M12 — Player Dodge (shipped, verified prior session, synced this session)
-- V key, 4-way directional roll, scripted impulse via CharacterController
-- 0.5s i-frames via `IsInvulnerable` on `CharacterStatsRuntime`
-- 25 stamina cost, 0.8s cooldown, cancels active attack
-- `PlayerDodge.cs`, `PlayerBaseControllerDodgeExtender.cs`,
-  `PlayerDodgePrefabAdder.cs`, `PlayerDodgeValidator.cs`
-- Lesson: canonical Input asset is `Assets/InputSystem_Actions.inputactions`
-  (not `Assets/Input/PlayerInputActions.inputactions`)
+**M14.fix — EnemyBaseBuilder .defense → .Defense reference**
+- `EnemyBaseBuilder` line 276 corrected from `.defense` to `.Defense` following the field encapsulation.
 
-### M12-R — PlayerHero refactor
-- `PlayerHero.cs` — root wiring manifest, `[RequireComponent]` chain
-  for all 14 player-side components, zero gameplay logic
-- `PlayerHeroBuilder.cs` — single idempotent builder replacing all
-  individual adders
-- `PlayerHeroValidator.cs` — consolidated validator (was ~50 checks,
-  now 63 after absorbing HUD + DamageNumber checks this session)
-- `Player_MaleHero.prefab` renamed → `Player_Hero.prefab` (GUID preserved)
-- All individual adder scripts and `PlayerPrefabBuilder.cs` deleted
-- `CinemachineRigBuilder.cs` restored as standalone after being
-  accidentally caught in the deletion pass
+**DamageNumberSpawner — _spawnYOffset added**
+- `_spawnYOffset = 1.5f` default SerializeField added to `DamageNumberSpawner.cs`. Lifts damage number spawn point above collider contact height. Resolves the deferred per-actor Y-offset issue from M8.
 
-### M13-EnemyBase — Enemy foundation
-- `EnemyData.cs` ScriptableObject — per-enemy HP, attack, defense,
-  move speed, detection/attack/leash ranges, cooldown
-- `EnemyBase.cs` — root wiring manifest, `[RequireComponent]` chain,
-  `[DefaultExecutionOrder(-50)]` pushes `EnemyData` into all consumers
-  at Awake before siblings run
-- `EnemyBaseBuilder.cs` — builds `Enemy_Grunt.prefab` from scratch,
-  wires `_AssassinateZone` child (canonical assassinate target now
-  that Dummy is retired)
-- `EnemyBaseValidator.cs` — 40 checks
-- `EnemyData_Grunt.asset` — 80 HP, 10 damage, detection 6m, attack 1.3m
-- `Enemy_Grunt.prefab` — production enemy prefab
-- `Dummy.prefab` + `CharacterStats_Dummy.asset` — **deleted**
-- Lesson: `[DefaultExecutionOrder(-50)]` on `EnemyBase` is load-bearing.
-  Without it, sibling Awakes at order 0 run first and overwrite the
-  `InitFromEnemyData` push-down values.
+**M11.1 — Post-hit i-frame window on enemy hit**
+- `EnemyCombat.cs` — `_iFrameDuration = 0.5f` SerializeField (tunable per-enemy). `GrantIFrames(CharacterStatsRuntime)` private coroutine: calls `stats.SetInvulnerable(true)`, yields `WaitForSeconds(_iFrameDuration)`, calls `SetInvulnerable(false)` (skipped if target died during window). Coroutine starts in `NotifyHitboxTriggered` after `ApplyDamage`, guarded on `!stats.IsDead && _iFrameDuration > 0f`. Added `using System.Collections` import.
+- `EnemyBaseValidator.cs` extended with checks 45-47: `_iFrameDuration` SerializeField present (check 45), `EnemyAnimationEventAbsorber.cs` confirmed absent (check 46), `OnHitboxOpen()` / `OnHitboxClose()` public void methods present (checks 47a/47b).
 
-### M-MenuCleanup + M-MenuDelete — Menu consolidation
-Full audit of 48 MenuItem attributes across 29 files. Result:
+**Enemy animation events confirmed**
+- `EnemyBaseBuilder` gained a menu item to stamp `OnHitboxOpen` / `OnHitboxClose` AnimationEvents onto the `Attack01_SwordAndShiled` clip at `0.35` / `0.65` normalizedTime. This fixed enemy hits not registering.
 
-**Deleted (17 editor scripts + 2 assets):**
-`PlayerCombatHitboxBuilder`, `DummyPrefabBuilder`,
-`EnemyBaseControllerBuilder`, `TestDoorBuilder`,
-`CinemachineAutoBindAdder`, `PlayerCombatPrefabAdder`,
-all M2-B step validators (Combat/Combo/Jump Animator/Runtime),
-`PlayerDeathOverlayBuilder`, `PlayerHUDBuilder`,
-`DamageNumberValidator`, `PlayerHUDValidator`,
-`V2_SampleThemeBuilder`, `Dummy.prefab`, `CharacterStats_Dummy.asset`
+**Enemy hits player — end-to-end wiring confirmed**
+- Full path verified: `EnemyAnimationEventForwarder.OnHitboxOpen/Close` → `EnemyCombat.OnHitboxOpen/Close` → `EnemyHitboxRelay.OnTriggerEnter` → `EnemyCombat.NotifyHitboxTriggered` → `CharacterStatsRuntime.ApplyDamage` on player.
 
-**Final menu (23 items):**
-```
-LevelGen
-├── Combat (4): Bake NavMesh, Build Enemy_Grunt, Place Enemy_Grunt, Validate Enemy
-├── Input (3): Add Cinemachine Follow Camera, Place _MouseLock, Validate MouseLook
-├── Interaction (1): Validate Interaction
-├── Player (3): Add Cinemachine Follow Camera, Build Player_Hero, Validate Player_Hero
-├── UI (3): Build DamageNumber, Build DamageNumberSpawner, Place DamageNumberSpawner
-├── Whitebox [Complete] (7) — do not touch
-├── LVL Configurator — do not touch
-└── V2 Level Generator
-```
+**Player_Hero CapsuleCollider (IsTrigger=true) added**
+- A `CapsuleCollider` (radius=0.4, height=1.8, center=(0,0.9,0), `isTrigger=true`) was added to the `Player_Hero` prefab root. This is required for `EnemyHitboxRelay.OnTriggerEnter` to fire — `CharacterController` alone does not receive `OnTriggerEnter` events. Applied manually to prefab this session.
 
-### Bugfix — self-damage + enemy HP not depleting
-- `PlayerCombat.NotifyHitboxTriggered` — added self-hit guard
-  (`CompareTag("Player")` early return), mirrors `EnemyCombat` convention
-- Enemy HP not depleting — root cause was log reading `maxHP` instead
-  of `currentHP` (Bug B). Fixed.
-- `PlayerCombat.cs:331-336` — IsDead guard added, mirrors M11 EnemyCombat
-  guard. Subsequent swings into a corpse are silent no-ops.
+**Diagnostic logs added and removed**
+- Temporary diagnostic `Debug.Log` calls were added to `EnemyCombat` and `EnemyAnimationEventForwarder` during debugging, then removed. No diagnostic logging remains in these files.
+
+### What was scoped but not shipped
+
+- **Target Lock** — recommended next milestone, not started.
+- **Enemy health bar sprite polish** — placeholder `UISprite` pending art swap.
+- **Editor wiring of EnemyHealthBar onto Enemy_Grunt.prefab** — scripts present, manual Inspector work deferred.
+- **WeaponStats SO** — replaces hardcoded `attackDamage = 10` on `PlayerCombat`.
+- **Second enemy archetype** — tests `EnemyBase` generality.
 
 ---
 
-## Validator state (end of session)
+## Section 2 — Validator State Table
 
-| Validator | Checks | Status |
-|-----------|--------|--------|
-| `Validate Player_Hero` | 63 | ✅ |
-| `Validate Enemy` | 40 | ✅ |
-| `Validate Interaction` | 16 | ✅ |
-| `Validate MouseLook` | 7 | ✅ |
+Check counts read from `CLAUDE.md`. These must be run in Unity to verify.
 
----
+| Validator | Menu Path | Checks | Status |
+|-----------|-----------|--------|--------|
+| Validate Enemy | `LevelGen ▶ Combat ▶ Validate Enemy` | 49 | Run after session start to verify |
+| Validate Player_Hero | `LevelGen ▶ Player ▶ Validate Player_Hero` | 63 | Run after session start to verify |
+| Validate Interaction | `LevelGen ▶ Interaction ▶ Validate Interaction` | 16 | Run after session start to verify |
+| Validate MouseLook | `LevelGen ▶ Input ▶ Validate MouseLook` | 7 | Run after session start to verify |
 
-## Deferred / known issues
-
-- **`EnemyDeath` collider-disable on Enemy_Grunt** — not verified.
-  The IsDead guard in `PlayerCombat` covers the symptom (no damage
-  to dead enemies) but `EnemyDeath._deathCollider` wiring in
-  `EnemyBaseBuilder` should be audited. Next step: read
-  `EnemyBaseBuilder.cs` and confirm `_deathCollider` SerializedObject
-  ref is wired to the root CapsuleCollider.
-- **Target Lock** — not yet started. Next combat milestone.
-- **Enemy health bar** — world-space billboard above enemy head,
-  Defense stat wired into `ApplyDamage`. Pairs with Target Lock.
-- **WeaponStats SO** — replace hardcoded `attackDamage = 10` on
-  `PlayerCombat`. Unlocks weapon variety from World Bundle's 8 sets.
+**Note on Validate Enemy check count:** M13-EnemyBase established 41 checks. M14 appended checks 41-44 (Defense + health bar component presence). M11.1 appended checks 45-47 (i-frame field, absorber absent, OnHitboxOpen/Close methods). Actual count expected: 49 (checks 1-47 plus 47a/47b counted as two).
 
 ---
 
-## Open milestone candidates for next session
+## Section 3 — Deferred / Known Issues
 
-**Recommended next (combat completion):**
-- **Target Lock** — sphere cast to nearest enemy, camera follow,
-  world-space lock indicator on enemy, auto-clear on death.
-  R key or RMB. Scoped and ready to prompt.
+- **Player CapsuleCollider not automated** — The `CapsuleCollider (IsTrigger=true)` on `Player_Hero` root was added manually this session. `EnemyBaseBuilder` and `PlayerHeroBuilder` do not add it automatically. A fresh `Build Player_Hero Prefab` run will drop the collider. Should be automated in `PlayerHeroBuilder` as an explicit step so it survives prefab rebuilds.
 
-**Also on deck:**
-- **Enemy health bar + Defense wired** — quick milestone, pairs
-  naturally after Target Lock
-- **WeaponStats SO** — enables weapon variety, clean SO pattern
-  mirroring EnemyData
-- **Second enemy archetype** — duplicate Enemy_Grunt, new
-  `EnemyData_X.asset`, different stats. Tests EnemyBase generality.
+- **EnemyBaseBuilder should wire Player CapsuleCollider** — Or alternatively, `PlayerHeroBuilder` should add `CapsuleCollider (IsTrigger=true, radius=0.4, height=1.8, center=(0,0.9,0))` on the root as part of its build sequence. Currently neither builder does this.
 
-**Deferred (level pipeline — separate track):**
-- Whitebox PieceCatalogue end-to-end test
-- V2 generator door-geometry placement
-- Hand-crafted dungeon layout (3 zones, ~25-35 rooms)
+- **Enemy health bar Y offset tuning** — The default `_barYOffset = 2.2f` is reasonable for Grunt height but will need per-archetype adjustment as more enemy types ship. Not a blocking issue.
+
+- **Enemy health bar sprite is a placeholder** — `UISprite.psd` (Unity built-in) is used for the fill Image per the M8 sprite-fix lesson. Swap with custom health bar art in a future pass.
+
+- **EnemyAnimationEventForwarder `_combat` field wiring** — The `_combat` SerializeField on `EnemyAnimationEventForwarder` (which lives on the `MaleCharacterPBR` child) was found to be `None` in the scene instance after builder runs in previous sessions. The `EnemyBaseBuilder`'s `SerializedObject` wiring of this field should be audited to confirm it fires correctly on a clean build.
+
+- **CLAUDE.md M11 Q5 stale claim** — The M11 entry states CharacterController.radius was bumped 0.3→0.4 to give the enemy hitbox arc "enough overlap window." The underlying assumption (that `CharacterController` receives `OnTriggerEnter`) was empirically disproved this session — a separate `CapsuleCollider (IsTrigger=true)` is required. The M11 section is worth a correction note on next pass, though the radius bump itself is harmless.
+
+- **EnemyDeath `_deathCollider` wiring** — Not re-audited this session. `EnemyBaseBuilder` should be confirmed to wire `_deathCollider` to the root `CapsuleCollider` on `Enemy_Grunt`. The IsDead guard in `EnemyCombat` covers the symptom but the collider-disable on death path needs verification.
 
 ---
 
-## Key architectural reminders
+## Section 4 — Open Milestone Candidates
 
-- `PlayerHero` and `EnemyBase` are wiring manifests only — no gameplay
-  logic. All future player/enemy components added via `[RequireComponent]`
-  on the root + `InitFromX` method pattern.
-- `EnemyData` SO is the single source of truth for enemy stats.
-  `EnemyBase.Awake` pushes values into consumers — do not read
-  `EnemyData` directly from `EnemyAI`, `EnemyCombat`, or
-  `CharacterStatsRuntime`.
-- `[DefaultExecutionOrder(-50)]` on `EnemyBase` is load-bearing.
-  Do not remove or change it.
+In priority order:
+
+1. **Target Lock** (RECOMMENDED NEXT — combat completion track)
+   Sphere cast to nearest `Targetable`, soft camera follow, world-space lock indicator above enemy, auto-clear on enemy death. R key or RMB. Integrates with `EnemyHealthBar.SetVisible` (force-show while locked). Clean scope, no architecture changes required.
+
+2. **WeaponStats SO** — Replace hardcoded `attackDamage = 10` on `PlayerCombat` and `_attackDamage = 10` on `EnemyCombat` with a per-weapon `ScriptableObject`. Unlocks weapon variety from World Bundle's 8 weapon sets. Clean SO pattern, mirrors `EnemyData`.
+
+3. **Second enemy archetype** — Duplicate `Enemy_Grunt.prefab` approach, new `EnemyData_X.asset` with different HP/damage/range/speed. Tests that `EnemyBase` generalizes correctly. Low-risk validation of the M13-EnemyBase architecture.
+
+4. **Enemy health bar polish + Editor wiring** — Wire `EnemyHealthBar` + `EnemyHealthBarProximityDriver` onto `Enemy_Grunt.prefab` in the Inspector. Swap `UISprite` placeholder for custom art. Tune `_barYOffset`. Automate in `EnemyBaseBuilder`.
+
+5. **Level pipeline — whitebox end-to-end test** (separate track)
+   Drop configured whitebox LVLs into `LevelGenerator.unity`, verify generator connections work. `PieceCatalogue` integration and `LVL_Configurator` end-to-end. Not on the combat critical path.
+
+---
+
+## Section 5 — Key Architectural Reminders
+
+- `PlayerHero` and `EnemyBase` are wiring manifests only — no gameplay logic. All future player/enemy components added via `[RequireComponent]` on root + `InitFromX` method pattern.
+- `EnemyData` SO is the single source of truth for enemy stats. `EnemyBase.Awake` pushes values into consumers — do not read `EnemyData` directly from `EnemyAI`, `EnemyCombat`, or `CharacterStatsRuntime`.
+- `[DefaultExecutionOrder(-50)]` on `EnemyBase` is load-bearing. Do not remove.
 - Canonical Input asset: `Assets/InputSystem_Actions.inputactions`
-- `IncomingDamage` convention: positive float = damage (processing
-  step subtracts from HP). Never pass negative values to `ApplyDamage`.
-- Single-writer-per-Animator-parameter invariant is in force for both
-  player and enemy Animator controllers.
+- `ApplyDamage` convention: positive float = damage. Flat defense reduction applied inside `ApplyDamage`. Never pass negative values.
+- Single-writer-per-Animator-parameter invariant is in force for both player and enemy Animator controllers.
+- `Player_Hero` requires a `CapsuleCollider (IsTrigger=true)` on root for enemy `OnTriggerEnter` to fire. `CharacterController` alone does not receive trigger events.
+- `EnemyAnimationEventForwarder` must be on the same GameObject as the Animator (`MaleCharacterPBR` child), not on the root.
 
 ---
 
-## Quick-start instructions for next session
+## Section 6 — Quick-Start Instructions
 
 > read Documentation/Session_Handoff.md at start of new chat
 >
@@ -174,6 +122,4 @@ LevelGen
 >
 > all prompts end with telling claude code to compact
 >
-> Picking up from 2026-05-11 session — PlayerHero + EnemyBase
-> foundations established, menu cleaned, bugs fixed. Recommended
-> next milestone is Target Lock. See handoff for full candidate list.
+> Picking up from 2026-05-11 session — full combat loop working both directions. Recommended next milestone is Target Lock. See handoff for full candidate list.

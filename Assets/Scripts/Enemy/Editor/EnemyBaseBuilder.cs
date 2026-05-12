@@ -253,6 +253,148 @@ namespace LevelGen.Enemy.EditorTools
         }
 
         // ════════════════════════════════════════════════════════════════════
+        // Menu: stamp OnHitboxOpen / OnHitboxClose onto the enemy attack clip
+        // ════════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Stamps two <see cref="AnimationEvent"/> entries —
+        /// <c>OnHitboxOpen</c> at 35% and <c>OnHitboxClose</c> at 65% of
+        /// clip length — onto the <c>Attack01_SwordAndShiled</c> FBX clip
+        /// found under Assets/AssetPacks/RPG Tiny Hero World Bundle/.
+        /// Events survive FBX reimport because they live in the .meta.
+        /// Symmetric to the player-side pattern from M11 / M2-B.
+        /// Idempotent: re-running when both events are already present is a
+        /// logged no-op.
+        /// </summary>
+        [MenuItem("LevelGen/Combat/Add Animation Events to Enemy Attack Clip")]
+        public static void AddAnimationEventsToEnemyAttackClip()
+        {
+            const string ClipName   = "Attack01_SwordAndShiled";
+            const string SearchRoot = "Assets/AssetPacks/RPG Tiny Hero World Bundle";
+
+            // ── Step 1: find the FBX that ships this clip ────────────────────
+            string fbxPath = FindFbxContainingClip(SearchRoot, ClipName);
+            if (string.IsNullOrEmpty(fbxPath))
+            {
+                Debug.LogError(
+                    $"[EnemyBaseBuilder] Could not find {ClipName} clip under {SearchRoot}. Aborting.");
+                return;
+            }
+
+            // ── Step 2: get the ModelImporter ────────────────────────────────
+            var importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+            if (importer == null)
+            {
+                Debug.LogError(
+                    $"[EnemyBaseBuilder] AssetImporter at '{fbxPath}' is not a ModelImporter. Aborting.");
+                return;
+            }
+
+            // ── Step 3: find the target clip in the mutable copy ─────────────
+            // clipAnimations is a value-copy array; must reassign to persist.
+            var clips = importer.clipAnimations;
+            int clipIndex = -1;
+            for (int i = 0; i < clips.Length; i++)
+            {
+                string name = string.IsNullOrEmpty(clips[i].name) ? clips[i].takeName : clips[i].name;
+                if (name == ClipName) { clipIndex = i; break; }
+            }
+
+            if (clipIndex < 0)
+            {
+                Debug.LogError(
+                    $"[EnemyBaseBuilder] ModelImporter at '{fbxPath}' has no clip named " +
+                    $"'{ClipName}'. Aborting.");
+                return;
+            }
+
+            // ── Step 4: idempotency — skip if both events are already present ─
+            var existingEvents = clips[clipIndex].events;
+            bool hasOpen  = false;
+            bool hasClose = false;
+            foreach (var ev in existingEvents)
+            {
+                if (ev.functionName == "OnHitboxOpen")  hasOpen  = true;
+                if (ev.functionName == "OnHitboxClose") hasClose = true;
+            }
+            if (hasOpen && hasClose)
+            {
+                Debug.Log(
+                    $"[EnemyBaseBuilder] Animation events already present on {ClipName}; skipping.");
+                return;
+            }
+
+            // ── Step 5: resolve clip duration via sub-asset ──────────────────
+            // time field on AnimationEvent is absolute seconds, not normalizedTime.
+            float clipLength = 0f;
+            var allAssets = AssetDatabase.LoadAllAssetRepresentationsAtPath(fbxPath);
+            foreach (var asset in allAssets)
+            {
+                var ac = asset as AnimationClip;
+                if (ac != null && ac.name == ClipName) { clipLength = ac.length; break; }
+            }
+            if (clipLength <= 0f)
+            {
+                Debug.LogError(
+                    $"[EnemyBaseBuilder] Could not load '{ClipName}' sub-asset from '{fbxPath}' " +
+                    "to read clip length. Aborting.");
+                return;
+            }
+
+            float openTime  = clipLength * 0.35f;
+            float closeTime = clipLength * 0.65f;
+
+            // ── Step 6: build the new events array ───────────────────────────
+            // Preserve any pre-existing non-hitbox events (e.g. footsteps).
+            var newEvents = new System.Collections.Generic.List<AnimationEvent>();
+            foreach (var ev in existingEvents)
+            {
+                if (ev.functionName != "OnHitboxOpen" && ev.functionName != "OnHitboxClose")
+                    newEvents.Add(ev);
+            }
+            newEvents.Add(new AnimationEvent { functionName = "OnHitboxOpen",  time = openTime  });
+            newEvents.Add(new AnimationEvent { functionName = "OnHitboxClose", time = closeTime });
+
+            clips[clipIndex].events = newEvents.ToArray();
+
+            // ── Step 7: assign back and reimport ─────────────────────────────
+            importer.clipAnimations = clips;
+            importer.SaveAndReimport();
+
+            Debug.Log(
+                $"[EnemyBaseBuilder] Stamped OnHitboxOpen (t={openTime:F2}s) and " +
+                $"OnHitboxClose (t={closeTime:F2}s) on {ClipName} at {fbxPath}.");
+        }
+
+        /// <summary>
+        /// Searches every FBX under <paramref name="searchRoot"/> and returns
+        /// the asset path of the first one whose
+        /// <see cref="ModelImporter.clipAnimations"/> array contains a clip
+        /// whose <c>.name</c> (falling back to <c>.takeName</c> when
+        /// <c>.name</c> is empty) equals <paramref name="clipName"/>.
+        /// Returns <c>null</c> if nothing matches.
+        /// </summary>
+        private static string FindFbxContainingClip(string searchRoot, string clipName)
+        {
+            string[] guids = AssetDatabase.FindAssets("t:Model", new[] { searchRoot });
+            foreach (var guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!path.EndsWith(".fbx", System.StringComparison.OrdinalIgnoreCase)) continue;
+
+                var imp = AssetImporter.GetAtPath(path) as ModelImporter;
+                if (imp == null) continue;
+
+                foreach (var clip in imp.clipAnimations)
+                {
+                    string name = string.IsNullOrEmpty(clip.name) ? clip.takeName : clip.name;
+                    if (name == clipName) return path;
+                }
+            }
+            return null;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
         // EnemyData_Grunt.asset creation
         // ════════════════════════════════════════════════════════════════════
 
