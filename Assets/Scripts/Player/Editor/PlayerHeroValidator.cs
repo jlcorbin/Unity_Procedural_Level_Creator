@@ -22,21 +22,31 @@
 using System;
 using System.IO;
 using System.Reflection;
+using TMPro;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using UnityEngine.UI;
 using LevelGen.Combat;
 using LevelGen.Input;
 using LevelGen.Player;
+using LevelGen.UI;
 
 namespace LevelGen.Player.Editor
 {
     public static class PlayerHeroValidator
     {
-        private const string PrefabPath          = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
-        private const string OldPrefabPath       = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
-        private const string ControllerPath      = "Assets/Animators/Player/PlayerBaseController.controller";
-        private const string PlayerHeroSrcPath   = "Assets/Scripts/Player/PlayerHero.cs";
+        private const string PrefabPath              = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
+        private const string OldPrefabPath           = "Assets/Prefabs/Character Prefabs/Player/Player_MaleHero.prefab";
+        private const string ControllerPath          = "Assets/Animators/Player/PlayerBaseController.controller";
+        private const string PlayerHeroSrcPath       = "Assets/Scripts/Player/PlayerHero.cs";
+
+        // ── Absorbed validator paths (M-MenuDelete) ──────────────────────────
+        private const string HUDPrefabPath           = "Assets/Prefabs/UI/PlayerHUD.prefab";
+        private const string DamageNumberPrefabPath  = "Assets/Prefabs/UI/DamageNumber.prefab";
+        private const string SpawnerPrefabPath       = "Assets/Prefabs/UI/DamageNumberSpawner.prefab";
+        private const string TargetableSrcPath       = "Assets/Scripts/Combat/Targetable.cs";
+        private const string SpawnerSrcPath          = "Assets/Scripts/UI/DamageNumberSpawner.cs";
 
         [MenuItem("LevelGen/Player/Validate Player_Hero")]
         public static void Run()
@@ -252,7 +262,115 @@ namespace LevelGen.Player.Editor
                 AssetDatabase.LoadAssetAtPath<MonoScript>("Assets/Scripts/Player/PlayerInteractor.cs") != null,
                 "source file");
 
+            // ════════════════════════════════════════════════════════════════
+            // 51-56: HUD checks (absorbed from PlayerHUDValidator)
+            // ════════════════════════════════════════════════════════════════
+
+            var hudPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(HUDPrefabPath);
+            Check("51 PlayerHUD.prefab exists",
+                hudPrefab != null,
+                hudPrefab != null ? HUDPrefabPath : $"missing at {HUDPrefabPath}");
+
+            PlayerHUD hud = hudPrefab != null ? hudPrefab.GetComponent<PlayerHUD>() : null;
+            Check("52 PlayerHUD component present on prefab root",
+                hud != null,
+                hud != null ? "present" : "missing");
+
+            if (hud == null)
+            {
+                for (int i = 53; i <= 56; i++)
+                    Check($"{i} PlayerHUD SerializeField ref", false, "PlayerHUD component missing — see check 52");
+            }
+            else
+            {
+                var hudSo = new SerializedObject(hud);
+                CheckSerializedRefNonNull(hudSo, "hpFill",       "53 PlayerHUD.hpFill (HP bar Image)",          ref pass, ref fail);
+                CheckSerializedRefNonNull(hudSo, "staminaFill",  "54 PlayerHUD.staminaFill (Stamina bar Image)",ref pass, ref fail);
+                CheckSerializedRefNonNull(hudSo, "hpLabel",      "55 PlayerHUD.hpLabel (TMP_Text)",             ref pass, ref fail);
+                CheckSerializedRefNonNull(hudSo, "staminaLabel", "56 PlayerHUD.staminaLabel (TMP_Text)",        ref pass, ref fail);
+            }
+
+            // ════════════════════════════════════════════════════════════════
+            // 57-63: Damage number checks (absorbed from DamageNumberValidator)
+            // ════════════════════════════════════════════════════════════════
+
+            var dnPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DamageNumberPrefabPath);
+            Check("57 DamageNumber.prefab exists",
+                dnPrefab != null,
+                dnPrefab != null ? DamageNumberPrefabPath : $"missing at {DamageNumberPrefabPath}");
+
+            var spawnerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(SpawnerPrefabPath);
+            Check("58 DamageNumberSpawner.prefab exists",
+                spawnerPrefab != null,
+                spawnerPrefab != null ? SpawnerPrefabPath : $"missing at {SpawnerPrefabPath}");
+
+            var dnComp = dnPrefab != null ? dnPrefab.GetComponent<DamageNumber>() : null;
+            Check("59 DamageNumber component present on DamageNumber.prefab",
+                dnComp != null,
+                dnComp != null ? "present" : "missing");
+
+            var spawnerComp = spawnerPrefab != null ? spawnerPrefab.GetComponent<DamageNumberSpawner>() : null;
+            Check("60 DamageNumberSpawner component present on DamageNumberSpawner.prefab",
+                spawnerComp != null,
+                spawnerComp != null ? "present" : "missing");
+
+            bool ok61 = false;
+            string detail61 = "DamageNumberSpawner component missing — see check 60";
+            if (spawnerComp != null)
+            {
+                var sso = new SerializedObject(spawnerComp);
+                var prop = sso.FindProperty("_damageNumberPrefab");
+                ok61 = prop != null && prop.objectReferenceValue != null;
+                detail61 = prop == null
+                    ? "_damageNumberPrefab field not found"
+                    : (ok61 ? $"wired to '{prop.objectReferenceValue.name}'" : "field is null");
+            }
+            Check("61 DamageNumberSpawner._damageNumberPrefab SerializeField wired", ok61, detail61);
+
+            // Source-scan: Targetable.cs declares static AnyTargetableHit event
+            bool ok62 = false;
+            string detail62 = $"source missing at {TargetableSrcPath}";
+            string targetableSrcFull = Path.Combine(Application.dataPath, "..", TargetableSrcPath);
+            if (File.Exists(targetableSrcFull))
+            {
+                string src = File.ReadAllText(targetableSrcFull);
+                ok62 = src.Contains("static event Action<Vector3, float> AnyTargetableHit");
+                detail62 = ok62
+                    ? "AnyTargetableHit static event declared"
+                    : "declaration not found";
+            }
+            Check("62 Targetable.cs declares static AnyTargetableHit event (source scan)", ok62, detail62);
+
+            // Source-scan: DamageNumberSpawner subscribes AND unsubscribes
+            // (leak prevention — static events survive domain reloads).
+            bool ok63 = false;
+            string detail63 = $"source missing at {SpawnerSrcPath}";
+            string spawnerSrcFull = Path.Combine(Application.dataPath, "..", SpawnerSrcPath);
+            if (File.Exists(spawnerSrcFull))
+            {
+                string src = File.ReadAllText(spawnerSrcFull);
+                bool sub   = src.Contains("Targetable.AnyTargetableHit += HandleAnyHit");
+                bool unsub = src.Contains("Targetable.AnyTargetableHit -= HandleAnyHit");
+                ok63 = sub && unsub;
+                detail63 = ok63
+                    ? "subscribes (+=) and unsubscribes (-=) HandleAnyHit"
+                    : $"subscribe={sub}, unsubscribe={unsub} (both required — static event leak prevention)";
+            }
+            Check("63 DamageNumberSpawner.cs subscribes+unsubscribes HandleAnyHit (leak check)", ok63, detail63);
+
             Summary(pass, fail);
+        }
+
+        private static void CheckSerializedRefNonNull(SerializedObject so, string fieldName,
+                                                      string label, ref int pass, ref int fail)
+        {
+            var prop = so.FindProperty(fieldName);
+            bool ok = prop != null && prop.objectReferenceValue != null;
+            string msg = prop == null
+                ? "field not found in SerializedObject"
+                : (ok ? prop.objectReferenceValue.name : "field is null");
+            if (ok) { pass++; Debug.Log($"[Validator] PASS — {label}: {msg}"); }
+            else    { fail++; Debug.LogError($"[Validator] FAIL — {label}: {msg}"); }
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────

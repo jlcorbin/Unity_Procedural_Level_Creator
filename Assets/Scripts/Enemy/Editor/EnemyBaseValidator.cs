@@ -1,21 +1,19 @@
-// EnemyBaseValidator.cs — M13-EnemyBase consolidated enemy validator.
+// EnemyBaseValidator.cs — consolidated enemy validator (M13-EnemyBase /
+// M-MenuDelete).
 //
-// Replaces the M-MenuCleanup ValidateEnemy.cs (32 checks, Dummy-targeted)
-// with a SUPERSET that adds Enemy_Grunt + EnemyBase + EnemyData coverage.
+// 40 read-only checks covering Enemy_Grunt.prefab + enemy-side scripts
+// + EnemyBaseController + EnemyData_Grunt. Originally inherited 32
+// Dummy-targeted checks from M-MenuCleanup's ValidateEnemy.cs; after
+// M-MenuDelete retired Dummy.prefab + CharacterStats_Dummy.asset, every
+// Dummy-prefab check was retargeted to Enemy_Grunt. Script-API surface
+// + Animator-graph checks are prefab-agnostic and stayed unchanged.
 //
-// 41 read-only checks:
-//   1-32: original ValidateEnemy coverage (Dummy.prefab, EnemyBaseController,
-//         script API surface, friendly-fire guard, AI ranges).
-//   33-41: M13-EnemyBase additions — EnemyBase presence + _data wiring,
-//          [DefaultExecutionOrder(-50)], InitFromEnemyData methods on
-//          consumers, EnemyData_Grunt asset existence + range ordering.
+// Numbering: 1-31 are the original prefab/script checks retargeted to
+// Enemy_Grunt (one Dummy-specific check — CharacterStats_Dummy.asset
+// existence — was dropped, so the count shifted from 32 → 31).
+// 32-40 are the M13-EnemyBase additions covering EnemyBase + EnemyData.
 //
 // Menu: LevelGen ▶ Combat ▶ Validate Enemy
-//
-// Targets BOTH Dummy.prefab (the sandbox / M4-M11 stack) AND
-// Enemy_Grunt.prefab (the M13-EnemyBase production archetype). Dummy
-// stays the smoke-test prefab; Enemy_Grunt is the canonical production
-// enemy. Both must pass.
 
 #if UNITY_EDITOR
 using System;
@@ -32,9 +30,7 @@ namespace LevelGen.Enemy.EditorTools
     public static class EnemyBaseValidator
     {
         // ── Paths ───────────────────────────────────────────────────────────
-        private const string DummyPrefabPath         = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
         private const string GruntPrefabPath         = "Assets/Prefabs/Character Prefabs/Enemy/Enemy_Grunt.prefab";
-        private const string DummyStatsAssetPath     = "Assets/Data/CharacterStats/CharacterStats_Dummy.asset";
         private const string GruntDataAssetPath      = "Assets/Data/EnemyData/EnemyData_Grunt.asset";
         private const string EnemyBaseControllerPath = "Assets/Animators/Enemy/EnemyBaseController.controller";
         private const string EnemyCombatSrcPath      = "Assets/Scripts/Combat/EnemyCombat.cs";
@@ -50,144 +46,135 @@ namespace LevelGen.Enemy.EditorTools
                 else    { fail++; Debug.LogError($"[Validator] FAIL — {label}: {detail}"); }
             }
 
-            // ════════════════════════════════════════════════════════════════
-            // 1-32: original ValidateEnemy coverage (Dummy + script surface)
-            // ════════════════════════════════════════════════════════════════
-
-            // ── 1: CharacterStats_Dummy.asset exists ─────────────────────────
-            var dummyStats = AssetDatabase.LoadAssetAtPath<CharacterStats>(DummyStatsAssetPath);
-            Check("1 CharacterStats_Dummy.asset exists",
-                dummyStats != null,
-                dummyStats != null ? DummyStatsAssetPath : $"missing at {DummyStatsAssetPath}");
-
-            var dummy = AssetDatabase.LoadAssetAtPath<GameObject>(DummyPrefabPath);
-            if (dummy == null)
+            // Load the canonical enemy prefab once for the prefab-relative checks.
+            var enemy = AssetDatabase.LoadAssetAtPath<GameObject>(GruntPrefabPath);
+            if (enemy == null)
             {
-                Debug.LogError($"[Validator] FATAL — Dummy.prefab missing at {DummyPrefabPath}. " +
-                               "Many checks will FAIL. Run 'LevelGen ▶ Combat ▶ Build Dummy Prefab'.");
+                Debug.LogError($"[Validator] FATAL — Enemy_Grunt.prefab missing at {GruntPrefabPath}. " +
+                               "All prefab-relative checks will FAIL. Run 'LevelGen ▶ Combat ▶ Build Enemy_Grunt Prefab'.");
             }
 
-            // ── 2: CharacterStatsRuntime on Dummy root ───────────────────────
-            var stats = dummy != null ? dummy.GetComponent<CharacterStatsRuntime>() : null;
-            Check("2 CharacterStatsRuntime component on Dummy root",
+            // ── 1: CharacterStatsRuntime on Enemy_Grunt root ─────────────────
+            var stats = enemy != null ? enemy.GetComponent<CharacterStatsRuntime>() : null;
+            Check("1 CharacterStatsRuntime component on Enemy_Grunt root",
                 stats != null,
                 stats != null ? "present" : "missing");
 
-            // ── 3-5: CharacterStatsRuntime API surface ───────────────────────
+            // ── 2-4: CharacterStatsRuntime API surface ───────────────────────
             var statsType = typeof(CharacterStatsRuntime);
             var invProp = statsType.GetProperty("IsInvulnerable",
                 BindingFlags.Public | BindingFlags.Instance);
-            Check("3 CharacterStatsRuntime.IsInvulnerable property",
+            Check("2 CharacterStatsRuntime.IsInvulnerable property",
                 invProp != null && invProp.PropertyType == typeof(bool),
                 invProp != null ? "bool, getter present" : "property missing");
 
             var setInv = statsType.GetMethod("SetInvulnerable",
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(bool) }, null);
-            Check("4 CharacterStatsRuntime.SetInvulnerable(bool) method",
+            Check("3 CharacterStatsRuntime.SetInvulnerable(bool) method",
                 setInv != null && setInv.ReturnType == typeof(void),
                 setInv != null ? "signature OK" : "method missing");
 
             var applyDmg = statsType.GetMethod("ApplyDamage",
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(int) }, null);
-            Check("5 CharacterStatsRuntime.ApplyDamage(int) method",
+            Check("4 CharacterStatsRuntime.ApplyDamage(int) method",
                 applyDmg != null && applyDmg.ReturnType == typeof(void),
                 applyDmg != null ? "signature OK" : "method missing");
 
-            // ── 6: Targetable on Dummy root ──────────────────────────────────
-            var targetable = dummy != null ? dummy.GetComponent<Targetable>() : null;
-            Check("6 Targetable component on Dummy root",
+            // ── 5: Targetable on Enemy_Grunt root ────────────────────────────
+            var targetable = enemy != null ? enemy.GetComponent<Targetable>() : null;
+            Check("5 Targetable component on Enemy_Grunt root",
                 targetable != null,
                 targetable != null ? "present" : "missing");
 
-            // ── 7-9: Targetable surface ──────────────────────────────────────
+            // ── 6-8: Targetable surface ──────────────────────────────────────
             var targType = typeof(Targetable);
             var onHit = targType.GetEvent("OnHit", BindingFlags.Public | BindingFlags.Instance);
-            Check("7 Targetable.OnHit event signature Action<Vector3, float>",
+            Check("6 Targetable.OnHit event signature Action<Vector3, float>",
                 onHit != null && onHit.EventHandlerType == typeof(Action<Vector3, float>),
                 onHit != null ? $"handlerType={onHit.EventHandlerType.Name}" : "event missing");
 
             var anyHit = targType.GetEvent("AnyTargetableHit", BindingFlags.Public | BindingFlags.Static);
-            Check("8 Targetable.AnyTargetableHit static event",
+            Check("7 Targetable.AnyTargetableHit static event",
                 anyHit != null,
                 anyHit != null ? "present (Action<Vector3, float>)" : "event missing");
 
             var raiseHit = targType.GetMethod("RaiseHit",
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(Vector3), typeof(float) }, null);
-            Check("9 Targetable.RaiseHit(Vector3, float) method",
+            Check("8 Targetable.RaiseHit(Vector3, float) method",
                 raiseHit != null && raiseHit.ReturnType == typeof(void),
                 raiseHit != null ? "signature OK" : "method missing");
 
-            // ── 10: EnemyHitReaction on Dummy root ───────────────────────────
-            var hitReact = dummy != null ? dummy.GetComponent<EnemyHitReaction>() : null;
-            Check("10 EnemyHitReaction component on Dummy root",
+            // ── 9: EnemyHitReaction on Enemy_Grunt root ──────────────────────
+            var hitReact = enemy != null ? enemy.GetComponent<EnemyHitReaction>() : null;
+            Check("9 EnemyHitReaction component on Enemy_Grunt root",
                 hitReact != null,
                 hitReact != null ? "present" : "missing");
 
-            // ── 11-12: EnemyHitReaction attributes ───────────────────────────
+            // ── 10-11: EnemyHitReaction attributes ───────────────────────────
             var hrType = typeof(EnemyHitReaction);
             bool requiresTarget = HasRequireComponent(hrType, typeof(Targetable));
-            Check("11 EnemyHitReaction [RequireComponent(Targetable)]",
+            Check("10 EnemyHitReaction [RequireComponent(Targetable)]",
                 requiresTarget,
                 requiresTarget ? "attribute present" : "attribute missing");
 
             bool hrDisallowDup = hrType.GetCustomAttribute<DisallowMultipleComponent>() != null;
-            Check("12 EnemyHitReaction [DisallowMultipleComponent]",
+            Check("11 EnemyHitReaction [DisallowMultipleComponent]",
                 hrDisallowDup,
                 hrDisallowDup ? "attribute present" : "attribute missing");
 
-            // ── 13: HandleHit(Vector3, float) method ─────────────────────────
+            // ── 12: HandleHit(Vector3, float) method ─────────────────────────
             var handleHit = hrType.GetMethod("HandleHit",
                 BindingFlags.NonPublic | BindingFlags.Instance,
                 null, new[] { typeof(Vector3), typeof(float) }, null);
-            Check("13 EnemyHitReaction.HandleHit(Vector3, float) method",
+            Check("12 EnemyHitReaction.HandleHit(Vector3, float) method",
                 handleHit != null,
                 handleHit != null ? "signature OK" : "method missing or wrong signature");
 
-            // ── 14: EnemyDeath on Dummy root ─────────────────────────────────
-            var death = dummy != null ? dummy.GetComponent<EnemyDeath>() : null;
-            Check("14 EnemyDeath component on Dummy root",
+            // ── 13: EnemyDeath on Enemy_Grunt root ───────────────────────────
+            var death = enemy != null ? enemy.GetComponent<EnemyDeath>() : null;
+            Check("13 EnemyDeath component on Enemy_Grunt root",
                 death != null,
                 death != null ? "present" : "missing");
 
-            // ── 15: CharacterStatsRuntime.OnDied event ───────────────────────
+            // ── 14: CharacterStatsRuntime.OnDied event ───────────────────────
             var onDied = statsType.GetEvent("OnDied", BindingFlags.Public | BindingFlags.Instance);
-            Check("15 CharacterStatsRuntime.OnDied event Action<CharacterStatsRuntime>",
+            Check("14 CharacterStatsRuntime.OnDied event Action<CharacterStatsRuntime>",
                 onDied != null && onDied.EventHandlerType == typeof(Action<CharacterStatsRuntime>),
                 onDied != null ? $"handlerType={onDied.EventHandlerType.Name}" : "event missing");
 
-            // ── 16: CharacterStatsRuntime.IsDead property ────────────────────
+            // ── 15: CharacterStatsRuntime.IsDead property ────────────────────
             var isDead = statsType.GetProperty("IsDead",
                 BindingFlags.Public | BindingFlags.Instance);
-            Check("16 CharacterStatsRuntime.IsDead property (bool)",
+            Check("15 CharacterStatsRuntime.IsDead property (bool)",
                 isDead != null && isDead.PropertyType == typeof(bool),
                 isDead != null ? "bool, getter present" : "property missing");
 
-            // ── 17: EnemyBaseController asset exists ─────────────────────────
+            // ── 16: EnemyBaseController asset exists ─────────────────────────
             var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(EnemyBaseControllerPath);
-            Check("17 EnemyBaseController.controller asset exists",
+            Check("16 EnemyBaseController.controller asset exists",
                 controller != null,
                 controller != null ? EnemyBaseControllerPath : $"missing at {EnemyBaseControllerPath}");
 
-            // ── 18: Dummy Animator references EnemyBaseController ────────────
-            var dummyAnimChild = dummy != null ? dummy.transform.Find("MaleCharacterPBR") : null;
-            Animator dummyAnim = dummyAnimChild != null ? dummyAnimChild.GetComponent<Animator>() : null;
-            bool ok18 = false;
-            string detail18 = "MaleCharacterPBR child not found";
-            if (dummyAnim != null)
+            // ── 17: Enemy_Grunt Animator references EnemyBaseController ──────
+            var enemyAnimChild = enemy != null ? enemy.transform.Find("MaleCharacterPBR") : null;
+            Animator enemyAnim = enemyAnimChild != null ? enemyAnimChild.GetComponent<Animator>() : null;
+            bool ok17 = false;
+            string detail17 = "MaleCharacterPBR child not found";
+            if (enemyAnim != null)
             {
-                var rac = dummyAnim.runtimeAnimatorController;
-                ok18 = rac != null && rac.name == "EnemyBaseController";
-                detail18 = rac != null
+                var rac = enemyAnim.runtimeAnimatorController;
+                ok17 = rac != null && rac.name == "EnemyBaseController";
+                detail17 = rac != null
                     ? $"controller='{rac.name}'"
                     : "Animator has no runtimeAnimatorController";
             }
-            Check("18 Dummy Animator references EnemyBaseController (not PlayerBaseController)",
-                ok18, detail18);
+            Check("17 Enemy_Grunt Animator references EnemyBaseController",
+                ok17, detail17);
 
-            // ── 19-22: Animator parameters ───────────────────────────────────
+            // ── 18-21: Animator parameters ───────────────────────────────────
             bool hasHit = false, hasDeath = false, hasMoveSpeed = false, hasAttack = false;
             if (controller != null)
             {
@@ -199,14 +186,14 @@ namespace LevelGen.Enemy.EditorTools
                     if (p.name == "Attack"    && p.type == AnimatorControllerParameterType.Trigger) hasAttack    = true;
                 }
             }
-            Check("19 EnemyBaseController Hit Trigger parameter",       hasHit,       hasHit       ? "type=Trigger" : "missing");
-            Check("20 EnemyBaseController Death Trigger parameter",     hasDeath,     hasDeath     ? "type=Trigger" : "missing");
-            Check("21 EnemyBaseController MoveSpeed Float parameter",   hasMoveSpeed, hasMoveSpeed ? "type=Float"   : "missing");
-            Check("22 EnemyBaseController Attack Trigger parameter",    hasAttack,    hasAttack    ? "type=Trigger" : "missing");
+            Check("18 EnemyBaseController Hit Trigger parameter",     hasHit,       hasHit       ? "type=Trigger" : "missing");
+            Check("19 EnemyBaseController Death Trigger parameter",   hasDeath,     hasDeath     ? "type=Trigger" : "missing");
+            Check("20 EnemyBaseController MoveSpeed Float parameter", hasMoveSpeed, hasMoveSpeed ? "type=Float"   : "missing");
+            Check("21 EnemyBaseController Attack Trigger parameter",  hasAttack,    hasAttack    ? "type=Trigger" : "missing");
 
-            // ── 23: AnyState → Hit transition canTransitionToSelf=false ──────
-            bool ok23 = false;
-            string detail23 = "controller missing";
+            // ── 22: AnyState → Hit transition canTransitionToSelf=false ──────
+            bool ok22 = false;
+            string detail22 = "controller missing";
             if (controller != null && controller.layers.Length > 0)
             {
                 AnimatorState hitState = null;
@@ -216,13 +203,13 @@ namespace LevelGen.Enemy.EditorTools
 
                 if (hitState != null)
                 {
-                    detail23 = "no AnyState → Hit transition found";
+                    detail22 = "no AnyState → Hit transition found";
                     foreach (var t in rootSm.anyStateTransitions)
                     {
                         if (t.destinationState == hitState)
                         {
-                            ok23 = !t.canTransitionToSelf;
-                            detail23 = ok23
+                            ok22 = !t.canTransitionToSelf;
+                            detail22 = ok22
                                 ? "canTransitionToSelf=false"
                                 : $"canTransitionToSelf={t.canTransitionToSelf} (expected false)";
                             break;
@@ -231,14 +218,14 @@ namespace LevelGen.Enemy.EditorTools
                 }
                 else
                 {
-                    detail23 = "Hit state missing from controller";
+                    detail22 = "Hit state missing from controller";
                 }
             }
-            Check("23 AnyState → Hit transition with canTransitionToSelf=false", ok23, detail23);
+            Check("22 AnyState → Hit transition with canTransitionToSelf=false", ok22, detail22);
 
-            // ── 24: Death state is terminal (no outgoing transitions) ────────
-            bool ok24 = false;
-            string detail24 = "controller missing";
+            // ── 23: Death state is terminal (no outgoing transitions) ────────
+            bool ok23 = false;
+            string detail23 = "controller missing";
             if (controller != null && controller.layers.Length > 0)
             {
                 AnimatorState deathState = null;
@@ -247,83 +234,83 @@ namespace LevelGen.Enemy.EditorTools
                     if (sc.state != null && sc.state.name == "Death") { deathState = sc.state; break; }
                 if (deathState != null)
                 {
-                    ok24 = deathState.transitions.Length == 0;
-                    detail24 = ok24
+                    ok23 = deathState.transitions.Length == 0;
+                    detail23 = ok23
                         ? "no outgoing transitions"
                         : $"outgoing transitions={deathState.transitions.Length} (expected 0)";
                 }
                 else
                 {
-                    detail24 = "Death state missing from controller";
+                    detail23 = "Death state missing from controller";
                 }
             }
-            Check("24 Death state is terminal (no outgoing transitions)", ok24, detail24);
+            Check("23 Death state is terminal (no outgoing transitions)", ok23, detail23);
 
-            // ── 25: EnemyCombat on Dummy root ────────────────────────────────
-            var enemyCombat = dummy != null ? dummy.GetComponent<EnemyCombat>() : null;
-            Check("25 EnemyCombat component on Dummy root",
+            // ── 24: EnemyCombat on Enemy_Grunt root ──────────────────────────
+            var enemyCombat = enemy != null ? enemy.GetComponent<EnemyCombat>() : null;
+            Check("24 EnemyCombat component on Enemy_Grunt root",
                 enemyCombat != null,
                 enemyCombat != null ? "present" : "missing");
 
-            // ── 26: EnemyWeaponHitbox child under weapon_r ───────────────────
+            // ── 25: EnemyWeaponHitbox child under weapon_r ───────────────────
             Transform weaponBone = null;
-            if (dummy != null)
+            if (enemy != null)
             {
-                weaponBone = FindChildRecursive(dummy.transform, "weapon_r")
-                          ?? FindChildRecursive(dummy.transform, "weapon_l")
-                          ?? FindChildRecursive(dummy.transform, "Weapon_R")
-                          ?? FindChildRecursive(dummy.transform, "Weapon_L");
+                weaponBone = FindChildRecursive(enemy.transform, "weapon_r")
+                          ?? FindChildRecursive(enemy.transform, "weapon_l")
+                          ?? FindChildRecursive(enemy.transform, "Weapon_R")
+                          ?? FindChildRecursive(enemy.transform, "Weapon_L");
             }
-            bool ok26 = false;
-            string detail26 = "no weapon bone found in hierarchy";
+            bool ok25 = false;
+            string detail25 = "no weapon bone found in hierarchy";
             if (weaponBone != null)
             {
                 Transform hitbox = null;
                 foreach (Transform c in weaponBone) if (c.name == "EnemyWeaponHitbox") { hitbox = c; break; }
-                ok26 = hitbox != null;
-                detail26 = ok26
+                ok25 = hitbox != null;
+                detail25 = ok25
                     ? $"EnemyWeaponHitbox under '{weaponBone.name}'"
                     : $"weapon bone '{weaponBone.name}' has no EnemyWeaponHitbox child";
             }
-            Check("26 EnemyWeaponHitbox child exists under weapon_r", ok26, detail26);
+            Check("25 EnemyWeaponHitbox child exists under weapon_r", ok25, detail25);
 
-            // ── 27: EnemyAnimationEventForwarder on MaleCharacterPBR child ───
+            // ── 26: EnemyAnimationEventForwarder on MaleCharacterPBR child ───
             EnemyAnimationEventForwarder forwarder = null;
-            if (dummyAnimChild != null)
-                forwarder = dummyAnimChild.GetComponent<EnemyAnimationEventForwarder>();
-            Check("27 EnemyAnimationEventForwarder on MaleCharacterPBR child",
+            if (enemyAnimChild != null)
+                forwarder = enemyAnimChild.GetComponent<EnemyAnimationEventForwarder>();
+            Check("26 EnemyAnimationEventForwarder on MaleCharacterPBR child",
                 forwarder != null,
                 forwarder != null ? "present" : "missing");
 
-            // ── 28: Friendly-fire guard literal-stub source scan ─────────────
-            bool ok28 = false;
-            string detail28 = $"source missing at {EnemyCombatSrcPath}";
+            // ── 27: Friendly-fire guard literal-stub source scan ─────────────
+            bool ok27 = false;
+            string detail27 = $"source missing at {EnemyCombatSrcPath}";
             string srcFull = Path.Combine(Application.dataPath, "..", EnemyCombatSrcPath);
             if (File.Exists(srcFull))
             {
                 string src = File.ReadAllText(srcFull);
-                ok28 = src.Contains("CompareTag(\"Player\")");
-                detail28 = ok28
+                ok27 = src.Contains("CompareTag(\"Player\")");
+                detail27 = ok27
                     ? "CompareTag(\"Player\") literal found"
                     : "friendly-fire guard literal missing from EnemyCombat.cs";
             }
-            Check("28 EnemyCombat friendly-fire guard (CompareTag(\"Player\")) present", ok28, detail28);
+            Check("27 EnemyCombat friendly-fire guard (CompareTag(\"Player\")) present", ok27, detail27);
 
-            // ── 29: EnemyAI on Dummy root ────────────────────────────────────
-            var ai = dummy != null ? dummy.GetComponent<EnemyAI>() : null;
-            Check("29 EnemyAI component on Dummy root",
+            // ── 28: EnemyAI on Enemy_Grunt root ──────────────────────────────
+            var ai = enemy != null ? enemy.GetComponent<EnemyAI>() : null;
+            Check("28 EnemyAI component on Enemy_Grunt root",
                 ai != null,
                 ai != null ? "present" : "missing");
 
-            // ── 30: NavMeshAgent on Dummy root ───────────────────────────────
-            var agent = dummy != null ? dummy.GetComponent<NavMeshAgent>() : null;
-            Check("30 NavMeshAgent component on Dummy root",
+            // ── 29: NavMeshAgent on Enemy_Grunt root ─────────────────────────
+            var agent = enemy != null ? enemy.GetComponent<NavMeshAgent>() : null;
+            Check("29 NavMeshAgent component on Enemy_Grunt root",
                 agent != null,
                 agent != null ? "present" : "missing");
 
-            // ── 31-32: EnemyAI SerializeField range fields > 0 ───────────────
-            bool ok31 = false, ok32 = false;
-            string detail31 = "EnemyAI missing", detail32 = "EnemyAI missing";
+            // ── 30-31: EnemyAI SerializeField range fields > 0 ───────────────
+            bool ok30 = false, ok31 = false;
+            string detail30 = "EnemyAI missing", detail31 = "EnemyAI missing";
             if (ai != null)
             {
                 var so = new SerializedObject(ai);
@@ -331,102 +318,101 @@ namespace LevelGen.Enemy.EditorTools
                 var detectionProp = so.FindProperty("_detectionRange");
                 if (attackProp != null)
                 {
-                    ok31 = attackProp.floatValue > 0f;
-                    detail31 = $"_attackRange={attackProp.floatValue:0.00}";
+                    ok30 = attackProp.floatValue > 0f;
+                    detail30 = $"_attackRange={attackProp.floatValue:0.00}";
                 }
-                else { detail31 = "_attackRange field not found"; }
+                else { detail30 = "_attackRange field not found"; }
                 if (detectionProp != null)
                 {
-                    ok32 = detectionProp.floatValue > 0f;
-                    detail32 = $"_detectionRange={detectionProp.floatValue:0.00}";
+                    ok31 = detectionProp.floatValue > 0f;
+                    detail31 = $"_detectionRange={detectionProp.floatValue:0.00}";
                 }
-                else { detail32 = "_detectionRange field not found"; }
+                else { detail31 = "_detectionRange field not found"; }
             }
-            Check("31 EnemyAI _attackRange > 0",    ok31, detail31);
-            Check("32 EnemyAI _detectionRange > 0", ok32, detail32);
+            Check("30 EnemyAI _attackRange > 0",    ok30, detail30);
+            Check("31 EnemyAI _detectionRange > 0", ok31, detail31);
 
             // ════════════════════════════════════════════════════════════════
-            // 33-41: M13-EnemyBase additions
+            // 32-40: M13-EnemyBase additions
             // ════════════════════════════════════════════════════════════════
 
-            // ── 33: Enemy_Grunt.prefab exists + EnemyBase on root ────────────
-            var grunt = AssetDatabase.LoadAssetAtPath<GameObject>(GruntPrefabPath);
-            EnemyBase gruntBase = grunt != null ? grunt.GetComponent<EnemyBase>() : null;
-            Check("33 Enemy_Grunt.prefab exists with EnemyBase on root",
-                gruntBase != null,
-                grunt == null
+            // ── 32: EnemyBase on Enemy_Grunt root ────────────────────────────
+            EnemyBase enemyBase = enemy != null ? enemy.GetComponent<EnemyBase>() : null;
+            Check("32 EnemyBase component on Enemy_Grunt root",
+                enemyBase != null,
+                enemy == null
                     ? $"prefab missing at {GruntPrefabPath} — run 'Build Enemy_Grunt Prefab'"
-                    : (gruntBase != null ? "EnemyBase present" : "EnemyBase component missing"));
+                    : (enemyBase != null ? "EnemyBase present" : "EnemyBase component missing"));
 
-            // ── 34: EnemyBase._data SerializeField non-null ──────────────────
-            bool ok34 = false;
-            string detail34 = "EnemyBase missing";
-            if (gruntBase != null)
+            // ── 33: EnemyBase._data SerializeField non-null ──────────────────
+            bool ok33 = false;
+            string detail33 = "EnemyBase missing";
+            if (enemyBase != null)
             {
-                var so = new SerializedObject(gruntBase);
+                var so = new SerializedObject(enemyBase);
                 var prop = so.FindProperty("_data");
                 if (prop != null)
                 {
-                    ok34 = prop.objectReferenceValue != null;
-                    detail34 = ok34
+                    ok33 = prop.objectReferenceValue != null;
+                    detail33 = ok33
                         ? $"wired to '{prop.objectReferenceValue.name}'"
                         : "_data field is null — re-run 'Build Enemy_Grunt Prefab'";
                 }
-                else { detail34 = "_data field not found on EnemyBase"; }
+                else { detail33 = "_data field not found on EnemyBase"; }
             }
-            Check("34 EnemyBase._data SerializeField non-null on Enemy_Grunt.prefab",
-                ok34, detail34);
+            Check("33 EnemyBase._data SerializeField non-null on Enemy_Grunt.prefab",
+                ok33, detail33);
 
-            // ── 35: [DefaultExecutionOrder(-50)] on EnemyBase ────────────────
+            // ── 34: [DefaultExecutionOrder(-50)] on EnemyBase ────────────────
             var enemyBaseType = typeof(EnemyBase);
             var execAttr = enemyBaseType.GetCustomAttribute<DefaultExecutionOrder>();
-            bool ok35 = execAttr != null && execAttr.order == -50;
-            string detail35 = execAttr == null
+            bool ok34 = execAttr != null && execAttr.order == -50;
+            string detail34 = execAttr == null
                 ? "attribute missing"
                 : $"order={execAttr.order} (expected -50)";
-            Check("35 EnemyBase has [DefaultExecutionOrder(-50)]", ok35, detail35);
+            Check("34 EnemyBase has [DefaultExecutionOrder(-50)]", ok34, detail34);
 
-            // ── 36-38: InitFromEnemyData methods on consumers ────────────────
+            // ── 35-37: InitFromEnemyData methods on consumers ────────────────
             var initOnAI = typeof(EnemyAI).GetMethod("InitFromEnemyData",
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(EnemyData) }, null);
-            Check("36 EnemyAI.InitFromEnemyData(EnemyData) method",
+            Check("35 EnemyAI.InitFromEnemyData(EnemyData) method",
                 initOnAI != null && initOnAI.ReturnType == typeof(void),
                 initOnAI != null ? "signature OK" : "method missing");
 
             var initOnCombat = typeof(EnemyCombat).GetMethod("InitFromEnemyData",
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(EnemyData) }, null);
-            Check("37 EnemyCombat.InitFromEnemyData(EnemyData) method",
+            Check("36 EnemyCombat.InitFromEnemyData(EnemyData) method",
                 initOnCombat != null && initOnCombat.ReturnType == typeof(void),
                 initOnCombat != null ? "signature OK" : "method missing");
 
             var initOnStats = typeof(CharacterStatsRuntime).GetMethod("InitFromEnemyData",
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(EnemyData) }, null);
-            Check("38 CharacterStatsRuntime.InitFromEnemyData(EnemyData) method",
+            Check("37 CharacterStatsRuntime.InitFromEnemyData(EnemyData) method",
                 initOnStats != null && initOnStats.ReturnType == typeof(void),
                 initOnStats != null ? "signature OK" : "method missing");
 
-            // ── 39: EnemyData_Grunt.asset exists ─────────────────────────────
+            // ── 38: EnemyData_Grunt.asset exists ─────────────────────────────
             var gruntData = AssetDatabase.LoadAssetAtPath<EnemyData>(GruntDataAssetPath);
-            Check("39 EnemyData_Grunt.asset exists",
+            Check("38 EnemyData_Grunt.asset exists",
                 gruntData != null,
                 gruntData != null ? GruntDataAssetPath : $"missing at {GruntDataAssetPath}");
 
-            // ── 40: EnemyData_Grunt.maxHP > 0 ────────────────────────────────
-            bool ok40 = gruntData != null && gruntData.maxHP > 0;
-            string detail40 = gruntData != null
+            // ── 39: EnemyData_Grunt.maxHP > 0 ────────────────────────────────
+            bool ok39 = gruntData != null && gruntData.maxHP > 0;
+            string detail39 = gruntData != null
                 ? $"maxHP={gruntData.maxHP}"
                 : "EnemyData_Grunt.asset missing";
-            Check("40 EnemyData_Grunt.maxHP > 0", ok40, detail40);
+            Check("39 EnemyData_Grunt.maxHP > 0", ok39, detail39);
 
-            // ── 41: EnemyData_Grunt range ordering (attack < detection) ──────
-            bool ok41 = gruntData != null && gruntData.attackRange < gruntData.detectionRange;
-            string detail41 = gruntData != null
+            // ── 40: EnemyData_Grunt range ordering (attack < detection) ──────
+            bool ok40 = gruntData != null && gruntData.attackRange < gruntData.detectionRange;
+            string detail40 = gruntData != null
                 ? $"attackRange={gruntData.attackRange:0.00}, detectionRange={gruntData.detectionRange:0.00}"
                 : "EnemyData_Grunt.asset missing";
-            Check("41 EnemyData_Grunt.attackRange < detectionRange", ok41, detail41);
+            Check("40 EnemyData_Grunt.attackRange < detectionRange", ok40, detail40);
 
             Summary(pass, fail);
         }

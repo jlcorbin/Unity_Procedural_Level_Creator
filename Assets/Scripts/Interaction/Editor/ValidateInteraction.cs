@@ -1,12 +1,13 @@
-// ValidateInteraction.cs — M-MenuCleanup consolidated interaction validator.
+// ValidateInteraction.cs — consolidated interaction validator
+// (M-MenuCleanup / M-MenuDelete).
 //
-// Replaces the 2 deleted per-milestone validators:
-//   InteractSystemValidator.cs    (M6)
-//   OpenInteractableValidator.cs  (M7)
+// Originally replaced 2 per-milestone validators (M6 InteractSystem,
+// M7 OpenInteractable). Updated in M-MenuDelete to retarget the
+// Dummy-prefab checks to Enemy_Grunt.prefab after Dummy was retired.
 //
-// 16 read-only checks covering Interactable base + concrete subclasses +
-// PlayerInteractor + wiring on Player_Hero + Dummy prefabs. No scene
-// modification.
+// 16 read-only checks covering Interactable base + concrete subclasses
+// + PlayerInteractor + wiring on Player_Hero + Enemy_Grunt prefabs.
+// No scene modification.
 //
 // Menu: LevelGen ▶ Interaction ▶ Validate Interaction
 //
@@ -39,7 +40,10 @@ namespace LevelGen.Interaction.EditorTools
         private const string PlayerInteractorSrcPath  = "Assets/Scripts/Player/PlayerInteractor.cs";
         private const string PlayerInputReaderSrc     = "Assets/Scripts/Player/PlayerInputReader.cs";
         private const string PlayerPrefabPath         = "Assets/Prefabs/Character Prefabs/Player/Player_Hero.prefab";
-        private const string DummyPrefabPath          = "Assets/Prefabs/Character Prefabs/Enemy/Dummy.prefab";
+        // M-MenuDelete: retargeted from Dummy.prefab to Enemy_Grunt.prefab
+        // after Dummy retirement. Enemy_Grunt carries the _AssassinateZone
+        // child built by EnemyBaseBuilder.BuildAssassinateZone.
+        private const string EnemyPrefabPath          = "Assets/Prefabs/Character Prefabs/Enemy/Enemy_Grunt.prefab";
         private const string TestDoorPrefabPath       = "Assets/Prefabs/TestRig/TestDoor.prefab";
 
         [MenuItem("LevelGen/Interaction/Validate Interaction")]
@@ -99,19 +103,19 @@ namespace LevelGen.Interaction.EditorTools
                 ok5,
                 ok5 ? "subclass confirmed" : $"BaseType={assassinateType.BaseType?.Name}");
 
-            // ── 6: _AssassinateZone child on Dummy prefab ────────────────────
-            var dummy = AssetDatabase.LoadAssetAtPath<GameObject>(DummyPrefabPath);
+            // ── 6: _AssassinateZone child on Enemy_Grunt prefab ──────────────
+            var enemy = AssetDatabase.LoadAssetAtPath<GameObject>(EnemyPrefabPath);
             bool ok6 = false;
-            string detail6 = $"Dummy.prefab missing at {DummyPrefabPath}";
-            if (dummy != null)
+            string detail6 = $"Enemy_Grunt.prefab missing at {EnemyPrefabPath}";
+            if (enemy != null)
             {
-                var zone = FindChildByName(dummy.transform, "_AssassinateZone");
+                var zone = FindChildByName(enemy.transform, "_AssassinateZone");
                 ok6 = zone != null;
                 detail6 = ok6
                     ? "_AssassinateZone child present"
-                    : "missing — run 'LevelGen ▶ Combat ▶ Build Dummy Prefab'";
+                    : "missing — run 'LevelGen ▶ Combat ▶ Build Enemy_Grunt Prefab'";
             }
-            Check("6 Dummy.prefab has _AssassinateZone child", ok6, detail6);
+            Check("6 Enemy_Grunt.prefab has _AssassinateZone child", ok6, detail6);
 
             // ── 7: OpenInteractable.cs exists ────────────────────────────────
             bool ok7 = AssetDatabase.LoadAssetAtPath<MonoScript>(OpenInteractableSrcPath) != null;
@@ -181,26 +185,26 @@ namespace LevelGen.Interaction.EditorTools
                 onInteract != null,
                 onInteract != null ? "signature OK" : "method missing");
 
-            // ── 15: Dummy has AssassinateInteractable on _AssassinateZone ────
+            // ── 15: Enemy_Grunt has AssassinateInteractable on _AssassinateZone ─
             bool ok15 = false;
-            string detail15 = "Dummy.prefab missing";
-            if (dummy != null)
+            string detail15 = "Enemy_Grunt.prefab missing";
+            if (enemy != null)
             {
-                var zone = FindChildByName(dummy.transform, "_AssassinateZone");
+                var zone = FindChildByName(enemy.transform, "_AssassinateZone");
                 if (zone != null)
                 {
                     var ai = zone.GetComponent<AssassinateInteractable>();
                     ok15 = ai != null;
                     detail15 = ok15
                         ? "AssassinateInteractable on _AssassinateZone"
-                        : "_AssassinateZone present but no AssassinateInteractable — re-run 'Build Dummy Prefab'";
+                        : "_AssassinateZone present but no AssassinateInteractable — re-run 'Build Enemy_Grunt Prefab'";
                 }
                 else
                 {
                     detail15 = "no _AssassinateZone child (see check 6)";
                 }
             }
-            Check("15 Dummy.prefab has AssassinateInteractable on _AssassinateZone", ok15, detail15);
+            Check("15 Enemy_Grunt.prefab has AssassinateInteractable on _AssassinateZone", ok15, detail15);
 
             // ── 16: PlayerHero._interactor SerializeField is non-null ────────
             bool ok16 = false;

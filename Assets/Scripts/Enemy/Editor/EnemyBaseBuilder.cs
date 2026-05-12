@@ -22,6 +22,7 @@ using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.AI;
 using LevelGen.Combat;
+using LevelGen.Interaction;
 
 namespace LevelGen.Enemy.EditorTools
 {
@@ -171,6 +172,11 @@ namespace LevelGen.Enemy.EditorTools
             // EnemyWeaponHitbox child under weapon_r.
             BuildEnemyWeaponHitbox(character, enemyCombat);
 
+            // _AssassinateZone child (M6 interact system). Mirror of
+            // DummyPrefabBuilder.BuildAssassinateZone — Enemy_Grunt is now
+            // the canonical assassinate target after Dummy is retired.
+            BuildAssassinateZone(root, runtime);
+
             // EnemyBase manifest — last so all sibling refs resolve.
             var enemyBase = root.AddComponent<EnemyBase>();
             WireEnemyBaseRefs(enemyBase, gruntData, runtime, root.GetComponent<Targetable>(),
@@ -209,7 +215,8 @@ namespace LevelGen.Enemy.EditorTools
                 $"CharacterStatsRuntime, Targetable, EnemyAI, EnemyCombat, EnemyHitReaction, EnemyDeath\n" +
                 $"  Components on child: EnemyAnimationEventForwarder\n" +
                 $"  Children:            weapon_r/EnemyWeaponHitbox (trigger BoxCollider + " +
-                $"kinematic Rigidbody + EnemyHitboxRelay)\n" +
+                $"kinematic Rigidbody + EnemyHitboxRelay),\n" +
+                $"                       _AssassinateZone (SphereCollider trigger + AssassinateInteractable)\n" +
                 $"  Drop into a scene with a baked NavMesh ('LevelGen ▶ Combat ▶ Bake Test Scene NavMesh')" +
                 " and press Play."
             );
@@ -400,6 +407,57 @@ namespace LevelGen.Enemy.EditorTools
             prop.objectReferenceValue = value;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(target);
+        }
+
+        /// <summary>
+        /// Builds the M6 _AssassinateZone child: SphereCollider trigger +
+        /// AssassinateInteractable, with prompt anchor at head height.
+        /// Mirror of DummyPrefabBuilder.BuildAssassinateZone — Enemy_Grunt
+        /// takes over as the canonical assassinate target.
+        /// </summary>
+        private static void BuildAssassinateZone(GameObject root, CharacterStatsRuntime runtime)
+        {
+            var zone = new GameObject("_AssassinateZone");
+            zone.transform.SetParent(root.transform, worldPositionStays: false);
+            zone.transform.localPosition = Vector3.zero;
+            zone.transform.localRotation = Quaternion.identity;
+            zone.transform.localScale    = Vector3.one;
+
+            var sc = zone.AddComponent<SphereCollider>();
+            sc.isTrigger = true;
+            sc.radius    = 1.5f;
+            sc.center    = new Vector3(0f, 0.9f, 0f);
+
+            var assassinate = zone.AddComponent<AssassinateInteractable>();
+
+            // Prompt anchor sits at head height so the floating prompt
+            // renders above the model.
+            var headAnchor = new GameObject("_PromptAnchor_Head");
+            headAnchor.transform.SetParent(zone.transform, worldPositionStays: false);
+            headAnchor.transform.localPosition = new Vector3(0f, 1.9f, 0f);
+
+            // Reset() does not fire on programmatic AddComponent — wire
+            // SerializeField refs explicitly via SerializedObject (M6 lesson).
+            var so = new SerializedObject(assassinate);
+            void Wire(string field, Object value)
+            {
+                var prop = so.FindProperty(field);
+                if (prop == null)
+                {
+                    Debug.LogError($"[EnemyBaseBuilder] AssassinateInteractable has no '{field}' field.");
+                    return;
+                }
+                prop.objectReferenceValue = value;
+            }
+            Wire("_targetStats",     runtime);
+            Wire("_targetTransform", root.transform);
+            Wire("_promptAnchor",    headAnchor.transform);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(assassinate);
+
+            // Build prompt UI at author time so it's visible in the prefab
+            // inspector (otherwise it only spawns on Awake at runtime).
+            assassinate.EnsurePromptUI();
         }
 
         private static Transform FindByNameRecursive(Transform t, string name)
