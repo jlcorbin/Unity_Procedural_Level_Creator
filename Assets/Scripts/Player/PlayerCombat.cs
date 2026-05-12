@@ -311,6 +311,14 @@ namespace LevelGen.Player
         /// </summary>
         public void NotifyHitboxTriggered(Collider other)
         {
+            // Self-hit guard. Player's own Targetable lives on the root
+            // (M11), and the player's CharacterController on the root
+            // would otherwise be detected by the weapon hitbox swing.
+            // Mirrors EnemyCombat's CompareTag("Player") friendly-fire
+            // pattern in reverse: PlayerCombat must NOT hit Players.
+            if (other.gameObject == gameObject) return;
+            if (other.CompareTag("Player")) return;
+
             var targetable = other.GetComponentInParent<Targetable>();
             if (targetable == null) return;
 
@@ -326,6 +334,13 @@ namespace LevelGen.Player
                 _currentAttackHitList.Add(targetable);
                 return;
             }
+
+            // Don't damage corpses. EnemyDeath disables the deathCollider
+            // + Targetable on HP→0, so OnTriggerEnter shouldn't normally
+            // fire on a dead target — but defense-in-depth in case the
+            // wiring is incomplete or the collider re-enables. Mirrors
+            // EnemyCombat's IsDead guard (M11).
+            if (stats.IsDead) return;
 
             // Per-swing damage override (single-shot, set by Interactables
             // via SetNextHitDamageOverride). Consumed AFTER stats / hit-list

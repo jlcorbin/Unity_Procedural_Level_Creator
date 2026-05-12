@@ -140,7 +140,13 @@ namespace LevelGen.Combat
         /// </summary>
         public void ApplyDamage(int amount)
         {
-            if (stats == null) return;
+            // Need at least one data source (CharacterStats for player,
+            // EnemyData for enemies). Without either, MaxHP is 0 and
+            // damage is meaningless. M13-EnemyBase: this guard was
+            // previously `stats == null` only, which silently dropped
+            // every damage event on enemies (which use the EnemyData
+            // path with stats=null).
+            if (stats == null && _enemyData == null) return;
             // M12: i-frames. Discard the entire damage event (no HP
             // delta, no OnDied) while invulnerable. Sole gate point —
             // do not duplicate this check elsewhere; route through here.
@@ -167,7 +173,8 @@ namespace LevelGen.Combat
         /// </summary>
         public void Heal(int amount)
         {
-            if (stats == null) return;
+            // Same dual-source guard as ApplyDamage (M13-EnemyBase).
+            if (stats == null && _enemyData == null) return;
             int prev = currentHP;
             currentHP = Mathf.Clamp(currentHP + amount, 0, MaxHP);
             Debug.Log($"[CharacterStatsRuntime] {DisplayName} HP {prev} -> {currentHP}");
