@@ -414,6 +414,115 @@ namespace LevelGen.Enemy.EditorTools
                 : "EnemyData_Grunt.asset missing";
             Check("40 EnemyData_Grunt.attackRange < detectionRange", ok40, detail40);
 
+            // ════════════════════════════════════════════════════════════════
+            // 41-44: Defense + health bar wiring (enemy health bar milestone)
+            // ════════════════════════════════════════════════════════════════
+
+            // ── 41: EnemyData_Grunt.Defense >= 0 ─────────────────────────────
+            bool ok41 = gruntData != null && gruntData.Defense >= 0f;
+            string detail41 = gruntData != null
+                ? $"Defense={gruntData.Defense:0.##}"
+                : "EnemyData_Grunt.asset missing";
+            Check("41 EnemyData_Grunt.Defense >= 0", ok41, detail41);
+
+            // ── 42: CharacterStatsRuntime.Defense getter + SetDefense(float) ─
+            var defenseProp = statsType.GetProperty("Defense",
+                BindingFlags.Public | BindingFlags.Instance);
+            Check("42 CharacterStatsRuntime.Defense property (float, getter)",
+                defenseProp != null && defenseProp.PropertyType == typeof(float),
+                defenseProp != null ? "float, getter present" : "property missing");
+
+            var setDefense = statsType.GetMethod("SetDefense",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, new[] { typeof(float) }, null);
+            Check("43 CharacterStatsRuntime.SetDefense(float) method",
+                setDefense != null && setDefense.ReturnType == typeof(void),
+                setDefense != null ? "signature OK" : "method missing");
+
+            // ── 44: EnemyHealthBar + EnemyHealthBarProximityDriver on Enemy_Grunt ──
+            // Types looked up by name so the check compiles before the scripts
+            // are created (health bar milestone ships these scripts). If the type
+            // is not yet compiled, the check is a FAIL with a clear message.
+            var healthBarType = Type.GetType("LevelGen.EnemyHealthBar, Assembly-CSharp");
+            var driverType    = Type.GetType("LevelGen.EnemyHealthBarProximityDriver, Assembly-CSharp");
+
+            bool ok44hb = false;
+            string detail44hb;
+            if (healthBarType == null)
+            {
+                detail44hb = "Type not found — script may not have compiled yet.";
+            }
+            else if (enemy == null)
+            {
+                detail44hb = "Enemy_Grunt.prefab missing.";
+            }
+            else
+            {
+                var hbComp = enemy.GetComponentInChildren(healthBarType);
+                ok44hb    = hbComp != null;
+                detail44hb = ok44hb
+                    ? $"EnemyHealthBar found on '{hbComp.gameObject.name}'"
+                    : "Component missing from prefab — wire it in the Editor.";
+            }
+            Check("44a EnemyHealthBar component exists in Enemy_Grunt hierarchy",
+                ok44hb, detail44hb);
+
+            bool ok44pd = false;
+            string detail44pd;
+            if (driverType == null)
+            {
+                detail44pd = "Type not found — script may not have compiled yet.";
+            }
+            else if (enemy == null)
+            {
+                detail44pd = "Enemy_Grunt.prefab missing.";
+            }
+            else
+            {
+                var pdComp = enemy.GetComponentInChildren(driverType);
+                ok44pd    = pdComp != null;
+                detail44pd = ok44pd
+                    ? $"EnemyHealthBarProximityDriver found on '{pdComp.gameObject.name}'"
+                    : "Component missing from prefab — wire it in the Editor.";
+            }
+            Check("44b EnemyHealthBarProximityDriver component exists in Enemy_Grunt hierarchy",
+                ok44pd, detail44pd);
+
+            // ════════════════════════════════════════════════════════════════
+            // 45-47: M11.1 post-hit i-frame follow-up additions
+            // ════════════════════════════════════════════════════════════════
+
+            // ── 45: EnemyCombat._iFrameDuration SerializeField present ────────
+            var ecType = typeof(EnemyCombat);
+            var iFrameField = ecType.GetField("_iFrameDuration",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Check("45 EnemyCombat._iFrameDuration SerializeField present",
+                iFrameField != null && iFrameField.FieldType == typeof(float),
+                iFrameField != null ? "float field present" : "field missing");
+
+            // ── 46: EnemyAnimationEventAbsorber.cs no longer exists ───────────
+            bool ok46 = !File.Exists(
+                Path.Combine(Application.dataPath, "..", "Assets/Scripts/Combat/EnemyAnimationEventAbsorber.cs"))
+                && !File.Exists(
+                Path.Combine(Application.dataPath, "..", "Assets/Scripts/Enemy/EnemyAnimationEventAbsorber.cs"));
+            Check("46 EnemyAnimationEventAbsorber.cs deleted (both known paths)",
+                ok46,
+                ok46 ? "not found at either path (correct)" : "file still exists — delete it");
+
+            // ── 47: OnHitboxOpen / OnHitboxClose methods on EnemyCombat ──────
+            var onOpen  = ecType.GetMethod("OnHitboxOpen",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, Type.EmptyTypes, null);
+            var onClose = ecType.GetMethod("OnHitboxClose",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, Type.EmptyTypes, null);
+            Check("47a EnemyCombat.OnHitboxOpen() public void method",
+                onOpen != null && onOpen.ReturnType == typeof(void),
+                onOpen != null ? "signature OK" : "method missing");
+            Check("47b EnemyCombat.OnHitboxClose() public void method",
+                onClose != null && onClose.ReturnType == typeof(void),
+                onClose != null ? "signature OK" : "method missing");
+
             Summary(pass, fail);
         }
 

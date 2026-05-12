@@ -91,6 +91,18 @@ namespace LevelGen.Combat
         public void SetInvulnerable(bool value) => IsInvulnerable = value;
 
         /// <summary>
+        /// Flat defense value. effectiveDamage = max(0, damage - Defense).
+        /// Pushed in from EnemyData via SetDefense, called by EnemyBase.Awake.
+        /// </summary>
+        public float Defense { get; private set; }
+
+        /// <summary>
+        /// Sets the flat defense value. Clamped to &gt;= 0.
+        /// Sole writer: EnemyBase (via InitFromEnemyData path).
+        /// </summary>
+        public void SetDefense(float value) => Defense = Mathf.Max(0f, value);
+
+        /// <summary>
         /// M13-EnemyBase entry point. Pushes an <see cref="EnemyData"/>
         /// asset into this runtime, overriding the <see cref="CharacterStats"/>
         /// values for HP and DisplayName. Called by
@@ -151,9 +163,14 @@ namespace LevelGen.Combat
             // delta, no OnDied) while invulnerable. Sole gate point —
             // do not duplicate this check elsewhere; route through here.
             if (IsInvulnerable) return;
+            // Flat defense reduction. Defense is pushed by EnemyBase.Awake
+            // via SetDefense; defaults to 0 on the player (no push-down).
+            int effectiveDamage = Mathf.Max(0, amount - Mathf.RoundToInt(Defense));
+            if (effectiveDamage <= 0) return;
             int prev = currentHP;
-            currentHP = Mathf.Clamp(currentHP - amount, 0, MaxHP);
-            Debug.Log($"[CharacterStatsRuntime] {DisplayName} HP {prev} -> {currentHP}");
+            currentHP = Mathf.Clamp(currentHP - effectiveDamage, 0, MaxHP);
+            string defenseTag = Defense > 0f ? $" (after Defense {Defense:0.##})" : "";
+            Debug.Log($"[CharacterStatsRuntime] {DisplayName} HP {prev} -> {currentHP}{defenseTag}");
 
             if (currentHP <= 0 && !_hasDied)
             {

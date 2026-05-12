@@ -4108,6 +4108,291 @@ Lessons logged for this milestone:
   is additive — older check numbers stay stable across consolidations
   so log diffs remain readable.
 
+## M14 — Enemy health bar + Defense wired (2026-05-11)
+
+Two-part combat polish milestone. Wires `EnemyData.Defense` through
+the damage pipeline as a flat reduction, and ships two scripts for a
+world-space health-bar billboard above each enemy. Scripts only —
+prefab wiring (Canvas / Image / component placement on Enemy_Grunt)
+is deferred to the editor pass.
+
+### Defense wiring (gameplay)
+
+- `EnemyData.cs` — `defense` converted from public field to
+  `[SerializeField] private float defense = 5f` + public read-only
+  `Defense` property. Field name unchanged so `EnemyData_Grunt.asset`'s
+  serialized value (defense=2 per M13-EnemyBase) is preserved.
+  OnValidate clamp `if (defense < 0f) defense = 0f` retained.
+- `CharacterStatsRuntime.cs` — new `Defense` auto-property (public
+  getter, private setter) and `SetDefense(float)` public mutator,
+  placed alongside `IsInvulnerable` / `SetInvulnerable` (same
+  write-once-from-outside pattern). `ApplyDamage(int amount)` gains a
+  flat-reduction step AFTER the IsInvulnerable guard, BEFORE the HP
+  delta:
+  ```
+  int effectiveDamage = Mathf.Max(0, amount - Mathf.RoundToInt(Defense));
+  if (effectiveDamage <= 0) return;
+  ```
+  HP arithmetic stays int; Defense (float) rounds to int via
+  `Mathf.RoundToInt`. Debug.Log appends `(after Defense N.NN)` when
+  Defense > 0 so log diffs make the reduction visible.
+- `EnemyBase.cs` (Enemy manifest) — `Awake` now calls
+  `_stats.SetDefense(_data.Defense)` immediately after the existing
+  `_stats.InitFromEnemyData(_data)` push-down. `[DefaultExecutionOrder(
+  -50)]` ordering preserved — Defense lands before any sibling Awake
+  could read it.
+
+Player keeps Defense=0 (no push-down on the player path). Future
+WeaponStats / ArmorStats SOs can call `SetDefense` on the player's
+CharacterStatsRuntime when the equipment system ships.
+
+### Enemy health bar (UI scripts)
+
+Two new scripts in `LevelGen` namespace (no sub-namespace, per the
+specified template):
+
+- `Assets/Scripts/Combat/EnemyHealthBar.cs` (NEW, ~125 lines):
+  World-space bar billboard. Inspector wires `_fillImage` (a Filled
+  Image) and `_barYOffset` (default 2.2). Awake resolves `_stats` via
+  `GetComponentInParent<CharacterStatsRuntime>` if not wired; disables
+  self with a warning if still null. Update lazy-caches `Camera.main`
+  (retries each null frame so a late-spawning CinemachineAutoBind rig
+  is picked up automatically). Billboard via
+  `transform.forward = -cam.transform.forward` (avoids LookAt mirror-
+  flip, cheaper than Quaternion.LookRotation). Fill update via
+  `Mathf.Clamp01((float)stats.CurrentHP / stats.MaxHP)` with
+  `MaxHP > 0` guard. OnEnable/OnDisable subscribe/unsubscribe to
+  `CharacterStatsRuntime.OnDied` and hide on death (so corpses that
+  linger 5s before despawn don't show 0/MaxHP bars). Public
+  `SetVisible(bool)` — external systems (proximity driver, future
+  target lock) drive visibility; component never polls distance.
+- `Assets/Scripts/Combat/EnemyHealthBarProximityDriver.cs` (NEW, ~97
+  lines): InvokeRepeating-based distance check. Inspector fields
+  `_healthBar`, `_showRadius=12`, `_pollInterval=0.2`, `_playerTag=
+  "Player"`. Start does one-shot `GameObject.FindWithTag` lookup; if
+  player or `_healthBar` is null, logs warning and self-disables (no
+  silent retry — missing player is a real config bug worth surfacing).
+  `CheckProximity` reads `Vector3.Distance(transform.position,
+  _player.position)` and calls `_healthBar.SetVisible(dist <=
+  _showRadius)`. `OnDestroy` cancels the invoke.
+
+### Validator extension
+
+- `Assets/Scripts/Enemy/Editor/EnemyBaseValidator.cs` — appended
+  checks 41-44 (continuing the consolidated 40-check sequence from
+  M13-EnemyBase):
+    41 `EnemyData_Grunt.Defense >= 0`
+    42 `CharacterStatsRuntime.Defense` public getter (float)
+    43 `CharacterStatsRuntime.SetDefense(float)` public void method
+    44a `EnemyHealthBar` component in Enemy_Grunt hierarchy
+        (via `Type.GetType("LevelGen.EnemyHealthBar, Assembly-CSharp")`
+        + `GetComponentInChildren`)
+    44b `EnemyHealthBarProximityDriver` component in Enemy_Grunt
+        hierarchy
+  Checks 44a/44b use deferred Type.GetType lookup so the validator
+  compiles even before the scripts are added to the prefab. FAIL
+  messages distinguish "Type not found" (script missing) from
+  "Component missing from prefab — wire it in the Editor".
+
+### Files
+
+- Assets/Scripts/Combat/EnemyData.cs (modified — `defense` field
+  converted to private SerializeField + Defense property)
+- Assets/Scripts/Combat/CharacterStatsRuntime.cs (modified —
+  Defense property + SetDefense + ApplyDamage reduction step)
+- Assets/Scripts/Enemy/EnemyBase.cs (modified — SetDefense push-down
+  in Awake)
+- Assets/Scripts/Combat/EnemyHealthBar.cs (NEW)
+- Assets/Scripts/Combat/EnemyHealthBarProximityDriver.cs (NEW)
+- Assets/Scripts/Enemy/Editor/EnemyBaseValidator.cs (extended,
+  41-44 added)
+
+### Current state
+
+- Defense flat-reduction wired end-to-end. EnemyBase.Awake pushes
+  Defense from EnemyData_Grunt (=2) into CharacterStatsRuntime; M11's
+  10-damage-per-swing now lands as 8/swing on Grunt (10 − 2). Player
+  side untouched (Defense=0).
+- EnemyHealthBar + EnemyHealthBarProximityDriver scripts compile-
+  ready. Enemy_Grunt.prefab does NOT yet carry these components —
+  editor wiring deferred (add a child HealthBar GameObject with a
+  World Space Canvas → Image, attach `EnemyHealthBar` and a child
+  `EnemyHealthBarProximityDriver`, wire references in Inspector,
+  save prefab). Validator checks 44a/44b will report "Component
+  missing from prefab — wire it in the Editor" until that happens.
+- No prefab, scene, asset, .asmdef, or ProjectSettings changes this
+  milestone.
+
+### Pending follow-up (Jason runs after CC completes)
+
+1. Editor wiring of EnemyHealthBar onto Enemy_Grunt.prefab:
+   - Add child GameObject `HealthBar` under Enemy_Grunt root
+   - Add child `Canvas` (Render Mode = World Space) under HealthBar
+   - Add child `Background` Image (dark) + child `Fill` Image
+     (Image Type = Filled, Fill Method = Horizontal, Origin = Left,
+     red tint) under the Canvas
+   - On `HealthBar` GameObject, add `EnemyHealthBar` component;
+     wire `_fillImage` → Fill, set `_barYOffset` ≈ 2.2
+   - On `HealthBar` GameObject (or root), add
+     `EnemyHealthBarProximityDriver`; wire `_healthBar` → the
+     EnemyHealthBar component on the same GameObject
+   - Save prefab
+2. `LevelGen ▶ Combat ▶ Validate Enemy` — expect 44/44 PASS.
+3. Sanity re-run `LevelGen ▶ Player ▶ Validate Player_Hero` — should
+   stay at 63/63 (no player-side changes).
+4. Play-mode smoke test:
+   - Walk within 12m of a Grunt → health bar appears
+   - Bar billboards to camera as player orbits
+   - Hit Grunt with Attack01 → fill drops from 100% to 90% (8/80
+     damage = 10%, not 10/80 = 12.5%) — confirms Defense applied
+   - Walk away beyond 12m → bar hides
+   - Kill Grunt → bar hides on death; corpse persists 5s without
+     showing 0/80
+5. Defense tuning: open `EnemyData_Grunt.asset`, adjust `defense`
+   field as desired. EnemyBase pushes the new value at runtime.
+
+### Deferred
+
+- Target Lock system (still recommended next milestone per
+  Session_Handoff)
+- WeaponStats SO (replaces hardcoded `attackDamage = 10` on
+  PlayerCombat; also unlocks Defense push-down for player armor)
+- Damage-type system (currently flat reduction; future:
+  fire/ice/poison resistances)
+- Crit / status effects layered on top of Defense
+- Per-archetype health bar art (size, color, sub-bars for shields
+  or stagger meter)
+- World-bundle billboard mesh (replace UGUI World Space Canvas with
+  a Mesh-based bar for mobile perf if profiling shows Canvas cost)
+- M-Factions: enemy-vs-enemy damage (currently blocked by
+  EnemyCombat friendly-fire guard)
+
+### Lessons logged
+
+- The `defense` field was already public on EnemyData — converting to
+  `[SerializeField] private` with the same name preserves serialized
+  asset values. Pattern carries forward whenever an existing public
+  field needs encapsulation: keep the field name, add SerializeField,
+  add a `PublicName => fieldName` property.
+- `Mathf.RoundToInt` is the right bridge when an int pipeline
+  consumes a float stat (HP arithmetic is integer; Defense is float
+  for future ScriptableObject tuning ergonomics). Rounding-to-nearest
+  matches damage-feel expectations better than truncation
+  (Mathf.FloorToInt would silently absorb 0.49 damage).
+- Health-bar visibility belongs to a separate driver component, not
+  the bar itself. Lets future systems (Target Lock force-show,
+  scripted cinematic hide) call the same `SetVisible` without
+  rewiring the proximity check. Proximity is one driver among many.
+- One-shot player lookup in Start with self-disable on miss is the
+  right pattern for the enemy health bar (vs PlayerHUD's coroutine
+  retry). Enemies spawn AFTER the player; a missing player at enemy-
+  Start is a config bug, not a timing issue. PlayerHUD's retry exists
+  because PlayerHUD spawns at scene load before the player prefab is
+  instantiated in some flows — different lifecycle.
+- Validator type-by-name lookup (`Type.GetType("LevelGen.X,
+  Assembly-CSharp")`) is the canonical pattern when validating types
+  that may not exist yet at compile time. Lets the validator land
+  alongside the script-writing work without ordering constraints.
+
+### M14 hotfix (2026-05-11)
+
+Recent changes:
+- Fixed EnemyBaseBuilder line 276: `.defense` → `.Defense` (field made
+  private in M14).
+- EnemyData.Defense made get/set (was get-only); fixes CS0200 in
+  EnemyBaseBuilder. Clamp matches OnValidate convention.
+- DamageNumberSpawner: added _spawnYOffset (default 1.5f) to lift
+  numbers above collider contact height. Resolves deferred per-actor
+  Y-offset issue.
+
+The M14 conversion of `defense` to a `[SerializeField] private` field
+silently broke `EnemyBaseBuilder.EnsureGruntData`, which set the field
+directly via `asset.defense = 2f;` (CS0122). Pivoting to `asset.Defense
+= 2f;` then surfaced CS0200 because `Defense` was expression-bodied
+get-only. Promoted `Defense` to a full property with a clamped setter:
+`public float Defense { get => defense; set => defense = Mathf.Max(0f,
+value); }`. The clamp mirrors the OnValidate convention (`if (defense
+< 0f) defense = 0f`) so authoring paths can't poison the asset with a
+negative value. Consumption surface unchanged — `EnemyBase.Awake`
+still reads `_data.Defense` as before.
+
+Lesson: when encapsulating a public field, audit ALL writers (not just
+readers) before shipping. A read-only property protects from accidental
+runtime mutation but breaks authoring paths that legitimately need to
+write — and ScriptableObject builders are exactly that. Default to
+`{ get; set; }` for SO stat fields; lean on OnValidate clamps rather
+than property-side guards.
+
+## M11.1 — post-hit i-frame window on enemy hit (2026-05-11)
+
+Follow-up to M11 (player takes damage). M11 proper shipped the full
+damage-to-player routing: `EnemyAnimationEventAbsorber` was deleted,
+`EnemyAnimationEventForwarder` and `EnemyHitboxRelay` were created,
+and `EnemyCombat.NotifyHitboxTriggered` applies damage. This follow-up
+adds the one missing piece: a brief i-frame window on the player after
+each hit, preventing rapid-swing stack-damage.
+
+**Changes:**
+
+- `EnemyCombat.cs`: added `_iFrameDuration = 0.5f` SerializeField
+  (tunable per-enemy in Inspector). Added `GrantIFrames(CharacterStatsRuntime)`
+  private coroutine that calls `stats.SetInvulnerable(true)`, yields
+  `WaitForSeconds(_iFrameDuration)`, then calls `SetInvulnerable(false)`
+  (skipped if the target died during the window). Coroutine is started in
+  `NotifyHitboxTriggered` immediately after `ApplyDamage`, guarded on
+  `!stats.IsDead && _iFrameDuration > 0f`. Added `using System.Collections;`
+  import required by the coroutine return type.
+
+- `EnemyBaseValidator.cs`: appended checks 45-47 (M11.1 additions).
+  - 45: `EnemyCombat._iFrameDuration` SerializeField present (float,
+    NonPublic reflection).
+  - 46: `EnemyAnimationEventAbsorber.cs` not found at either known path
+    (`Assets/Scripts/Combat/` or `Assets/Scripts/Enemy/`) — confirms
+    M11 deletion persists.
+  - 47a/47b: `EnemyCombat.OnHitboxOpen()` and `OnHitboxClose()` public
+    void methods present (already true from M11; this makes the state
+    explicit in the validator).
+
+**Already done in M11 (not re-done here):**
+
+- `EnemyAnimationEventAbsorber.cs` was deleted in M11. Confirmed absent
+  at both search paths.
+- `EnemyCombat.OnHitboxOpen` / `OnHitboxClose` already implemented in
+  M11 (enable/disable hitbox + clear hit list). Not modified.
+- `HashSet<Targetable> _currentAttackHitList` already exists in M11.
+  The prompt's `List<Collider>` alternative was not introduced — the
+  existing typed HashSet is correct and consumed by surrounding code.
+- `OnTriggerEnter` was NOT added to `EnemyCombat` — the `EnemyHitboxRelay`
+  pattern (relay on the child BoxCollider that routes to
+  `NotifyHitboxTriggered` on root) is the correct M11 architecture.
+
+**Current state:** enemy attack damage deals to player via
+`EnemyCombat.NotifyHitboxTriggered`; player i-frames wired via
+`CharacterStatsRuntime.SetInvulnerable` coroutine on each hit;
+`EnemyAnimationEventAbsorber` deleted in M11 and confirmed absent.
+
+**Files modified:**
+
+- `Assets/Scripts/Combat/EnemyCombat.cs` — `_iFrameDuration` field,
+  `GrantIFrames` coroutine, coroutine start in `NotifyHitboxTriggered`,
+  `using System.Collections` import.
+- `Assets/Scripts/Enemy/Editor/EnemyBaseValidator.cs` — checks 45-47
+  appended.
+
+**Files NOT modified:** `CharacterStatsRuntime.cs` (SetInvulnerable /
+IsInvulnerable already shipped in M12), `EnemyHitboxRelay.cs`,
+`EnemyAnimationEventForwarder.cs`, `EnemyAI.cs`, `EnemyBase.cs`,
+`EnemyDeath.cs`, `EnemyHitReaction.cs`, any prefab, any .unity scene.
+
+**Pending follow-up:**
+
+- `LevelGen ▶ Combat ▶ Validate Enemy` — expect 49 PASS / 0 FAIL
+  (44 prior checks + checks 45, 46, 47a, 47b).
+- Play-mode smoke test: have Grunt swing at player twice in quick
+  succession (within 0.5s). Only the first hit registers on the HP bar;
+  the second is absorbed by i-frames. After 0.5s the bar is vulnerable
+  again.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

@@ -119,7 +119,11 @@ namespace LevelGen.Enemy
                 return;
             }
 
-            if (_stats  != null) _stats.InitFromEnemyData(_data);
+            if (_stats  != null)
+            {
+                _stats.InitFromEnemyData(_data);
+                _stats.SetDefense(_data.Defense);
+            }
             if (_ai     != null) _ai.InitFromEnemyData(_data);
             if (_combat != null) _combat.InitFromEnemyData(_data);
             if (_agent  != null)

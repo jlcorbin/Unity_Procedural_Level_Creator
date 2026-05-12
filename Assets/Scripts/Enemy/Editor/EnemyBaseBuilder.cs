@@ -273,7 +273,7 @@ namespace LevelGen.Enemy.EditorTools
             asset.enemyName        = "Grunt";
             asset.maxHP            = 80;
             asset.attackDamage     = 10f;
-            asset.defense          = 2f;
+            asset.Defense          = 2f;
             asset.moveSpeed        = 3.5f;
             asset.rotationSpeed    = 10f;
             asset.detectionRange   = 6f;

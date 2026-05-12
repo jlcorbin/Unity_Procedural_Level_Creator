@@ -47,8 +47,9 @@ namespace LevelGen.Combat
                  "Float for future tuning; cast to int on consumption.")]
         public float attackDamage = 10f;
 
-        [Tooltip("Reserved for future damage-mitigation logic. Not yet consumed.")]
-        public float defense = 5f;
+        [Tooltip("Flat damage reduction applied before HP loss. effectiveDamage = max(0, incomingDamage - Defense).")]
+        [SerializeField] private float defense = 5f;
+        public float Defense { get => defense; set => defense = Mathf.Max(0f, value); }
 
         [Header("Movement")]
         [Tooltip("NavMeshAgent.speed during Chase. m/s.")]

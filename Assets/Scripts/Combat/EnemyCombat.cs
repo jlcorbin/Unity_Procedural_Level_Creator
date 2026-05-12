@@ -17,6 +17,7 @@
 // the hit via its own Targetable.OnHit (M8) and reacts via
 // PlayerHitReaction → PlayerCombat → PlayerAnimator. One direction.
 
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -39,6 +40,9 @@ namespace LevelGen.Combat
                  "WeaponStats SO with per-weapon values is a follow-up. " +
                  "Mirror of PlayerCombat.attackDamage default = 10.")]
         [SerializeField] private int _attackDamage = 10;
+
+        [Tooltip("Duration in seconds the player is invulnerable after taking a hit from this enemy.")]
+        [SerializeField] private float _iFrameDuration = 0.5f;
 
         [Header("Refs")]
         [Tooltip("Trigger collider on the enemy weapon. Enabled during the " +
@@ -143,12 +147,44 @@ namespace LevelGen.Combat
                 ? other.ClosestPoint(_hitbox.bounds.center)
                 : other.bounds.center;
 
+            // Requires player root or hitbox ancestor to be tagged "Player"
             stats.ApplyDamage(dmg);
+
+            // Post-hit i-frame window (M11.1). Grant a brief invulnerability
+            // window so rapid consecutive swings (or multiple enemies in melee)
+            // can't stack-damage the player every single frame. Only start the
+            // coroutine if the target survived (IsDead → no point granting
+            // invuln on a fresh corpse; invuln state would linger until the
+            // coroutine resolves 0.5s later and may suppress a Death trigger).
+            if (!stats.IsDead && _iFrameDuration > 0f)
+                StartCoroutine(GrantIFrames(stats));
+
             targetable.RaiseHit(hitPoint, dmg);
             _currentAttackHitList.Add(targetable);
 
             Debug.Log($"[EnemyCombat] {gameObject.name} hit {targetable.name} for {dmg} " +
                       $"(HP now {stats.CurrentHP}/{stats.MaxHP}).");
+        }
+
+        // ── I-frame coroutine ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// Grants the target a brief invulnerability window after being hit.
+        /// Starts after <see cref="ApplyDamage"/> returns (so damage this swing
+        /// already applied); ends after <see cref="_iFrameDuration"/> seconds.
+        /// Guarded against a null stats ref (defensive; callers already check)
+        /// and against re-granting invuln to a target that died during the window.
+        /// </summary>
+        private IEnumerator GrantIFrames(CharacterStatsRuntime stats)
+        {
+            if (stats == null) yield break;
+            stats.SetInvulnerable(true);
+            yield return new WaitForSeconds(_iFrameDuration);
+            // Don't clear invuln on a dead target — EnemyDeath / PlayerDeath
+            // already cleaned up; lingering SetInvulnerable(false) is harmless
+            // but tidy to skip.
+            if (stats != null && !stats.IsDead)
+                stats.SetInvulnerable(false);
         }
     }
 }

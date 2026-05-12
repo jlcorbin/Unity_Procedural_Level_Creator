@@ -31,6 +31,9 @@ namespace LevelGen.UI
                  "clean). Defaults to this transform if unset.")]
         [SerializeField] private Transform _spawnParent;
 
+        [Tooltip("World-space Y offset added to the hit point before spawning. Compensates for low collider contact points.")]
+        [SerializeField] private float _spawnYOffset = 1.5f;
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -69,8 +72,9 @@ namespace LevelGen.UI
         private void HandleAnyHit(Vector3 hitPoint, float damage)
         {
             if (_damageNumberPrefab == null) return; // misconfigured; no warn-spam
+            Vector3 spawnPosition = hitPoint + Vector3.up * _spawnYOffset;
             var dn = Instantiate(_damageNumberPrefab, _spawnParent);
-            dn.Initialize(hitPoint, damage);
+            dn.Initialize(spawnPosition, damage);
         }
     }
 }
