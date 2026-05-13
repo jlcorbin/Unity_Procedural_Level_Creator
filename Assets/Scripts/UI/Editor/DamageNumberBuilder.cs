@@ -21,10 +21,14 @@ namespace LevelGen.UI.EditorTools
     {
         private const string DamageNumberPrefabPath  = "Assets/Prefabs/UI/DamageNumber.prefab";
         private const string SpawnerPrefabPath       = "Assets/Prefabs/UI/DamageNumberSpawner.prefab";
+        private const string FontMaterialPath        = "Assets/Prefabs/UI/DamageNumber_FontMat.mat";
 
         // World-space TMP_Text size — scaled for the existing top-down
-        // camera distance. Tune in playtest.
-        private const float DamageNumberFontSize = 6f;
+        // camera distance. Reduced from 6 to 4 (M15b) for better readability
+        // at typical combat distance.
+        // Rebuild prefab via LevelGen ▶ UI ▶ Build DamageNumber Prefab after any font change
+        private const float DamageNumberFontSize = 4f;
+        private const float DamageNumberOutlineWidth = 0.2f;
 
         // ════════════════════════════════════════════════════════════════════
         // Menu item: build DamageNumber prefab
@@ -54,9 +58,15 @@ namespace LevelGen.UI.EditorTools
             tmp.alignment  = TextAlignmentOptions.Center;
             tmp.color      = Color.white;
             tmp.fontStyle  = FontStyles.Bold;
-            // Outline for legibility against varied scene backgrounds.
-            tmp.outlineWidth = 0.2f;
-            tmp.outlineColor = Color.black;
+
+            // Outline for legibility against varied scene backgrounds. We
+            // build a sibling Material asset off the font's sharedMaterial
+            // and write outline shader properties to it directly. Using
+            // tmp.outlineWidth / outlineColor here would call
+            // renderer.material under the hood, instantiating a leaked
+            // material in edit mode. Assigning fontSharedMaterial avoids
+            // that path entirely.
+            tmp.fontSharedMaterial = EnsureOutlineFontMaterial(tmp);
 
             // Save prefab.
             var saved = PrefabUtility.SaveAsPrefabAsset(root, DamageNumberPrefabPath, out bool success);
@@ -214,6 +224,42 @@ namespace LevelGen.UI.EditorTools
                 Debug.LogError($"[DamageNumberBuilder] Failed to create folder: {path}");
             else
                 Debug.Log($"[DamageNumberBuilder] Created folder: {path}");
+        }
+
+        // Build (or rebuild) a sibling outline Material asset for the
+        // DamageNumber's TMP font. Cloned from the font's sharedMaterial
+        // so it inherits the correct shader + atlas; outline properties
+        // are set via SetFloat / SetColor on the asset itself. Returns
+        // the loaded asset for assignment to TMP.fontSharedMaterial.
+        //
+        // This pattern avoids TMP_Text.outlineWidth / outlineColor
+        // setters, which call renderer.material under the hood and leak
+        // an instance copy of the shared material when invoked in edit
+        // mode on a non-saved GameObject.
+        private static Material EnsureOutlineFontMaterial(TextMeshPro tmp)
+        {
+            EnsureFolder("Assets", "Prefabs");
+            EnsureFolder("Assets/Prefabs", "UI");
+
+            // Idempotent rebuild.
+            if (AssetDatabase.LoadAssetAtPath<Material>(FontMaterialPath) != null)
+                AssetDatabase.DeleteAsset(FontMaterialPath);
+
+            var baseMat = tmp.fontSharedMaterial;
+            if (baseMat == null)
+            {
+                Debug.LogError("[DamageNumberBuilder] TMP.fontSharedMaterial is null — " +
+                               "outline material not created. Skipping outline.");
+                return null;
+            }
+
+            var outlineMat = new Material(baseMat) { name = "DamageNumber_FontMat" };
+            outlineMat.SetFloat("_OutlineWidth", DamageNumberOutlineWidth);
+            outlineMat.SetColor("_OutlineColor", Color.black);
+
+            AssetDatabase.CreateAsset(outlineMat, FontMaterialPath);
+            AssetDatabase.SaveAssets();
+            return AssetDatabase.LoadAssetAtPath<Material>(FontMaterialPath);
         }
     }
 }

@@ -64,6 +64,14 @@ namespace LevelGen.Player
         /// </summary>
         public event System.Action DodgePressed;
 
+        /// <summary>
+        /// Raised once per LockOn button press (button-down edge,
+        /// ctx.performed). Subscribed to by TargetLock. Toggles lock-on
+        /// state — same press acquires or releases a locked target.
+        /// Not raised on hold or release.
+        /// </summary>
+        public event System.Action OnLockOnPerformed;
+
         // ── UnityEvent endpoints ─────────────────────────────────────────────
         // Wired in the inspector to UnityEngine.InputSystem.PlayerInput's
         // per-action UnityEvents. Value-type actions (Move, Look) read every
@@ -148,6 +156,17 @@ namespace LevelGen.Player
         public void OnDodge(InputAction.CallbackContext ctx)
         {
             if (ctx.started) DodgePressed?.Invoke();
+        }
+
+        /// <summary>
+        /// LockOn action endpoint. Raises <see cref="OnLockOnPerformed"/>
+        /// on the performed phase (button-down edge). Consumed by
+        /// TargetLock. Toggles lock-on state — same press acquires or
+        /// releases a locked target.
+        /// </summary>
+        public void OnLockOn(InputAction.CallbackContext ctx)
+        {
+            if (ctx.performed) OnLockOnPerformed?.Invoke();
         }
     }
 }

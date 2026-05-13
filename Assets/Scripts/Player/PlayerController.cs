@@ -54,6 +54,11 @@ namespace LevelGen.Player
         [Tooltip("Jump height in meters at the peak of the arc. Fixed-height jump; gravity completes the arc. Air-time ≈ 2 * sqrt(2h/|g|) ≈ 0.99s at default 1.2m / -9.81 gravity.")]
         [SerializeField] private float jumpHeight = 1.2f;
 
+        [Header("Target Lock")]
+        [Tooltip("Slerp rate per second used to rotate the player body toward a locked target. " +
+                 "Higher values snap faster; lower values feel more fluid.")]
+        [SerializeField] private float _lockFaceSpeed = 10f;
+
         [Header("References")]
         [Tooltip("Camera the input is interpreted relative to. Auto-resolves to Camera.main if null at Awake.")]
         [SerializeField] private Transform cameraTransform;
@@ -156,8 +161,10 @@ namespace LevelGen.Player
             // 2) Clamp magnitude to 1 (Q-5: WASD diagonal would be ~1.414 raw).
             if (input.sqrMagnitude > 1f) input.Normalize();
 
-            // 3) Build camera-relative world-space move direction (XZ plane only).
-            Vector3 moveDirXZ = BuildCameraRelativeMove(input);
+            // 3) Build world-space move direction (XZ plane only).
+            //    When locked onto a target, WASD is body-relative (strafe toward
+            //    the target); otherwise use the standard camera-relative path.
+            Vector3 moveDirXZ = BuildMoveVector(input);
 
             // 4) Compose horizontal motion. Sprint multiplier kicks in when:
             //    - the player is holding Sprint, AND
@@ -190,11 +197,12 @@ namespace LevelGen.Player
             // 6) Move.
             _cc.Move(motion * Time.deltaTime);
 
-            // 7) Align body yaw to camera yaw. Snap (no smoothing) per design
-            //    decision (α). The body's "forward" is whatever the camera is
-            //    looking along on the XZ plane, so strafing input maps cleanly:
-            //    A on the stick = move left relative to body = LFT walk clip.
-            SnapBodyToCameraYaw();
+            // 7) Align body yaw. Two modes:
+            //    a) Locked: slerp to face the target (TargetLock strafe model).
+            //       WASD is already projected relative to body-facing in step 3,
+            //       so the player strafes around the enemy as expected.
+            //    b) Free-look: snap body to camera yaw (original M2 strafe model).
+            RotateBody();
 
             // 7.5) Push grounded state to Animator on change. Drives N10
             //      (JumpStart → JumpAir on !IsGrounded) and N12
@@ -318,6 +326,67 @@ namespace LevelGen.Player
             camForward.Normalize();
 
             transform.rotation = Quaternion.LookRotation(camForward, Vector3.up);
+        }
+
+        /// <summary>
+        /// Builds the world-space XZ move vector from WASD input.
+        /// When locked onto a target via <see cref="TargetLock"/>, input is
+        /// projected relative to the player's current body-forward (which is
+        /// being rotated toward the target by <see cref="RotateBody"/>), giving
+        /// proper strafe-around-target movement. Otherwise falls back to the
+        /// standard camera-relative projection used in free-look mode.
+        /// </summary>
+        private Vector3 BuildMoveVector(Vector2 input)
+        {
+            if (TargetLock.Instance != null
+                && TargetLock.Instance.IsLocked
+                && TargetLock.Instance.LockedTarget != null)
+            {
+                // Strafe mode: project WASD relative to the player's body axes.
+                // RotateBody() (step 7) will slerp body toward the target this
+                // same frame. Using the body's current forward + right means the
+                // input reads correctly on the very first locked frame too.
+                Vector3 fwd   = transform.forward; fwd.y = 0f;
+                Vector3 right = transform.right;   right.y = 0f;
+                if (fwd.sqrMagnitude   > minMoveSqr) fwd.Normalize();
+                if (right.sqrMagnitude > minMoveSqr) right.Normalize();
+                return fwd * input.y + right * input.x;
+            }
+
+            // Free-look: standard camera-relative move (original path).
+            return BuildCameraRelativeMove(input);
+        }
+
+        /// <summary>
+        /// Rotates the player's body each frame. When locked onto a target,
+        /// smoothly slerps to face it at <see cref="_lockFaceSpeed"/> degrees
+        /// per second. In free-look mode, snaps body to camera yaw (original
+        /// M2 strafe model — no change to existing behavior).
+        /// </summary>
+        private void RotateBody()
+        {
+            if (TargetLock.Instance != null
+                && TargetLock.Instance.IsLocked
+                && TargetLock.Instance.LockedTarget != null)
+            {
+                // Lock-on: smoothly rotate to face the target on the XZ plane.
+                Vector3 toTarget = TargetLock.Instance.LockedTarget.transform.position
+                                   - transform.position;
+                toTarget.y = 0f;
+                if (toTarget.sqrMagnitude > 0.001f)
+                {
+                    Quaternion targetFacing = Quaternion.LookRotation(toTarget.normalized, Vector3.up);
+                    transform.rotation = Quaternion.Slerp(
+                        transform.rotation,
+                        targetFacing,
+                        Time.deltaTime * _lockFaceSpeed);
+                }
+            }
+            else
+            {
+                // Free-look: snap body to camera yaw (original behavior).
+                SnapBodyToCameraYaw();
+            }
         }
     }
 }

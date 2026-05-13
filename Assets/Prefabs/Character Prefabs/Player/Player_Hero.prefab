@@ -120,6 +120,7 @@ GameObject:
   - component: {fileID: 700607533112611545}
   - component: {fileID: 5210536101866667839}
   - component: {fileID: 8326192862227759673}
+  - component: {fileID: 1045920072317689940}
   m_Layer: 0
   m_Name: Player_Hero
   m_TagString: Player
@@ -354,6 +355,22 @@ MonoBehaviour:
         m_CallState: 2
     m_ActionId: a2c7d4e1-0000-4012-b0d4-000000000012
     m_ActionName: 'Player/Dodge[a2c7d4e1-0000-4012-b0d4-000000000012]'
+  - m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 3466405732630974326}
+        m_TargetAssemblyTypeName: LevelGen.Player.PlayerInputReader, Assembly-CSharp
+        m_MethodName: OnLockOn
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+    m_ActionId: c4e9f6a3-0000-4012-b0d4-000000000014
+    m_ActionName: 'Player/LockOn[c4e9f6a3-0000-4012-b0d4-000000000014]'
   m_NeverAutoSwitchControlSchemes: 0
   m_DefaultControlScheme: 
   m_DefaultActionMap: Player
@@ -401,6 +418,7 @@ MonoBehaviour:
   stickyGroundVelocity: -2
   minMoveSqr: 0.0001
   jumpHeight: 1.2
+  _lockFaceSpeed: 10
   cameraTransform: {fileID: 0}
 --- !u!114 &2271876486046543205
 MonoBehaviour:
@@ -553,6 +571,7 @@ MonoBehaviour:
   _hitReaction: {fileID: 4163399805207047792}
   _death: {fileID: 1115029209863257410}
   _interactor: {fileID: 372145876249854902}
+  _targetLock: {fileID: 1045920072317689940}
 --- !u!136 &8326192862227759673
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -576,6 +595,26 @@ CapsuleCollider:
   m_Height: 1.8
   m_Direction: 1
   m_Center: {x: 0, y: 0.9, z: 0}
+--- !u!114 &1045920072317689940
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4475946285068610722}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 425be1834cec75d4589863ffd58231e2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.TargetLock
+  _lockRange: 20
+  _breakRange: 25
+  _sphereCastRadius: 3
+  _targetLayer:
+    serializedVersion: 2
+    m_Bits: 0
+  _eyeHeight: 1.2
+  _indicatorPrefab: {fileID: 0}
 --- !u!1 &8263107797383945181
 GameObject:
   m_ObjectHideFlags: 0

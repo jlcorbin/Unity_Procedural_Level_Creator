@@ -60,6 +60,7 @@ namespace LevelGen.Player.Editor
             ("Next",     "OnNext"),
             ("Sprint",   "OnSprint"),
             ("Dodge",    "OnDodge"),
+            ("LockOn",   "OnLockOn"),
         };
 
         [MenuItem("LevelGen/Player/Build Player_Hero Prefab")]
@@ -107,6 +108,7 @@ namespace LevelGen.Player.Editor
                 AddIfMissing<PlayerStamina>(contents, added, already);
                 AddIfMissing<PlayerDodge>(contents, added, already);
                 AddIfMissing<MouseLook>(contents, added, already);
+                AddIfMissing<TargetLock>(contents, added, already);
                 AddIfMissing<PlayerHero>(contents, added, already);
 
                 // ── Step 4: wire PlayerHero SerializeField refs ───────────
@@ -358,6 +360,7 @@ namespace LevelGen.Player.Editor
             WireProp(so, "_hitReaction",         root.GetComponent<PlayerHitReaction>());
             WireProp(so, "_death",               root.GetComponent<PlayerDeath>());
             WireProp(so, "_interactor",          root.GetComponent<PlayerInteractor>());
+            WireProp(so, "_targetLock",          root.GetComponent<TargetLock>());
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(hero);
 

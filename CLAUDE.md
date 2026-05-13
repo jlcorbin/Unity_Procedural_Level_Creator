@@ -4399,6 +4399,218 @@ IsInvulnerable already shipped in M12), `EnemyHitboxRelay.cs`,
   the second is absorbed by i-frames. After 0.5s the bar is vulnerable
   again.
 
+## M15 — Target Lock (2026-05-12)
+
+Right-mouse target lock-on with strafe-mode movement. Acquires the
+nearest in-cone enemy via sphere-cast, parks a yellow billboard
+indicator above its head, and forces the enemy's health bar visible
+while locked. Player body slerps toward the target each frame (the
+camera continues to follow normally via Cinemachine — no camera
+modification). Locking again unlocks. Lock auto-clears when the
+target dies (`CharacterStatsRuntime.OnDied` subscription) or moves
+beyond `_breakRange`.
+
+### Architectural decisions (locked)
+
+- **Singleton scope**: `TargetLock.Instance` (per-scene, no
+  DontDestroyOnLoad). Fourth project singleton after MouseLook
+  (`_MouseLock`), PlayerInteractor, DamageNumberSpawner.
+  Justified because `PlayerController.Update` reads
+  `TargetLock.Instance.IsLocked` each frame without taking a
+  hard dependency reference.
+- **`[DefaultExecutionOrder(-40)]`** on TargetLock: after
+  EnemyBase (-50), before default (0). Ensures
+  `TargetLock.Instance` is non-null when sibling components
+  read it.
+- **`InitFromPlayerHero(PlayerInputReader)`**: subscription
+  wiring is injection-based, not GetComponent-based. PlayerHero
+  owns the call site; TargetLock owns the subscription.
+- **Strafe model**: when locked, `PlayerController` rotates the
+  body toward the target via Quaternion.Slerp at
+  `_lockFaceSpeed` (default 10). WASD then translates relative
+  to the new body-forward. The free-look path
+  (SnapBodyToCameraYaw) is preserved as the else branch —
+  purely additive.
+- **No camera changes**: Cinemachine's existing follow rig
+  continues to track the player body. Body-faces-target is
+  sufficient for strafe feel without modifying the vcam.
+- **Indicator is procedural**: `LockIndicator` builds a tiny
+  equilateral triangle mesh in Awake (3 verts, triangles
+  `{0,2,1}`, vertical drop ≈ 0.4 units), assigns a URP/Unlit
+  material with `_BaseColor = Color.yellow`, billboards via
+  `transform.rotation = _cam.transform.rotation` (matches
+  unity-specialist guidance — camera-plane match, not LookAt,
+  to avoid tilt when target is off-center). Bobs vertically
+  via `Mathf.Sin(Time.time * _bobSpeed * 2π) * _bobAmplitude`.
+  No Canvas, no TextMeshPro.
+- **URP shader stripping caveat**: `Shader.Find("Universal
+  Render Pipeline/Unlit")` works in editor but the shader must
+  be in **Project Settings ▶ Graphics ▶ Always Included
+  Shaders** (or held by a Resources/ material) to survive
+  shader stripping on IL2CPP mobile builds. Documented in
+  LockIndicator's class header XML doc.
+- **Acquire scoring**: smallest `Vector3.Angle(camera.forward,
+  candidate - camera.position)` wins. Sphere cast originates
+  at `transform.position + Vector3.up * _eyeHeight` (1.2f),
+  direction = camera-forward, distance = `_lockRange` (20m),
+  radius = `_sphereCastRadius` (3m). `IsDead` candidates
+  skipped.
+- **Unlock hygiene**: unsubscribe `OnDied` first, hide health
+  bar only if still alive (EnemyHealthBar hides itself on
+  death), destroy indicator GameObject, null both state
+  fields.
+
+### Files
+
+- `Assets/InputSystem_Actions.inputactions` (modified — added
+  `LockOn` Button action + `<Mouse>/rightButton` binding in
+  the Player action map, stable GUIDs)
+- `Assets/Scripts/Player/PlayerInputReader.cs` (modified —
+  added `OnLockOnPerformed` event of type `System.Action`,
+  added `OnLockOn(InputAction.CallbackContext)` endpoint
+  raising on `ctx.performed`)
+- `Assets/Scripts/Combat/LockIndicator.cs` (NEW —
+  procedural-mesh billboard, `namespace LevelGen`,
+  `[RequireComponent(MeshFilter, MeshRenderer)]`)
+- `Assets/Scripts/Player/TargetLock.cs` (NEW — singleton lock
+  manager, `namespace LevelGen`,
+  `[DefaultExecutionOrder(-40)]`, `[DisallowMultipleComponent]`)
+- `Assets/Scripts/Player/PlayerController.cs` (modified —
+  `_lockFaceSpeed = 10f` SerializeField + lock-aware body
+  rotation branch in the movement pipeline; free-look path
+  preserved verbatim as the else branch)
+- `Assets/Scripts/Player/PlayerHero.cs` (modified — added
+  `[RequireComponent(typeof(TargetLock))]` and
+  `using LevelGen;` directive since TargetLock is in the root
+  `LevelGen` namespace, not `LevelGen.Player`)
+- `Assets/Scripts/Player/Editor/TargetLockValidator.cs` (NEW —
+  12 read-only checks; menu `LevelGen ▶ Player ▶ Validate
+  Target Lock`)
+
+### Namespace note
+
+Both `TargetLock` and `LockIndicator` live in the root
+`LevelGen` namespace (not `LevelGen.Player` / `LevelGen.Combat`)
+per the M15 spec wording. PlayerHero.cs added `using LevelGen;`
+to reference `TargetLock` directly. PlayerController.cs does
+NOT need a using directive because C# nested-namespace lookup
+resolves `TargetLock` from `LevelGen.Player` to the enclosing
+`LevelGen` namespace automatically.
+
+### Pending follow-up (Jason runs after CC completes)
+
+1. Re-open Unity — the new validator menu appears.
+2. `LevelGen ▶ Player ▶ Validate Target Lock` — expect
+   12 PASS / 0 FAIL (plus 1 extra "7b" check that the
+   LockIndicator type loads via reflection, for 13 total
+   pass lines).
+3. If check 12 FAILs ("Player_Hero.prefab has TargetLock
+   component missing"), open `Player_Hero.prefab` in the
+   editor — the `[RequireComponent(typeof(TargetLock))]`
+   attribute will auto-add the component on prefab open.
+   Save the prefab and re-validate.
+4. `LevelGen ▶ Player ▶ Validate Player_Hero` — sanity re-run.
+   Expect existing pass count + 0 new failures.
+5. Verify the project's Layer for enemies is included in
+   the `_targetLayer` LayerMask on the TargetLock component
+   in the prefab inspector — without this the sphere cast
+   hits nothing.
+6. Add `Universal Render Pipeline/Unlit` to **Project Settings
+   ▶ Graphics ▶ Always Included Shaders** if any IL2CPP build
+   will run — otherwise the lock indicator may render as
+   pink/missing in player builds.
+7. Play-mode smoke test:
+   - Walk near Grunt → press RMB → indicator floats over head,
+     yellow triangle bobs, health bar appears
+   - Strafe with A/D → player rotates to face Grunt, WASD is
+     relative to that facing
+   - Walk backward beyond 25m → indicator + lock auto-release
+   - Re-acquire → kill Grunt → indicator + lock auto-release
+   - RMB again with no enemy in cone → silent no-op
+   - RMB while already locked → unlocks
+
+### Deferred / out of scope
+
+- Multi-target cycling (re-press RMB while locked to cycle
+  to next nearest)
+- Controller bumper binding (gamepad)
+- Lock-on-aware dodge direction (dodge away from target
+  rather than along input axis)
+- Strafing animation state in Animator (lateral movement
+  blend tree — currently strafing plays MoveFWD pose with
+  body yaw drifting)
+- Camera dolly / over-shoulder framing tweaks when locked
+- Lock-on UI element on PlayerHUD (e.g. enemy name + HP%)
+
+### Lessons logged
+
+- C# nested-namespace lookup is automatic across both the
+  syntactic-nesting and dotted-name namespace declarations.
+  From `namespace LevelGen.Player`, types in `LevelGen` are
+  visible without a `using LevelGen;` directive. Adding the
+  using is harmless / occasionally clarifying for readers but
+  is NOT a compile requirement. Useful default: only add the
+  using when the file declares types that have ambiguity with
+  a sibling sub-namespace; otherwise lean on the implicit
+  parent-namespace lookup.
+- Spec language "namespace LevelGen on all new scripts" can
+  be read either as "the root LevelGen namespace specifically"
+  or as "the LevelGen umbrella" (any sub-namespace). The
+  agent chose the literal root reading for new M15 scripts.
+  Both readings are defensible; the cost is the extra
+  `using LevelGen;` directive on PlayerHero. Future specs
+  that want a specific sub-namespace should name it
+  explicitly (e.g. "namespace LevelGen.Player").
+- URP unlit material via `new Material(Shader.Find(...))` is
+  IL2CPP-fragile. Always include URP/Unlit in Always Included
+  Shaders OR keep a Resources/ material referencing it. The
+  EnemyHealthBar's existing material setup likely has the
+  same caveat — worth auditing if M15 plays fine in editor
+  but breaks in player builds.
+- `[RequireComponent]` auto-adds the required component when
+  a prefab is opened in the editor, but DOES NOT auto-add
+  it to existing prefab assets stored on disk. After adding
+  a new RequireComponent to a manifest script, the prefab
+  must be opened (or rebuilt via its builder) to materialize
+  the new component. Validators that check for component
+  presence on a prefab asset should expect a one-time
+  "open the prefab to migrate" step the first time a new
+  RequireComponent ships.
+
+## M15b — Damage Number Polish (2026-05-12)
+
+Polish pass on the M8 floating combat text. Five issues fixed,
+scripts only — no prefab or scene edits.
+
+Fixed issues:
+1. **No camera billboard** — numbers faced a fixed direction and
+   angled away as the camera orbited. Fixed: `Update` lazy-caches
+   `Camera.main` (matches EnemyHealthBar / LockIndicator pattern)
+   and calls `Quaternion.LookRotation(-cam.forward, cam.up)` every
+   frame.
+2. **Spawns too low** — numbers overlapped the enemy health bar.
+   Fixed: `_riseDistance` default increased from `1.5f` to `2.0f`.
+3. **Font too large** — `fontSize = 6` was too big at typical combat
+   distance. Fixed: builder constant changed to `4f`.
+4. **No lateral offset** — rapid hits stacked on the same XZ point.
+   Fixed: `Initialize` applies a random jitter `± _lateralJitter`
+   (default 0.3) on X and Z before storing `_startPosition`.
+5. **Fade-out broken** — alpha was written via `_tmp.color` (vertex
+   color), which composes with outline color in unexpected ways. Fixed:
+   switched to `_tmp.alpha` (TMPro vertex-alpha path) with the same
+   smoothstep curve as the rise, driven by a named `smoothT` local.
+
+Files changed:
+- `Assets/Scripts/UI/DamageNumber.cs` — `_cam` field + `Update`
+  billboard, `_lateralJitter` SerializeField + jitter in `Initialize`,
+  `_riseDistance` default 1.5→2.0, coroutine refactored to use named
+  `smoothT` + `_tmp.alpha = 1f - smoothT`, `Initialize` XML doc updated.
+- `Assets/Scripts/UI/Editor/DamageNumberBuilder.cs` — `DamageNumberFontSize`
+  constant changed from `6f` to `4f`, rebuild reminder comment added.
+
+After changes: run `LevelGen ▶ UI ▶ Build DamageNumber Prefab` to
+push the font-size change into the prefab asset.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

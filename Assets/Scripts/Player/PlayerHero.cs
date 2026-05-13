@@ -25,6 +25,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using LevelGen.Combat;
 using LevelGen.Input;
+using LevelGen; // TargetLock lives in the root LevelGen namespace (M15)
 
 namespace LevelGen.Player
 {
@@ -51,6 +52,7 @@ namespace LevelGen.Player
     [RequireComponent(typeof(PlayerDeath))]
     [RequireComponent(typeof(PlayerInteractor))]
     [RequireComponent(typeof(MouseLook))]
+    [RequireComponent(typeof(TargetLock))]
     [DisallowMultipleComponent]
     public class PlayerHero : MonoBehaviour
     {
@@ -83,6 +85,10 @@ namespace LevelGen.Player
         [Header("Interaction")]
         [SerializeField] private PlayerInteractor _interactor;
 
+        // ── Target Lock (M15) ───────────────────────────────────────────────
+        [Header("Target Lock")]
+        [SerializeField] private TargetLock _targetLock;
+
         // ── Public read API ─────────────────────────────────────────────────
         public CharacterController CharacterController => _characterController;
         public CharacterStatsRuntime Stats             => _stats;
@@ -98,6 +104,7 @@ namespace LevelGen.Player
         public PlayerHitReaction HitReaction           => _hitReaction;
         public PlayerDeath Death                       => _death;
         public PlayerInteractor Interactor             => _interactor;
+        public TargetLock TargetLock                   => _targetLock;
 
         // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -123,6 +130,13 @@ namespace LevelGen.Player
             if (_hitReaction         == null) _hitReaction         = GetComponent<PlayerHitReaction>();
             if (_death               == null) _death               = GetComponent<PlayerDeath>();
             if (_interactor          == null) _interactor          = GetComponent<PlayerInteractor>();
+            if (_targetLock          == null) _targetLock          = GetComponent<TargetLock>();
+
+            // M15: inject the input reader so TargetLock can subscribe to
+            // OnLockOnPerformed. PlayerHero owns this call site; TargetLock
+            // owns the subscription lifecycle (OnDisable unsubs).
+            if (_targetLock != null && _input != null)
+                _targetLock.InitFromPlayerHero(_input);
         }
     }
 }

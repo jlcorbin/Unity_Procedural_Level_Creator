@@ -94,6 +94,15 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "LockOn",
+                    "type": "Button",
+                    "id": "c4e9f6a3-0000-4012-b0d4-000000000014",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -490,6 +499,17 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "Dodge",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d5f0a7b4-0000-4012-b0d4-000000000015",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "LockOn",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }
