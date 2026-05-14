@@ -4611,6 +4611,43 @@ Files changed:
 After changes: run `LevelGen ▶ UI ▶ Build DamageNumber Prefab` to
 push the font-size change into the prefab asset.
 
+## Session log — 2026-05-12
+
+Recent changes (full details in their own milestone sections above):
+
+- **M15 — Target Lock** shipped. RMB-toggle lock-on with sphere-cast
+  acquire, world-space billboard indicator above the locked enemy,
+  body-faces-target strafe model (camera untouched), OnDied auto-
+  unlock + range-break safety. Files: `TargetLock.cs`,
+  `LockIndicator.cs`, `TargetLockValidator.cs` (NEW); modifications
+  to `InputSystem_Actions.inputactions`, `PlayerInputReader.cs`,
+  `PlayerController.cs`, `PlayerHero.cs`, `PlayerHeroBuilder.cs`.
+  Validator: 12/12 PASS this session.
+- **M15b — Damage Number Polish** shipped. Camera billboard,
+  lateral spawn jitter (0.3), rise distance 1.5 → 2.0, TMP alpha
+  fade 1 → 0 over lifetime, font size 6 → 4.
+- **M15b hotfix — TMP material leak**. `DamageNumberBuilder.cs`
+  switched from `tmp.outlineWidth` / `outlineColor` (which call
+  `renderer.material` and leak instance materials into the prefab
+  in edit mode) to a sibling `DamageNumber_FontMat.mat` asset
+  cloned from the font's `sharedMaterial`. Outline properties
+  (`_OutlineWidth`, `_OutlineColor`) are written directly on the
+  asset and assigned via `tmp.fontSharedMaterial`.
+- **Billboard sign fix lesson**: both `LockIndicator` and
+  `DamageNumber` ended up using **positive** `_cam.transform.forward`
+  in their `Quaternion.LookRotation(forward, up)` call. Negative
+  forward mirror-flipped the mesh/text. The earlier M15 spec
+  suggested `-cam.forward`; playtest revealed positive is correct
+  for this project's camera setup. Future billboard work should
+  default to positive forward and only flip if visibly backwards.
+- **Namespace lesson**: `DamageNumber` was briefly moved to
+  `LevelGen.UI` during M15b — this broke prefab type references
+  (TMP component on the prefab couldn't resolve the script type).
+  Reverted to root `LevelGen`. The lesson: changing the namespace
+  of a MonoBehaviour script that's referenced by an existing
+  prefab will break the reference unless the prefab is rebuilt.
+  Prefer keeping the namespace stable across script edits.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
