@@ -235,6 +235,95 @@ namespace LevelGen.Interaction.EditorTools
             }
             Check("16 PlayerHero._interactor SerializeField non-null on Player_Hero.prefab", ok16, detail16);
 
+            // ── M16 checks 17-27 ─────────────────────────────────────────────
+
+            // ── 17: EquipSlot.cs exists ──────────────────────────────────────
+            const string equipSlotPath = "Assets/Scripts/Items/EquipSlot.cs"; // M16
+            bool ok17 = File.Exists(equipSlotPath); // M16
+            Check("17 EquipSlot.cs exists",
+                ok17,
+                ok17 ? equipSlotPath : $"missing at {equipSlotPath}"); // M16
+
+            // ── 18: ItemData.cs exists and subclasses ScriptableObject ───────
+            const string itemDataPath = "Assets/Scripts/Items/ItemData.cs"; // M16
+            bool itemDataExists = File.Exists(itemDataPath); // M16
+            bool ok18 = itemDataExists // M16
+                && File.ReadAllText(itemDataPath).Contains(": ScriptableObject");
+            Check("18 ItemData.cs exists & subclasses ScriptableObject",
+                ok18,
+                ok18
+                    ? itemDataPath
+                    : (itemDataExists ? "file present but ': ScriptableObject' not found" : $"missing at {itemDataPath}")); // M16
+
+            // ── 19: ItemDatabase.cs exists and subclasses ScriptableObject ───
+            const string itemDbPath = "Assets/Scripts/Items/ItemDatabase.cs"; // M16
+            bool itemDbExists = File.Exists(itemDbPath); // M16
+            bool ok19 = itemDbExists // M16
+                && File.ReadAllText(itemDbPath).Contains(": ScriptableObject");
+            Check("19 ItemDatabase.cs exists & subclasses ScriptableObject",
+                ok19,
+                ok19
+                    ? itemDbPath
+                    : (itemDbExists ? "file present but ': ScriptableObject' not found" : $"missing at {itemDbPath}")); // M16
+
+            // ── 20: PlayerInventory.cs exists ────────────────────────────────
+            const string playerInventoryPath = "Assets/Scripts/Player/PlayerInventory.cs"; // M16
+            bool ok20 = File.Exists(playerInventoryPath); // M16
+            Check("20 PlayerInventory.cs exists",
+                ok20,
+                ok20 ? playerInventoryPath : $"missing at {playerInventoryPath}"); // M16
+
+            // ── 21: PlayerInventory has static Instance property ─────────────
+            string inventorySrc21 = ok20 ? File.ReadAllText(playerInventoryPath) : string.Empty; // M16
+            bool ok21 = inventorySrc21.Contains("static PlayerInventory Instance"); // M16
+            Check("21 PlayerInventory has static Instance property",
+                ok21,
+                ok21 ? "static Instance found in source" : "source does not contain 'static PlayerInventory Instance'"); // M16
+
+            // ── 22: PlayerInventory.AddItem method exists ────────────────────
+            bool ok22 = inventorySrc21.Contains("public bool AddItem"); // M16
+            Check("22 PlayerInventory.AddItem public method",
+                ok22,
+                ok22 ? "source contains 'public bool AddItem'" : "source does not contain 'public bool AddItem'"); // M16
+
+            // ── 23: WorldItem.cs exists ──────────────────────────────────────
+            const string worldItemPath = "Assets/Scripts/Interaction/WorldItem.cs"; // M16
+            bool ok23 = File.Exists(worldItemPath); // M16
+            Check("23 WorldItem.cs exists",
+                ok23,
+                ok23 ? worldItemPath : $"missing at {worldItemPath}"); // M16
+
+            // ── 24: WorldItem subclasses Interactable ────────────────────────
+            string worldItemSrc = ok23 ? File.ReadAllText(worldItemPath) : string.Empty; // M16
+            bool ok24 = worldItemSrc.Contains(": Interactable"); // M16
+            Check("24 WorldItem subclasses Interactable",
+                ok24,
+                ok24 ? "source contains ': Interactable'" : "source does not contain ': Interactable'"); // M16
+
+            // ── 25: WorldItem.Execute calls PlayerInventory.Instance ─────────
+            bool ok25 = worldItemSrc.Contains("PlayerInventory.Instance"); // M16
+            Check("25 WorldItem.Execute references PlayerInventory.Instance",
+                ok25,
+                ok25 ? "source contains 'PlayerInventory.Instance'" : "source does not contain 'PlayerInventory.Instance'"); // M16
+
+            // ── 26: WorldItem.Execute calls Destroy(gameObject) ─────────────
+            bool ok26 = worldItemSrc.Contains("Destroy(gameObject)"); // M16
+            Check("26 WorldItem.Execute calls Destroy(gameObject)",
+                ok26,
+                ok26 ? "source contains 'Destroy(gameObject)'" : "source does not contain 'Destroy(gameObject)'"); // M16
+
+            // ── 27: PlayerHero.cs has RequireComponent(typeof(PlayerInventory))
+            const string playerHeroSrcPath = "Assets/Scripts/Player/PlayerHero.cs"; // M16
+            string heroSrc27 = File.Exists(playerHeroSrcPath) ? File.ReadAllText(playerHeroSrcPath) : string.Empty; // M16
+            bool ok27 = heroSrc27.Contains("typeof(PlayerInventory)"); // M16
+            Check("27 PlayerHero.cs has RequireComponent(typeof(PlayerInventory))",
+                ok27,
+                ok27
+                    ? "source contains 'typeof(PlayerInventory)'"
+                    : (File.Exists(playerHeroSrcPath)
+                        ? "PlayerHero.cs found but 'typeof(PlayerInventory)' not present — re-run PlayerHeroBuilder"
+                        : $"PlayerHero.cs missing at {playerHeroSrcPath}")); // M16
+
             Summary(pass, fail);
         }
 

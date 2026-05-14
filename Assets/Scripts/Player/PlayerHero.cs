@@ -51,6 +51,7 @@ namespace LevelGen.Player
     [RequireComponent(typeof(PlayerHitReaction))]
     [RequireComponent(typeof(PlayerDeath))]
     [RequireComponent(typeof(PlayerInteractor))]
+    [RequireComponent(typeof(PlayerInventory))]
     [RequireComponent(typeof(MouseLook))]
     [RequireComponent(typeof(TargetLock))]
     [DisallowMultipleComponent]

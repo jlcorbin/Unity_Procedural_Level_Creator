@@ -4648,6 +4648,219 @@ Recent changes (full details in their own milestone sections above):
   prefab will break the reference unless the prefab is rebuilt.
   Prefer keeping the namespace stable across script edits.
 
+## M16 — Item Data Layer + WorldItem Pickup (2026-05-13)
+
+Data layer + world pickup actor. Does NOT wire items into
+`PlayerCombat` — that's the next milestone (WeaponStats). Goal:
+define items as ScriptableObject data, place them in the world,
+let the player pick them up via the existing Interact system
+(E key), store them in an inventory component.
+
+### Architectural decisions (locked)
+
+- **`ItemData` ScriptableObject** is the per-item data template
+  (CreateAssetMenu `Hub & Hollow/Item Data`). Pure data —
+  identity (id, displayName, description), equipment (slot,
+  damage, requiredLevel), presentation (icon, worldPrefab,
+  rarity). No gameplay logic. Mirrors `EnemyData`/`CharacterStats`
+  patterns from M13/M9: encapsulated `[SerializeField] private`
+  fields with expression-bodied get-only public properties.
+- **`ItemDatabase` ScriptableObject** holds a `List<ItemData>`
+  with `GetById(string)` / `GetBySlot(EquipSlot)` / `Count`
+  lookup helpers. No singleton — multiple databases allowed
+  (one per dungeon zone if needed). Designer holds
+  serialized references to whichever database they need.
+- **`PlayerInventory`** is the fifth project singleton after
+  MouseLook (`_MouseLock`), PlayerInteractor, DamageNumberSpawner,
+  and TargetLock. `[DefaultExecutionOrder(-30)]` runs after
+  EnemyBase (-50) and TargetLock (-40), before default (0).
+  Per-scene scope, no DontDestroyOnLoad. Duplicate self-destroys
+  with warning (mirrors PlayerInteractor pattern).
+- **`WorldItem`** is the third concrete `Interactable` subclass
+  after `AssassinateInteractable` (M6) and `OpenInteractable`
+  (M7). Subclassing the abstract base buys the entire register/
+  deregister loop, SphereCollider trigger, world-space prompt
+  UI, and InteractPriority arbitration for free. Reset configures
+  `_priority = InteractPriority.Pickup` (= 10, defined in M6 enum
+  but unused until now — this is its first consumer). Awake
+  mutates `_promptLabel` to `"Pick Up {item.DisplayName}"` BEFORE
+  `base.Awake()` so `EnsurePromptUI` picks up the enriched label
+  on first build.
+- **No equipment / consumption logic this milestone**.
+  `ItemData.Damage` is read by nothing yet — WeaponStats SO
+  (next milestone) will consume it inside PlayerCombat.
+- **No `_inventory` SerializeField on PlayerHero manifest**.
+  PlayerInventory is added to the `[RequireComponent]` chain but
+  not exposed as a SerializeField reference on PlayerHero. Access
+  is via the singleton (`PlayerInventory.Instance`). Conscious
+  divergence from M12-R's "every required component has a
+  manifest SerializeField ref" convention — inventory access is
+  always through a one-of-its-kind singleton, never through the
+  PlayerHero manifest.
+
+### Single-direction dependency invariants preserved
+
+  WorldItem.Execute → PlayerInventory.Instance → AddItem(ItemData)
+                    → fires OnItemAdded event → (future UI subscribes)
+                    → Destroy(gameObject)
+
+WorldItem never touches PlayerCombat, PlayerAnimator,
+PlayerHero, or any other player-side component. PlayerInventory
+never touches Interactable / WorldItem / PlayerInteractor.
+
+### Files
+
+NEW (5):
+- `Assets/Scripts/Items/EquipSlot.cs` — pure enum (Melee /
+  OffHand / Ranged / Armor), `namespace LevelGen.Items`
+- `Assets/Scripts/Items/ItemData.cs` — ScriptableObject with
+  nested `ItemRarity` enum (Common / Uncommon / Rare); 9
+  encapsulated fields with public expression-bodied properties
+- `Assets/Scripts/Items/ItemDatabase.cs` — ScriptableObject with
+  `GetById` / `GetBySlot` / `Count` API; defensive null-skip
+  on list iteration
+- `Assets/Scripts/Player/PlayerInventory.cs` — singleton
+  `[DefaultExecutionOrder(-30)]`; `AddItem` / `RemoveItem` /
+  `HasItem` / `Items` / `Count` API; `OnItemAdded` /
+  `OnItemRemoved` events
+- `Assets/Scripts/Interaction/WorldItem.cs` — concrete
+  `Interactable` subclass; `[RequireComponent(SphereCollider)]`;
+  Reset configures Pickup priority + collider; Awake enriches
+  prompt label with item.DisplayName before `base.Awake()`
+
+MODIFIED (2, additive only):
+- `Assets/Scripts/Player/PlayerHero.cs` — added
+  `[RequireComponent(typeof(PlayerInventory))]` between
+  PlayerInteractor and MouseLook in the existing manifest chain.
+  No SerializeField, no property, no Awake resolution — access
+  is via the singleton.
+- `Assets/Scripts/Interaction/Editor/ValidateInteraction.cs` —
+  appended 11 checks (17-27) tagged `// M16`. Existing checks
+  1-16 untouched. New total: 27 checks (was 16 after
+  M-MenuCleanup consolidation).
+
+### Validator checks (M16 additions)
+
+17 — EquipSlot.cs exists
+18 — ItemData.cs exists + subclasses ScriptableObject
+19 — ItemDatabase.cs exists + subclasses ScriptableObject
+20 — PlayerInventory.cs exists
+21 — PlayerInventory has static Instance property
+22 — PlayerInventory.AddItem method exists
+23 — WorldItem.cs exists
+24 — WorldItem subclasses Interactable
+25 — WorldItem.Execute references PlayerInventory.Instance
+26 — WorldItem.Execute calls Destroy(gameObject)
+27 — PlayerHero.cs has RequireComponent(typeof(PlayerInventory))
+
+### Project singletons (post-M16)
+
+  Singleton                    Scope        ExecutionOrder    First defined
+  ────────────────────────────────────────────────────────────────────────────
+  MouseLook (_MouseLock GO)    per-scene    -100              M-CursorLock
+  PlayerInteractor             per-prefab   default (0)       M6
+  DamageNumberSpawner          per-scene    default (0)       M8
+  TargetLock                   per-prefab   -40               M15
+  PlayerInventory              per-prefab   -30               M16
+
+### InteractPriority consumers
+
+  Value  Name          First consumer
+  ─────────────────────────────────────────
+  10     Pickup        WorldItem (M16)       ← first consumer
+  50     Open          OpenInteractable (M7)
+  100    Assassinate   AssassinateInteractable (M6)
+
+`InteractPriority.Pickup = 10` was defined in M6's enum but
+went unconsumed for 10 milestones. M16 is its first consumer.
+
+### Pending follow-up (Jason runs after CC completes)
+
+1. Re-open Unity — let it compile. The new `Assets/Scripts/Items/`
+   folder will be auto-created on first AssetDatabase refresh.
+2. `LevelGen ▶ Interaction ▶ Validate Interaction` — expect
+   27 PASS / 0 FAIL.
+3. Sanity re-run `LevelGen ▶ Player ▶ Validate Player_Hero` —
+   expect prior pass count + 0 new failures. The PlayerHero
+   manifest gained a `[RequireComponent(typeof(PlayerInventory))]`
+   line; opening `Player_Hero.prefab` in the editor will
+   auto-add the PlayerInventory component to the root. Save
+   the prefab after opening.
+4. (Optional) Author a first item asset: right-click in
+   `Assets/Data/Items/` (create the folder if missing) →
+   `Create ▶ Hub & Hollow ▶ Item Data`. Set `_id` to
+   `"light_sword"`, `_displayName` to `"Light Sword"`,
+   `_slot` to `Melee`, `_damage` to `10`, `_rarity` to
+   `Common`.
+5. (Optional) Build a quick WorldItem test:
+   - Create empty GameObject in test scene → add `WorldItem`
+     component (auto-adds SphereCollider via RequireComponent;
+     Reset configures isTrigger + radius 1.5).
+   - Drag the ItemData asset into the `_itemData` slot.
+   - Position in front of the player spawn.
+   - Press Play; walk near → "Press [E] Pick Up Light Sword"
+     prompt appears; press E → object destroys, console logs
+     OnItemAdded.
+
+### Deferred / out of scope
+
+- **WeaponStats SO** — replaces hardcoded `attackDamage = 10`
+  on PlayerCombat with a SerializeField pointing at an ItemData
+  (or a dedicated WeaponStats wrapping ItemData). Next milestone.
+- **Inventory UI** — slot grid, drag-drop, tooltip on hover.
+  Needs PlayerInventory's `OnItemAdded` / `OnItemRemoved` events.
+- **Equipment system** — actual "this item is the active weapon"
+  state. Likely a separate `PlayerEquipment` component that
+  observes `PlayerInventory` and drives PlayerCombat / weapon
+  meshes.
+- **Pickup VFX / SFX** — particle burst + audio cue on
+  `Destroy(gameObject)`. Cosmetic polish.
+- **Loot drops on enemy death** — wire `EnemyData.lootTable` →
+  spawn WorldItem.prefab from `ItemData.WorldPrefab` at enemy
+  position on `OnDied`. Hooks: `EnemyData` already exists
+  (M13-EnemyBase); add `lootTable` field as a List<ItemData> or
+  a separate `LootTable` SO with drop weights.
+- **Stack support** — currently each item occupies one inventory
+  slot regardless of "stackable". Consumables (potions) will
+  want a stack count; the `List<ItemData>` model can extend to
+  `List<ItemStack>` when needed.
+- **Save/load** — `ItemData.Id` is the stable key; serialize
+  the inventory as a list of IDs + counts, resolve via
+  `ItemDatabase.GetById` on load.
+- **Multi-database resolution** — currently each consumer must
+  know which database it points at. If global lookup becomes
+  necessary, a registry pattern (`ItemDatabase.Master`) could
+  emerge — defer until the second database asset is authored.
+
+### Lessons logged for this milestone
+
+- **`InteractPriority` enum value reservation pays off**:
+  M6 reserved `Pickup = 10` without a consumer. Ten milestones
+  later, M16 plugs in directly with no enum edits or migration.
+  Pattern recommendation: when defining a closed enum that's
+  likely to grow, reserve all anticipated values at definition
+  time with a documented gap (10/50/100 here) so future
+  additions can slot in without renumbering or value churn.
+- **`Interactable` base API is mature enough that subclassing
+  is cheap**: M16's `WorldItem` is ~60 lines of body code
+  including XML doc. The base handles trigger detection,
+  registration, prompt UI, and lifecycle. The "rule of three"
+  for generalization (M11 lesson) is now satisfied —
+  AssassinateInteractable + OpenInteractable + WorldItem = 3
+  concrete subclasses, all working off the same abstract base
+  with no base-class extensions needed. Future Interactables
+  (ReadInteractable for signs, ActivateInteractable for levers)
+  should slot in with similar effort.
+- **Manifest deviation for singletons**: M12-R established
+  "every required component gets a SerializeField ref on
+  PlayerHero." M16 breaks this convention deliberately for
+  PlayerInventory — because access is always through
+  `PlayerInventory.Instance`, the SerializeField would be
+  unused boilerplate. The `[RequireComponent]` chain still
+  enforces presence; the manifest just doesn't bother to
+  cache a reference. Acceptable when access is universally
+  through a singleton (not via the manifest property).
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
