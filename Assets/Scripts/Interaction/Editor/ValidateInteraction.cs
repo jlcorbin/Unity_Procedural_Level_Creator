@@ -45,6 +45,7 @@ namespace LevelGen.Interaction.EditorTools
         // child built by EnemyBaseBuilder.BuildAssassinateZone.
         private const string EnemyPrefabPath          = "Assets/Prefabs/Character Prefabs/Enemy/Enemy_Grunt.prefab";
         private const string TestDoorPrefabPath       = "Assets/Prefabs/TestRig/TestDoor.prefab";
+        private const string PlayerCombatSrcPath      = "Assets/Scripts/Player/PlayerCombat.cs"; // M17
 
         [MenuItem("LevelGen/Interaction/Validate Interaction")]
         public static void Run()
@@ -323,6 +324,74 @@ namespace LevelGen.Interaction.EditorTools
                     : (File.Exists(playerHeroSrcPath)
                         ? "PlayerHero.cs found but 'typeof(PlayerInventory)' not present — re-run PlayerHeroBuilder"
                         : $"PlayerHero.cs missing at {playerHeroSrcPath}")); // M16
+
+            // ── M17 checks 28-37 ─────────────────────────────────────────────
+            // inventorySrc21 (PlayerInventory.cs source) and worldItemSrc
+            // (WorldItem.cs source) are already loaded above.
+
+            string playerCombatSrc = File.Exists(PlayerCombatSrcPath) // M17
+                ? File.ReadAllText(PlayerCombatSrcPath)
+                : string.Empty;
+
+            // ── 28: PlayerInventory.Equip method exists ───────────────────────
+            bool ok28 = inventorySrc21.Contains("public void Equip"); // M17
+            Check("28 PlayerInventory.Equip method exists",
+                ok28,
+                ok28 ? "source contains 'public void Equip'" : "source does not contain 'public void Equip'"); // M17
+
+            // ── 29: PlayerInventory.Unequip method exists ─────────────────────
+            bool ok29 = inventorySrc21.Contains("public void Unequip"); // M17
+            Check("29 PlayerInventory.Unequip method exists",
+                ok29,
+                ok29 ? "source contains 'public void Unequip'" : "source does not contain 'public void Unequip'"); // M17
+
+            // ── 30: PlayerInventory.GetEquipped method exists ─────────────────
+            bool ok30 = inventorySrc21.Contains("public ItemData GetEquipped"); // M17
+            Check("30 PlayerInventory.GetEquipped method exists",
+                ok30,
+                ok30 ? "source contains 'public ItemData GetEquipped'" : "source does not contain 'public ItemData GetEquipped'"); // M17
+
+            // ── 31: PlayerInventory.OnWeaponEquipped event exists ─────────────
+            bool ok31 = inventorySrc21.Contains("OnWeaponEquipped"); // M17
+            Check("31 PlayerInventory.OnWeaponEquipped event exists",
+                ok31,
+                ok31 ? "source contains 'OnWeaponEquipped'" : "source does not contain 'OnWeaponEquipped'"); // M17
+
+            // ── 32: PlayerInventory._equipped dictionary field exists ──────────
+            bool ok32 = inventorySrc21.Contains("Dictionary<EquipSlot, ItemData>"); // M17
+            Check("32 PlayerInventory._equipped Dictionary<EquipSlot, ItemData> field exists",
+                ok32,
+                ok32 ? "source contains 'Dictionary<EquipSlot, ItemData>'" : "source does not contain 'Dictionary<EquipSlot, ItemData>'"); // M17
+
+            // ── 33: WorldItem.Execute calls IsSlotEquipped ────────────────────
+            bool ok33 = worldItemSrc.Contains("IsSlotEquipped"); // M17
+            Check("33 WorldItem.Execute calls IsSlotEquipped",
+                ok33,
+                ok33 ? "source contains 'IsSlotEquipped'" : "source does not contain 'IsSlotEquipped'"); // M17
+
+            // ── 34: WorldItem.Execute calls inv.Equip ─────────────────────────
+            bool ok34 = worldItemSrc.Contains("inv.Equip"); // M17
+            Check("34 WorldItem.Execute calls inv.Equip",
+                ok34,
+                ok34 ? "source contains 'inv.Equip'" : "source does not contain 'inv.Equip'"); // M17
+
+            // ── 35: PlayerCombat.cs references PlayerInventory.Instance ───────
+            bool ok35 = playerCombatSrc.Contains("PlayerInventory.Instance"); // M17
+            Check("35 PlayerCombat.cs references PlayerInventory.Instance",
+                ok35,
+                ok35 ? "source contains 'PlayerInventory.Instance'" : "source does not contain 'PlayerInventory.Instance'"); // M17
+
+            // ── 36: PlayerCombat.cs references GetEquipped ────────────────────
+            bool ok36 = playerCombatSrc.Contains("GetEquipped"); // M17
+            Check("36 PlayerCombat.cs references GetEquipped",
+                ok36,
+                ok36 ? "source contains 'GetEquipped'" : "source does not contain 'GetEquipped'"); // M17
+
+            // ── 37: PlayerCombat.cs has _fallbackDamage field ─────────────────
+            bool ok37 = playerCombatSrc.Contains("_fallbackDamage"); // M17
+            Check("37 PlayerCombat.cs has _fallbackDamage field",
+                ok37,
+                ok37 ? "source contains '_fallbackDamage'" : "source does not contain '_fallbackDamage'"); // M17
 
             Summary(pass, fail);
         }

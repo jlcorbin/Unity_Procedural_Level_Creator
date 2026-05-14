@@ -10,6 +10,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using LevelGen.Combat;
+using LevelGen.Items;
 
 namespace LevelGen.Player
 {
@@ -44,9 +45,8 @@ namespace LevelGen.Player
         [SerializeField, Range(0f, 1f)] private float bufferConsumeAt = 0.85f;
 
         [Header("Damage")]
-        [Tooltip("HP subtracted per successful hit. Hardcoded for now; " +
-                 "WeaponStats SO with per-weapon values is a follow-up.")]
-        [SerializeField] private int attackDamage = 10;
+        [Tooltip("Fallback damage when no weapon is equipped in the Melee slot (unarmed swing).")]
+        [SerializeField] private int _fallbackDamage = 10;
 
         [Tooltip("Trigger collider on the weapon. Enabled during the active " +
                  "frames of an attack via OnHitboxOpen / OnHitboxClose " +
@@ -306,7 +306,8 @@ namespace LevelGen.Player
         /// Called by <see cref="HitboxRelay"/> when the weapon's trigger
         /// collider enters another collider. Resolves the hit to a
         /// <see cref="Targetable"/> + <see cref="CharacterStatsRuntime"/>
-        /// pair, applies <see cref="attackDamage"/> once per attack, and
+        /// pair, applies damage (from equipped Melee weapon or
+        /// <see cref="_fallbackDamage"/> if unarmed) once per attack, and
         /// records the target so the same swing can't double-hit.
         /// </summary>
         public void NotifyHitboxTriggered(Collider other)
@@ -346,9 +347,17 @@ namespace LevelGen.Player
             // via SetNextHitDamageOverride). Consumed AFTER stats / hit-list
             // checks so the warning + already-hit branches above leave the
             // override intact for the next eligible swing.
-            int dmg = _nextHitDamageOverride > 0 ? _nextHitDamageOverride : attackDamage;
+            // M17: pull base damage from equipped Melee weapon; fall back to
+            // unarmed _fallbackDamage when no weapon is in the Melee slot.
+            var inv = PlayerInventory.Instance;
+            ItemData melee = inv != null ? inv.GetEquipped(EquipSlot.Melee) : null;
+            int dmg = melee != null ? melee.Damage : _fallbackDamage;
             bool wasOverride = _nextHitDamageOverride > 0;
-            if (wasOverride) _nextHitDamageOverride = -1;
+            if (wasOverride)
+            {
+                dmg = _nextHitDamageOverride;
+                _nextHitDamageOverride = -1;
+            }
 
             stats.ApplyDamage(dmg);
             _currentAttackHitList.Add(targetable);

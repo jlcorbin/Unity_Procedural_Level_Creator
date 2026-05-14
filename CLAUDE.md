@@ -4861,6 +4861,229 @@ went unconsumed for 10 milestones. M16 is its first consumer.
   cache a reference. Acceptable when access is universally
   through a singleton (not via the manifest property).
 
+## M17 — WeaponStats: Equip System + PlayerCombat Damage Wiring (2026-05-13)
+
+Closes the loop opened by M16. Picking up a weapon now actually
+changes how hard the player hits. Per-slot equipping, pull-pattern
+damage read inside `PlayerCombat.NotifyHitboxTriggered`, auto-equip
+on first pickup of an empty slot.
+
+### Architectural decisions (locked)
+
+- **Per-slot equip state**: `Dictionary<EquipSlot, ItemData> _equipped`
+  on `PlayerInventory`. Melee, OffHand, Ranged, Armor slots are
+  independent — a Sword in Melee does not displace a Shield in OffHand.
+- **Pull pattern (not push)**: `PlayerCombat` reads
+  `PlayerInventory.Instance.GetEquipped(EquipSlot.Melee)?.Damage`
+  at swing time inside `NotifyHitboxTriggered`. No event subscription
+  needed for the damage read — the value is recomputed per-hit. Equip
+  swaps mid-combo are reflected on the next `OnHitboxOpen` cleanly.
+  Cost: one Dictionary lookup per hit (Mathf-cheap).
+- **Auto-equip on first pickup**: `WorldItem.Execute` checks
+  `inv.IsSlotEquipped(_itemData.Slot)`; if empty, calls
+  `inv.Equip(_itemData)` before destroying the world actor. This
+  gives "pick up a sword, immediately swing it" semantics without
+  any UI to manually equip. Subsequent pickups in the same slot go
+  to inventory only (caller decides whether to swap).
+- **Field rename**: `PlayerCombat.attackDamage` → `_fallbackDamage`.
+  New name signals "unarmed default" rather than "the canonical
+  weapon damage". Unity serializes by field name — renaming resets
+  the prefab's serialized value to the C# default. The new default
+  is `10` (matching the prior unarmed value), but Jason must
+  re-verify the `_fallbackDamage` field on `Player_Hero.prefab` in
+  the Inspector. If it shows 0, manually enter 10.
+- **Assassinate override path preserved**: `_nextHitDamageOverride`
+  (set by `AssassinateInteractable` for 99999-damage backstabs) is
+  consumed AFTER the new inventory-based base compute, so it still
+  wins. The only behavior change is the BASE damage source — the
+  override layer is byte-identical.
+- **`OnWeaponEquipped` event** (`Action<ItemData>`) on PlayerInventory
+  is the hook for future inventory UI. Payload is the newly equipped
+  item, or null on unequip. M17 has no consumer; the event exists
+  for the next inventory-UI milestone.
+
+### Single-direction dependency invariants preserved
+
+  WorldItem.Execute → PlayerInventory.AddItem
+                    → PlayerInventory.IsSlotEquipped(slot)
+                    → PlayerInventory.Equip(item)
+                    → fires OnWeaponEquipped (no current consumer)
+                    → Destroy(gameObject)
+
+  PlayerCombat.NotifyHitboxTriggered
+                    → PlayerInventory.Instance.GetEquipped(Melee)
+                    → ItemData.Damage  (read-only property)
+                    → ApplyDamage / RaiseHit on target
+
+PlayerInventory never reaches into PlayerCombat. PlayerCombat never
+mutates PlayerInventory.
+
+### Files
+
+MODIFIED (4, no new files):
+
+- `Assets/Scripts/Player/PlayerInventory.cs` — additive. Added
+  `Dictionary<EquipSlot, ItemData> _equipped` field, `OnWeaponEquipped`
+  event, four new methods (`Equip`, `Unequip`, `GetEquipped`,
+  `IsSlotEquipped`). Existing M16 surface (`AddItem`, `RemoveItem`,
+  `HasItem`, `Items`, `Count`, `OnItemAdded`, `OnItemRemoved`,
+  singleton lifecycle) byte-identical.
+- `Assets/Scripts/Interaction/WorldItem.cs` — additive.
+  `Execute(GameObject)` gains an auto-equip block between the
+  `AddItem` success path and `Destroy(gameObject)`. `Destroy` stays
+  as the last statement so the M16 validator check 26
+  (`Destroy(gameObject)` source-match) still passes.
+- `Assets/Scripts/Player/PlayerCombat.cs` — surgical. Renamed field
+  `attackDamage` → `_fallbackDamage` (default 10 preserved at the C#
+  declaration, but serialized prefab value will reset — see Jason
+  follow-up below). Added `using LevelGen.Items;` (LevelGen.Player
+  not needed — same namespace). Replaced the base-damage compute
+  line in `NotifyHitboxTriggered` with a 3-line pull from inventory.
+  XML doc on `NotifyHitboxTriggered` updated to describe the new
+  damage source. The `_nextHitDamageOverride` consume block
+  (Assassinate path) and its `wasOverride` log tag remain
+  byte-identical. Agent restructured an inline ternary into a
+  base-compute-then-override-overwrite pattern (functionally
+  identical — both flows produce the same `dmg` value at
+  `ApplyDamage` time).
+- `Assets/Scripts/Interaction/Editor/ValidateInteraction.cs` —
+  additive. Added `PlayerCombatSrcPath` const. Appended 10 new
+  checks (28-37) tagged `// M17`. Reuses already-loaded
+  `inventorySrc21` (PlayerInventory) and `worldItemSrc` (WorldItem)
+  for the inventory + worldItem checks; reads PlayerCombat.cs once
+  into a new `playerCombatSrc` local. Existing checks 1-27
+  untouched.
+
+### Validator checks (M17 additions)
+
+28 — `PlayerInventory` has `public void Equip` method
+29 — `PlayerInventory` has `public void Unequip` method
+30 — `PlayerInventory` has `public ItemData GetEquipped` method
+31 — `PlayerInventory` has `OnWeaponEquipped` event
+32 — `PlayerInventory` has `Dictionary<EquipSlot, ItemData>` field
+33 — `WorldItem.Execute` calls `IsSlotEquipped`
+34 — `WorldItem.Execute` calls `inv.Equip`
+35 — `PlayerCombat.cs` references `PlayerInventory.Instance`
+36 — `PlayerCombat.cs` references `GetEquipped`
+37 — `PlayerCombat.cs` has `_fallbackDamage` field
+
+Total: 37 checks (was 27 after M16).
+
+### Pending follow-up (Jason runs after CC completes)
+
+1. **VERIFY `_fallbackDamage` Inspector value**: open
+   `Player_Hero.prefab` in the editor. Look at the PlayerCombat
+   component on the root, in the Damage header. The `_fallbackDamage`
+   field should show `10`. If it shows `0` or is blank, enter `10`
+   manually and save the prefab. (The field was renamed from
+   `attackDamage` — Unity re-serializes by name, so the old
+   serialized `10` doesn't auto-migrate to the new field name.
+   The C# default `_fallbackDamage = 10` should populate fresh
+   builds, but existing prefab assets retain the legacy
+   serialization shape until the field is re-touched in the
+   editor.)
+2. Unity will recompile. The new equip API surface compiles
+   cleanly.
+3. `LevelGen ▶ Interaction ▶ Validate Interaction` — expect
+   37 PASS / 0 FAIL.
+4. Sanity re-runs of prior validators — none should regress:
+   - `LevelGen ▶ Player ▶ Validate Player_Hero` (still 63/63)
+   - `LevelGen ▶ Combat ▶ Validate Enemy` (still 49/49)
+   - `LevelGen ▶ Combat ▶ Validate Damage Routing` (still 12/12 — note
+     this validator targets the old field name path; if it FAILs on
+     a stale `attackDamage` source-scan, that's a M17 regression
+     in the validator, not in PlayerCombat; revisit DamageRoutingValidator
+     if so).
+5. Play-mode smoke test (no scripts changed during play; this is
+   a runtime data-flow verification):
+   - Confirm starting damage is 10 per hit (unarmed `_fallbackDamage`).
+   - Place a WorldItem in the test scene wired to an ItemData with
+     `Slot=Melee` + `Damage=25`. Walk over → "Press [E] Pick Up
+     {Name}" appears. Press E → object destroys, inventory.Count++,
+     auto-equip fires (slot was empty), `OnWeaponEquipped` event
+     would fire (no listener yet).
+   - Attack a Grunt — damage per hit should now be 25, not 10.
+     Console log line should read `Hit Enemy_Grunt for 25 (HP now
+     X/Y).` (NOT `(override)` — that tag is for Assassinate only.)
+   - Assassinate a Grunt from the back arc — damage should still be
+     99999 (override path intact). Console log should read
+     `Hit Enemy_Grunt for 99999 (override) (HP now 0/Y).`
+   - Place a second weapon pickup with `Damage=50`. Walk over,
+     E-press → goes to inventory but does NOT auto-equip (slot
+     occupied). Combat damage remains 25.
+   - (Optional, no UI exists for manual equip) Call
+     `PlayerInventory.Instance.Equip(<the 50 dmg item>)` via
+     ContextMenu / debug console — combat damage flips to 50 on
+     next swing.
+
+### Deferred / out of scope
+
+- **Inventory UI** — slot grid, drag-drop, equipped highlight,
+  hover tooltip. Listens to `OnItemAdded` / `OnItemRemoved` /
+  `OnWeaponEquipped`. The events are wired; the UI is the next UI
+  milestone.
+- **Manual equip flow** — currently the only way to change the
+  equipped Melee weapon is the auto-equip-on-first-pickup path.
+  Manual equip needs UI (above) or a debug ContextMenu.
+- **Visual weapon mesh swap** — the player still visually holds
+  the same OHS03 sword (Duo re-import, M3-03B) regardless of which
+  ItemData is equipped. `ItemData.WorldPrefab` is authored but not
+  consumed by any system. Next milestone: a `PlayerEquipmentVisuals`
+  component subscribes to `OnWeaponEquipped` and swaps the visible
+  mesh under `weapon_r` on the rig.
+- **OffHand / Ranged / Armor consumers** — only Melee is wired
+  to PlayerCombat damage. Shield items can be equipped (`Slot=OffHand`)
+  but produce no gameplay effect yet. Ranged items can be equipped
+  but PlayerCombat is melee-only (no bow attack state).
+- **RequiredLevel gate** — `ItemData.RequiredLevel` is authored but
+  not checked by `Equip`. Future: `bool CanEquip(ItemData)` that
+  guards on player level (which doesn't exist yet — no level
+  system shipped).
+- **Stat aggregation** — single weapon contributes `Damage` only.
+  Future weapons may have crit chance, attack speed, status-apply
+  chance, range. Add to ItemData OR introduce a `WeaponStats` SO
+  pointed at by ItemData (the eponymous "WeaponStats SO" from
+  earlier deferred lists, now partially fulfilled here).
+- **Two-handed handling** — THS swords + Spears occupy both
+  Melee and OffHand slots conceptually. Currently the Slot is
+  authored to whichever the designer picks; no enforcement that
+  equipping a THS clears OffHand. Future: an `IsTwoHanded` bool on
+  ItemData with auto-unequip-OffHand logic inside `Equip`.
+
+### Lessons logged for this milestone
+
+- **Pull vs push for read-mostly state**: Equipped weapon damage
+  is read once per hitbox-target hit (typically 0-3 times per
+  swing). A pull at the read site (one Dictionary lookup) costs
+  less in code complexity than maintaining a cached `_currentDamage`
+  field on PlayerCombat that subscribes to `OnWeaponEquipped`. The
+  push pattern wins when the consumer reads every frame
+  (PlayerHUD's HP bar reads CurrentHP every Update — that's why
+  PlayerHUD polls). Heuristic: read frequency > update frequency
+  ⇒ push; read frequency ≤ update frequency ⇒ pull.
+- **Field rename serialization gotcha**: Unity serializes
+  MonoBehaviour `[SerializeField]` values keyed by C# field name.
+  Renaming a field disconnects the prefab's saved value — the new
+  field falls back to its C# default. Two options to preserve
+  value: (a) use `[FormerlySerializedAs("oldName")]` attribute
+  (Unity's official migration tool), or (b) accept the reset and
+  document the manual re-entry step. M17 chose (b) because the
+  default `10` is the correct value and only one prefab carries
+  the field; for fields with non-default tuned values across many
+  prefabs, `[FormerlySerializedAs]` is mandatory. Add to project
+  conventions: any rename of a `[SerializeField]` field on a
+  shipped prefab must include `[FormerlySerializedAs]` OR
+  explicitly document the re-entry step in the milestone log.
+- **Override layered over base compute**: the M17 pattern (compute
+  base damage, then if override flag is set overwrite) is
+  structurally cleaner than the prior inline ternary
+  (`int dmg = override > 0 ? override : base`) because the base
+  source can now be a multi-line expression (inventory lookup +
+  null-coalesce + cast) without nesting. Both patterns produce
+  identical runtime behavior; the new shape is easier to extend
+  with future damage layers (crit multipliers, vulnerability
+  multipliers, etc.).
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

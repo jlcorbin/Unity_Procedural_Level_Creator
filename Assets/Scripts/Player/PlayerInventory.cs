@@ -41,6 +41,8 @@ namespace LevelGen.Player
         // ── Runtime state ──────────────────────────────────────────────────────
 
         private readonly List<ItemData> _items = new List<ItemData>();
+        private readonly Dictionary<EquipSlot, ItemData> _equipped =
+            new Dictionary<EquipSlot, ItemData>();
 
         // ── Events ─────────────────────────────────────────────────────────────
 
@@ -55,6 +57,12 @@ namespace LevelGen.Player
         /// The payload is the item that was removed.
         /// </summary>
         public event System.Action<ItemData> OnItemRemoved;
+
+        /// <summary>
+        /// Fired when any slot's equipped item changes.
+        /// Payload: the newly equipped item, or null if unequipped.
+        /// </summary>
+        public event System.Action<ItemData> OnWeaponEquipped;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -126,5 +134,50 @@ namespace LevelGen.Player
 
         /// <summary>Current number of items in the inventory.</summary>
         public int Count => _items.Count;
+
+        /// <summary>
+        /// Equips the item into its slot. Replaces any previously equipped
+        /// item in that slot (does not return it to inventory — caller's
+        /// responsibility). Fires <see cref="OnWeaponEquipped"/>.
+        /// </summary>
+        /// <param name="item">Item to equip. Null is a silent no-op.</param>
+        public void Equip(ItemData item)
+        {
+            if (item == null) return;
+            _equipped[item.Slot] = item;
+            OnWeaponEquipped?.Invoke(item);
+        }
+
+        /// <summary>
+        /// Unequips the item in the given slot. No-op if slot is empty.
+        /// Fires <see cref="OnWeaponEquipped"/> with null.
+        /// </summary>
+        /// <param name="slot">The slot to clear.</param>
+        public void Unequip(EquipSlot slot)
+        {
+            if (_equipped.ContainsKey(slot))
+            {
+                _equipped.Remove(slot);
+                OnWeaponEquipped?.Invoke(null);
+            }
+        }
+
+        /// <summary>
+        /// Returns the equipped item for the given slot, or null if empty.
+        /// </summary>
+        /// <param name="slot">The slot to query.</param>
+        public ItemData GetEquipped(EquipSlot slot)
+        {
+            return _equipped.TryGetValue(slot, out var item) ? item : null;
+        }
+
+        /// <summary>
+        /// Returns true if the given slot has an item equipped.
+        /// </summary>
+        /// <param name="slot">The slot to test.</param>
+        public bool IsSlotEquipped(EquipSlot slot)
+        {
+            return _equipped.TryGetValue(slot, out var item) && item != null;
+        }
     }
 }

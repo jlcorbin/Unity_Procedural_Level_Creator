@@ -105,6 +105,13 @@ namespace LevelGen.Interaction
                 return;
             }
 
+            // Auto-equip if the slot is currently empty (first pickup of that slot
+            // becomes equipped; later pickups go to inventory only).
+            if (!inv.IsSlotEquipped(_itemData.Slot))
+            {
+                inv.Equip(_itemData);
+            }
+
             Destroy(gameObject);
         }
     }
