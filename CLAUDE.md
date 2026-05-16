@@ -187,6 +187,14 @@ All scripts use namespace LevelGen.
 - #if UNITY_EDITOR guards on editor-only code
 - No magic numbers — named constants or inspector fields
 
+## CC prompt conventions
+- qa-tester agent must read actual .cs source files before writing any
+  validator check descriptions or event/method name references — do not
+  infer from context. (M18: a session-handoff write mislabeled validator
+  checks 40-42 and used a stale event name because the descriptions were
+  inferred from prior agent output instead of read from the live
+  `ValidateInteraction.cs` and `PlayerInputReader.cs`.)
+
 ## Three-scene pipeline
 1. `RoomWorkshop.unity` — build and curate individual rooms (placeholder, not yet populated)
 2. `LevelGenerator.unity` — assemble levels from room prefabs (placeholder, not yet populated)
