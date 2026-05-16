@@ -1,138 +1,73 @@
-# Session Handoff — 2026-05-13
+# Session Handoff — 2026-05-16
 
-## Section 1 — Session Summary
+## Session Summary
 
-### What shipped this session
+**What shipped — M18 Inventory UI:**
+- `InventoryHUD.cs` — always-visible HUD strip (Melee + OffHand slots), subscribes to `PlayerInventory.OnWeaponEquipped`, updates labels on equip/unequip
+- `InventoryPanel.cs` — full inventory panel toggled by I key, two-column layout (bag list left / equipped slots right), pauses game via `Time.timeScale = 0`
+- `InventoryItemRow.cs` — reusable row prefab script, Equip/Unequip button per item
+- `PlayerInputReader.cs` — `OnToggleInventory` endpoint + `OnToggleInventoryPerformed` event added (same UnityEvent dispatch pattern as all other actions)
+- `InputSystem_Actions.inputactions` — `ToggleInventory` action added to Player map, bound to `<Keyboard>/i`, wired to `PlayerInputReader.OnToggleInventory` via PlayerInput UnityEvent in the Inspector
+- `PlayerInventory.cs` — `GetAllItems()` / `Items` property confirmed present, `Equip()` confirmed firing `OnWeaponEquipped`
 
-**M16 — Item Data Layer + WorldItem Pickup**
-- 5 new files: `EquipSlot.cs`, `ItemData.cs`, `ItemDatabase.cs`,
-  `PlayerInventory.cs`, `WorldItem.cs`
-- `WorldItem` subclasses `Interactable` — E key prompt, pickup radius,
-  register/deregister all inherited
-- `InteractPriority.Pickup = 10` first consumed (defined M6)
-- `PlayerInventory.Instance` is the 5th project singleton
-- Validator extended to 27 checks — 27 PASS confirmed
-- Weapon Prefab Inventory doc created at `Documentation/Weapon_Prefab_Inventory.md`
-  — 57 Wave PBR prefabs catalogued across Melee/OffHand/Ranged slots
+**Scene wiring completed:**
+- `InventoryCanvas` (Screen Space Overlay) with `HUDStrip` and `InventoryPanel` as children
+- `InventoryPanel` host stays always-active; `PanelRoot` child is the visual toggle target
+- All Inspector fields wired: Panel Root, Bag Container, Equipped labels, Item Row Prefab, Player Input Reader, Close Button
 
-**M17 — WeaponStats: Equip System + PlayerCombat Damage Wiring**
-- `PlayerInventory` gained per-slot equip dictionary
-  (`Dictionary<EquipSlot, ItemData>`), `Equip`/`Unequip`/`GetEquipped`/
-  `IsSlotEquipped` methods, `OnWeaponEquipped` event
-- `WorldItem.Execute` auto-equips on pickup if slot is empty
-- `PlayerCombat.NotifyHitboxTriggered` now pulls damage from
-  `PlayerInventory.Instance.GetEquipped(EquipSlot.Melee)?.Damage ?? _fallbackDamage`
-- `attackDamage` renamed to `_fallbackDamage` (default 10, verified in Inspector)
-- Validator extended to 37 checks — 37 PASS confirmed
-- Smoke test confirmed: damage number changes after weapon pickup
+**Key lessons learned this session:**
+- `PlayerInputReader` uses UnityEvent dispatch pattern (Behavior: Invoke Unity Events) — NO generated `InputSystem_Actions.cs` class, NO `_input.Player.X.performed` pattern. Every action is a `public void OnX(InputAction.CallbackContext ctx)` endpoint wired via the PlayerInput component Inspector. CC prompts must read `PlayerInputReader.cs` before generating any input code.
+- `InventoryPanel` host GameObject must stay ACTIVE — only `PanelRoot` (visual child) is toggled. If the host is inactive, `OnEnable` never runs and the toggle event subscription never happens.
+- Unity drops serialized references silently if a component is removed/re-added or if a scene object references a prefab asset instead of a scene instance. Always verify Inspector field assignments in Edit mode before entering Play mode.
+- `ItemData._displayName` must be populated on each SO asset — blank display name shows as blank in HUD, not as a missing-reference error.
 
-### What was scoped but not shipped
-Nothing — both milestones completed fully.
+## Validator State
 
----
+| Check | Status |
+|-------|--------|
+| Validator run at session close | Not confirmed — Jason closed session before final validator run |
 
-## Section 2 — Validator State Table
+Note: request validator run at start of next session before any new work.
 
-Check counts read from `CLAUDE.md`. These must be run in Unity to verify.
+## Deferred / Known Issues
 
-| Validator | Menu Path | Last Known State |
-|-----------|-----------|------------------|
-| Validate Interaction | `LevelGen ▶ Interaction ▶ Validate Interaction` | ✅ 37 PASS / 0 FAIL (this session) |
-| Validate Enemy | `LevelGen ▶ Combat ▶ Validate Enemy` | Last known 49 PASS (not re-run this session) |
-| Validate Player_Hero | `LevelGen ▶ Player ▶ Validate Player_Hero` | Not re-run this session |
-| Validate Target Lock | `LevelGen ▶ Player ▶ Validate Target Lock` | Last known 13 PASS (not re-run this session) |
-| Validate Player Dodge | `LevelGen ▶ Player ▶ Validate Player Dodge` | Last known PASS (not re-run this session) |
+- Validator target was 42 PASS / 0 FAIL — not confirmed this session; run at next open
+- `EnemyHealthBar` editor wiring on `Enemy_Grunt` prefab — still pending from M14
+- No item icons on `ItemData` assets (Sprite field blank) — deferred to future milestone
+- Armor slot deferred from M18 scope — not yet in HUD or panel
 
----
+## Open Milestone Candidates
 
-## Section 3 — Deferred / Known Issues
+| Milestone | Description | Recommended? |
+|-----------|-------------|--------------|
+| M18b | Validator confirmation + any M18 polish (label formatting, close button UX) | **Run first next session** |
+| M19 | Enemy AI improvements — patrol, alert states, group awareness | |
+| M20 | WeaponStats integration — wire `ItemData.Damage` into `PlayerCombat` via equipped item | |
+| M21 | Armor slot — add to HUD strip, InventoryPanel, and `EquipSlot` enum | |
 
-- **`attackDamage` → `_fallbackDamage` rename lesson** — future renames of
-  shipped-prefab SerializeFields must use `[FormerlySerializedAs]` or
-  document the re-entry step explicitly. Logged in CLAUDE.md.
+**Recommended next:** Confirm validator at 42 PASS, then M20 (WeaponStats) — the `ItemData.Damage` field exists, `PlayerInventory.GetEquipped` is ready, and `PlayerCombat` is the natural consumer. Short milestone, high value.
 
-- **`EnemyAnimationEventForwarder._combat` wiring** — still unverified on
-  clean builder run. `EnemyBaseBuilder`'s SerializedObject wiring of this
-  field should be audited.
+## Architectural Reminders for Next Session
 
-- **Enemy health bar editor wiring** — `EnemyHealthBar` +
-  `EnemyHealthBarProximityDriver` not yet wired onto `Enemy_Grunt.prefab`
-  in Inspector.
+- **Input pattern:** UnityEvent dispatch only. Read `PlayerInputReader.cs` before writing any input code. Never suggest `_input.Player.X.performed` — it does not exist.
+- **InventoryPanel host:** Must remain active. Toggle `_panelRoot`, not `gameObject`.
+- **Time.timeScale:** Set to 0 on Open, 1 on Close. If any future animation is added to the panel, use `unscaledDeltaTime`.
+- **PlayerHero and EnemyBase** are wiring manifests only — no logic.
+- **All damage** flows through `CharacterStatsRuntime.ApplyDamage` — never bypass.
+- **EnemyData push-down:** `EnemyBase.Awake` pushes values; do not read `EnemyData` directly from `EnemyAI`, `EnemyCombat`, or `CharacterStatsRuntime`.
 
-- **Player CapsuleCollider not in builder** — `CapsuleCollider (IsTrigger=true)`
-  on Player_Hero root must survive prefab rebuilds; not yet automated in
-  `PlayerHeroBuilder`.
+## Quick-Start for Next Session
 
-- **`OnWeaponEquipped` event has no subscribers yet** — wired and ready;
-  inventory UI will subscribe to it.
+Paste this at the start of the next chat:
 
-- **Only Melee slot wired into damage** — `PlayerCombat` reads
-  `GetEquipped(EquipSlot.Melee)` only. OffHand/Ranged/Armor slots are
-  authored but not consumed by any combat script yet.
+```
+# Hub & Hollow — Session Open
 
----
+Read in order:
+1. CLAUDE.md
+2. Documentation/Session_Handoff.md
 
-## Section 4 — Open Milestone Candidates
-
-In priority order:
-
-1. **Inventory UI** (RECOMMENDED NEXT — committed to this session)
-   Display equipped items and inventory contents. `OnWeaponEquipped` event
-   and `GetEquipped` are already in place. Equip/unequip from UI calls
-   existing `PlayerInventory.Equip`/`Unequip`. Clean scope — all data
-   layer is ready.
-
-2. **Second enemy archetype** — duplicate `Enemy_Grunt` approach, new
-   `EnemyData_X.asset`. Tests that `EnemyBase` generalizes. Low-risk
-   validation milestone.
-
-3. **Enemy health bar polish + editor wiring** — wire `EnemyHealthBar` onto
-   `Enemy_Grunt.prefab` in Inspector, swap UISprite placeholder, automate
-   in `EnemyBaseBuilder`.
-
-4. **Player CapsuleCollider automation** — add to `PlayerHeroBuilder` so
-   it survives prefab rebuilds.
-
-5. **Level pipeline — whitebox end-to-end test** (separate track) —
-   `PieceCatalogue` wiring, `LVL_Configurator` runs, generator end-to-end
-   in `LevelGenerator.unity`.
-
----
-
-## Section 5 — Key Architectural Reminders
-
-- `PlayerHero` and `EnemyBase` are wiring manifests only — no gameplay
-  logic. All future components added via `[RequireComponent]` + `InitFromX`
-  pattern.
-- `EnemyData` SO is single source of truth for enemy stats. `EnemyBase.Awake`
-  pushes values into consumers — do not read `EnemyData` directly from
-  `EnemyAI`, `EnemyCombat`, or `CharacterStatsRuntime`.
-- `PlayerCombat` damage now pulls from `PlayerInventory.Instance.GetEquipped(EquipSlot.Melee)?.Damage ?? _fallbackDamage`. The `_nextHitDamageOverride` assassinate path is untouched.
-- `ApplyDamage` convention: positive float = damage. Never pass negative.
-- Per-slot equip dictionary: `Dictionary<EquipSlot, ItemData>`. Auto-equips
-  on pickup if slot empty. `OnWeaponEquipped` event is the UI hook.
-- `[FormerlySerializedAs]` must be used on any future SerializeField rename
-  on a shipped prefab to avoid silent Inspector reset to default.
-- `LockIndicator` billboard uses **positive** `_cam.transform.forward` —
-  negative causes mirror-flip.
-- `DamageNumber` namespace is `LevelGen` (not `LevelGen.UI`) — sub-namespace
-  breaks prefab type references.
-- `Player_Hero` requires a `CapsuleCollider (IsTrigger=true)` on root for
-  enemy `OnTriggerEnter`. `CharacterController` alone does not receive
-  trigger events.
-- Static events must be paired with `OnEnable +=` / `OnDisable -=` in
-  every subscriber.
-
----
-
-## Section 6 — Quick-Start Instructions
-
-> Read `Documentation/Session_Handoff.md` at start of new chat.
->
-> No coding in chat — provide Claude Code prompts only.
->
-> All prompts end with telling Claude Code to `/compact`.
->
-> Picking up from 2026-05-13 session — M16 item data layer and M17 weapon
-> equip system both shipped. Inventory is data-driven. Next milestone is
-> inventory UI. See Section 4 for full candidate list.
+M18 (Inventory UI) shipped last session. Confirm validator at 42 PASS before
+any new work. Recommended next milestone: M20 (WeaponStats — wire ItemData.Damage
+into PlayerCombat via equipped item).
+```

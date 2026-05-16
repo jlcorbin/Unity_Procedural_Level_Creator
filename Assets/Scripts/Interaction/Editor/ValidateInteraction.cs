@@ -5,8 +5,9 @@
 // M7 OpenInteractable). Updated in M-MenuDelete to retarget the
 // Dummy-prefab checks to Enemy_Grunt.prefab after Dummy was retired.
 //
-// 16 read-only checks covering Interactable base + concrete subclasses
-// + PlayerInteractor + wiring on Player_Hero + Enemy_Grunt prefabs.
+// 42 read-only checks covering Interactable base + concrete subclasses
+// + PlayerInteractor + wiring on Player_Hero + Enemy_Grunt prefabs
+// + M16 item data layer + M17 equip system + M18 inventory UI.
 // No scene modification.
 //
 // Menu: LevelGen ▶ Interaction ▶ Validate Interaction
@@ -392,6 +393,59 @@ namespace LevelGen.Interaction.EditorTools
             Check("37 PlayerCombat.cs has _fallbackDamage field",
                 ok37,
                 ok37 ? "source contains '_fallbackDamage'" : "source does not contain '_fallbackDamage'"); // M17
+
+            // ── M18 checks 38-42 ─────────────────────────────────────────────
+
+            // ── 38: InventoryHUD.cs exists ───────────────────────────────────
+            const string inventoryHUDPath = "Assets/Scripts/UI/InventoryHUD.cs"; // M18
+            bool ok38 = File.Exists(inventoryHUDPath); // M18
+            Check("38 InventoryHUD.cs exists",
+                ok38,
+                ok38 ? inventoryHUDPath : $"missing at {inventoryHUDPath}"); // M18
+
+            // ── 39: InventoryPanel.cs exists ─────────────────────────────────
+            const string inventoryPanelPath = "Assets/Scripts/UI/InventoryPanel.cs"; // M18
+            bool ok39 = File.Exists(inventoryPanelPath); // M18
+            Check("39 InventoryPanel.cs exists",
+                ok39,
+                ok39 ? inventoryPanelPath : $"missing at {inventoryPanelPath}"); // M18
+
+            // ── 40: InputSystem_Actions.inputactions contains ToggleInventory ─
+            const string inputActionsPath = "Assets/InputSystem_Actions.inputactions"; // M18
+            string inputActionsSrc = File.Exists(inputActionsPath) // M18
+                ? File.ReadAllText(inputActionsPath)
+                : string.Empty;
+            bool ok40 = inputActionsSrc.Contains("ToggleInventory"); // M18
+            Check("40 InputSystem_Actions.inputactions contains 'ToggleInventory'",
+                ok40,
+                ok40
+                    ? "source contains 'ToggleInventory'"
+                    : (File.Exists(inputActionsPath)
+                        ? "file found but 'ToggleInventory' not present — re-add action to the Player map"
+                        : $"file missing at {inputActionsPath}")); // M18
+
+            // ── 41: PlayerInputReader.cs declares OnToggleInventoryPerformed event ─────
+            string inputReaderSrc41 = File.Exists(PlayerInputReaderSrc) // M18
+                ? File.ReadAllText(PlayerInputReaderSrc)
+                : string.Empty;
+            bool ok41 = inputReaderSrc41.Contains("event System.Action OnToggleInventoryPerformed") // M18
+                || inputReaderSrc41.Contains("event Action OnToggleInventoryPerformed");
+            Check("41 PlayerInputReader.cs declares OnToggleInventoryPerformed event",
+                ok41,
+                ok41
+                    ? "source contains OnToggleInventoryPerformed event declaration"
+                    : "source does not contain OnToggleInventoryPerformed event declaration"); // M18
+
+            // ── 42: PlayerInventory.cs has Items property or GetAllItems method
+            // M16 shipped an IReadOnlyList<ItemData> Items property; GetAllItems
+            // was not needed. Accept either form.
+            bool ok42 = inventorySrc21.Contains("IReadOnlyList<ItemData> Items") // M18
+                || inventorySrc21.Contains("public IReadOnlyList<ItemData> GetAllItems");
+            Check("42 PlayerInventory.cs exposes IReadOnlyList<ItemData> Items or GetAllItems",
+                ok42,
+                ok42
+                    ? "source contains IReadOnlyList<ItemData> Items property (M16 — no GetAllItems needed)"
+                    : "source contains neither 'IReadOnlyList<ItemData> Items' nor 'GetAllItems'"); // M18
 
             Summary(pass, fail);
         }

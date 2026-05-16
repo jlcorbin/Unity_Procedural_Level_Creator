@@ -5084,6 +5084,272 @@ Total: 37 checks (was 27 after M16).
   with future damage layers (crit multipliers, vulnerability
   multipliers, etc.).
 
+## M18 — Inventory UI (2026-05-15)
+
+Closes the loop opened by M16 (item data + world pickup) and M17
+(equip system + damage wiring). Picking up and equipping weapons is
+now fully visible to the player: a permanent HUD strip shows the
+currently-equipped Melee and OffHand slots, and pressing I opens a
+full inventory panel that lists every item in the bag with
+one-click equip/unequip buttons. The panel pauses the game while
+open via `Time.timeScale = 0`.
+
+### Architectural decisions (locked)
+
+- **Hybrid layout: HUD strip (always visible) + full panel (toggled
+  by I key)**. The HUD strip (`InventoryHUD`) shows only the equipped
+  slots — a small permanent row in the bottom-right of the screen.
+  The full panel (`InventoryPanel`) shows the entire bag list with
+  action buttons. Both are separate MonoBehaviours on separate
+  GameObjects; neither owns the other.
+- **Pause via `Time.timeScale = 0`**. The simplest pause mechanism.
+  Caveats: all `Update` / `FixedUpdate` code that uses `Time.deltaTime`
+  halts; coroutines using `WaitForSeconds` halt; UI using
+  `Time.unscaledDeltaTime` continues. Any in-panel animations must
+  use unscaled time. `timeScale` is restored to its previous value
+  (captured at open time via a `_prevTimeScale` float) so the system
+  is compatible with future slow-motion effects.
+- **Active-subscriber + toggleable-child pattern**. `InventoryPanel`'s
+  own GameObject stays ACTIVE permanently so its `OnEnable` fires at
+  scene load and the `PlayerInputReader.OnToggleInventoryPerformed` subscription
+  wires up correctly. The visible panel is a `_panelRoot` child
+  GameObject that receives `SetActive(true/false)` to show or hide.
+  Without this split, `OnEnable` would not fire while the panel is
+  visually closed, so the toggle event subscription would never be
+  registered.
+- **Repopulate-on-equip pattern**. After any `Equip` or `Unequip`
+  call, `InventoryPanel` destroys all existing row GameObjects under
+  `_bagContainer` and re-instantiates them from the current
+  `PlayerInventory.Items` list so button labels ("Equip" / "Unequip")
+  are always accurate. Simple and correct at typical inventory sizes
+  (<100 items); defer virtualization until profiling demands it.
+- **HUD refresh is event-driven**. `InventoryHUD` subscribes to
+  `PlayerInventory.OnWeaponEquipped` in `OnEnable` and unsubscribes
+  in `OnDisable`. No per-frame polling. `OnWeaponEquipped` fires with
+  the newly equipped `ItemData` (or null on unequip), giving the HUD
+  a direct trigger to refresh both slot labels.
+- **Text-only labels for M18**. `ItemData.Icon` (Sprite field from
+  M16) is authored but not consumed. Icon display deferred to the
+  next inventory-polish milestone.
+- **`GetAllItems()` method added to `PlayerInventory`**. The existing
+  `Items` property returns `IReadOnlyList<ItemData>` for the bag.
+  `GetAllItems()` is a convenience alias that returns the same list
+  cast to `IEnumerable<ItemData>` for foreach-friendly iteration in
+  `InventoryPanel`. No new data storage — delegates directly to the
+  existing `_items` backing list.
+
+### Single-direction dependency invariants preserved
+
+  PlayerInputReader → (event OnToggleInventoryPerformed) → InventoryPanel.HandleToggle
+  InventoryPanel → PlayerInventory.GetAllItems / Equip / Unequip / GetEquipped
+  PlayerInventory → (event OnWeaponEquipped) → InventoryHUD.HandleWeaponEquipped
+                 → InventoryHUD.RefreshAll
+
+`InventoryPanel` is the only writer to `Time.timeScale` within this
+system. `PlayerInventory` never reaches into UI scripts.
+`InventoryHUD` never reaches into `InventoryPanel` (no cross-panel
+coupling). Single-direction preserved.
+
+### Files
+
+NEW (3):
+- `Assets/Scripts/UI/InventoryHUD.cs` — permanent equipped-slot strip.
+  `[DisallowMultipleComponent]`. SerializeFields: `_meleeLabel`
+  (TMP_Text), `_offHandLabel` (TMP_Text), `_playerInventoryTag`
+  (string, default "Player"). Awake tag-lookup with retry coroutine
+  (mirrors PlayerHUD pattern). OnEnable/OnDisable
+  subscribe/unsubscribe `PlayerInventory.OnWeaponEquipped`.
+  `HandleWeaponEquipped(ItemData)` and `RefreshAll()` update both
+  labels from `GetEquipped(EquipSlot.Melee)` and
+  `GetEquipped(EquipSlot.OffHand)` with null-coalesce to "— empty —".
+- `Assets/Scripts/UI/InventoryPanel.cs` — full inventory panel.
+  `[DisallowMultipleComponent]`. SerializeFields: `_panelRoot`
+  (GameObject — the toggleable visual child), `_bagContainer`
+  (Transform — parent for row instances), `_equippedMeleeLabel`
+  (TMP_Text), `_equippedOffHandLabel` (TMP_Text), `_itemRowPrefab`
+  (GameObject), `_playerInputReader` (PlayerInputReader),
+  `_closeButton` (Button, optional). OnEnable subscribes
+  `_playerInputReader.OnToggleInventoryPerformed` and `_closeButton.onClick`
+  (if wired). OnDisable unsubscribes both. `HandleToggle()` calls
+  `Open()` or `Close()` based on `_panelRoot.activeSelf`. `Open()`
+  captures `_prevTimeScale`, sets `timeScale = 0`, calls
+  `SetActive(true)` + `Repopulate()`. `Close()` restores timeScale,
+  sets `SetActive(false)`. `Repopulate()` destroys existing children
+  under `_bagContainer`, instantiates one `InventoryItemRow` prefab
+  per item in `PlayerInventory.Instance.GetAllItems()`, and calls
+  `InventoryItemRow.Init(item, isEquipped, onEquip, onUnequip)`.
+  Equipped labels refreshed on `Repopulate()` as well.
+- `Assets/Scripts/UI/InventoryItemRow.cs` — single row in the bag
+  list. `[DisallowMultipleComponent]`. SerializeFields:
+  `_nameLabel` (TMP_Text), `_statsLabel` (TMP_Text), `_actionButton`
+  (Button — text child label flips "Equip" / "Unequip"). Public
+  `Init(ItemData item, bool isEquipped, UnityAction onEquip,
+  UnityAction onUnequip)` — writes name, stats string (damage +
+  rarity), wires button onClick to the correct callback based on
+  `isEquipped`, sets button label.
+
+MODIFIED (4):
+- `Assets/InputSystem_Actions.inputactions` — added `ToggleInventory`
+  Button action to the Player action map + `<Keyboard>/i` binding,
+  stable GUIDs. Matches the M12 Dodge + M15 LockOn precedent.
+- `Assets/Scripts/Player/PlayerInputReader.cs` — added
+  `event System.Action OnToggleInventoryPerformed` and
+  `public void OnToggleInventory(InputAction.CallbackContext ctx)`
+  endpoint raising on `ctx.performed`. M1-stub log NOT added (has a
+  real consumer from day one). Mirrors all prior input-event additions.
+- `Assets/Scripts/Player/PlayerInventory.cs` — added `GetAllItems()`
+  public method returning `IEnumerable<ItemData>` (delegates to
+  the existing `_items` List<ItemData> backing field). The existing
+  `Items` property (`IReadOnlyList<ItemData>`) is unchanged.
+- `Assets/Scripts/Interaction/Editor/ValidateInteraction.cs` —
+  appended checks 38-42 tagged `// M18`. Existing checks 1-37
+  untouched. New total: 42 checks.
+
+### Validator checks (M18 additions)
+
+38 — `InventoryHUD.cs` exists at `Assets/Scripts/UI/InventoryHUD.cs`
+39 — `InventoryPanel.cs` exists at `Assets/Scripts/UI/InventoryPanel.cs`
+40 — `InputSystem_Actions.inputactions` source contains `ToggleInventory`
+41 — `PlayerInputReader.cs` source declares the `OnToggleInventoryPerformed`
+     event (`event System.Action` / `event Action`)
+42 — `PlayerInventory.cs` source exposes an `IReadOnlyList<ItemData> Items`
+     property or a `GetAllItems` method
+
+Total: 42 checks (was 37 after M17).
+
+Note: there is no validator check for `InventoryItemRow.cs` existence —
+the actual ValidateInteraction.cs M18 block (checks 38-42) covers the two
+UI scripts the system can't run without (HUD + Panel), the input binding,
+the reader event, and the inventory accessor. Add an InventoryItemRow
+existence check if a future milestone wants 43.
+
+### Pending follow-up (Jason runs after CC completes)
+
+1. Recompile in Unity — the new `Assets/Scripts/UI/` scripts compile
+   cleanly alongside existing `PlayerHUD`, `DamageNumber`,
+   `DamageNumberSpawner`, `PlayerDeathOverlay`.
+2. **Wire InventoryHUD in the active scene**:
+   - Find (or create) the persistent Canvas in the scene.
+   - Add a child GameObject named `InventoryHUD`. Add the
+     `InventoryHUD` component. Wire `_meleeLabel` and
+     `_offHandLabel` to two TMP_Text children.
+3. **Wire InventoryPanel in the active scene**:
+   - Add a sibling GameObject named `InventoryPanel` (stays ACTIVE
+     permanently — its visual child will hide). Add the
+     `InventoryPanel` component.
+   - Create a child GameObject `_PanelRoot` with your two-column
+     layout (equipped column + bag column). Assign it to `_panelRoot`.
+   - Assign `_bagContainer`, `_equippedMeleeLabel`,
+     `_equippedOffHandLabel`, `_itemRowPrefab`,
+     `_playerInputReader`, and (optionally) `_closeButton`.
+   - Set `_PanelRoot.activeSelf = false` in the scene so the panel
+     starts hidden.
+4. **Create the row prefab** (`Assets/Prefabs/UI/InventoryItemRow.prefab`):
+   - Root GameObject with `InventoryItemRow` component.
+   - Child TMP_Text `NameLabel` → wire to `_nameLabel`.
+   - Child TMP_Text `StatsLabel` → wire to `_statsLabel`.
+   - Child Button `ActionButton` with a TMP_Text child "Equip" →
+     wire Button to `_actionButton`.
+5. `LevelGen ▶ Interaction ▶ Validate Interaction` — expect
+   42 PASS / 0 FAIL.
+6. Sanity re-runs:
+   - `LevelGen ▶ Player ▶ Validate Player_Hero` — no regression
+   - `LevelGen ▶ Combat ▶ Validate Enemy` — no regression
+7. Play-mode smoke test:
+   - Pick up a WorldItem weapon → `InventoryHUD` Melee slot updates
+     from "— empty —" to the weapon's display name.
+   - Press I → game pauses (`Time.timeScale = 0`), panel opens, bag
+     list shows the item with an "Equip" button (or "Unequip" if
+     auto-equipped on pickup).
+   - Click Equip → button label flips to "Unequip", equipped column
+     updates, HUD strip updates.
+   - Press I again (or click Close button if wired) → game unpauses,
+     panel closes.
+   - Confirm no input events fire during pause (WASD / mouse / attack
+     do nothing while timeScale=0 halts PlayerController/PlayerCombat).
+
+### Deferred / out of scope
+
+- **Item icons / sprites** — `ItemData.Icon` (Sprite field, M16) is
+  authored but unused. Image display requires a third Image child on
+  the row prefab wired to a `_iconImage` SerializeField.
+- **Hover tooltips** — description, rarity color-coding, required
+  level check result. Needs a floating tooltip Canvas child.
+- **Drag-drop reordering** — requires `IBeginDragHandler` /
+  `IDragHandler` / `IDropHandler` on row items and a separate
+  slot-grid layout.
+- **Sort / filter** — alphabetical, by slot, by rarity, by damage.
+- **Controller / gamepad navigation** — set EventSystem first-
+  selected button on panel open; trap focus within the panel modal.
+  Use `EventSystem.current.SetSelectedGameObject(firstButton)` on
+  `Open()`.
+- **Open/close animations** — any panel animation MUST use
+  `Time.unscaledDeltaTime` since `timeScale = 0` freezes scaled
+  time. Suitable approach: DOTween with `SetUpdate(true)` or a
+  `WaitForSecondsRealtime` coroutine.
+- **Ranged + Armor slot HUD strips** — `InventoryHUD` has only Melee
+  and OffHand labels wired. Armor and Ranged slots follow the same
+  pattern: add two more TMP_Text SerializeFields and call
+  `GetEquipped(EquipSlot.Ranged)` / `GetEquipped(EquipSlot.Armor)`.
+- **Stack counts** — consumable items (potions) will want a count
+  alongside the name label. Requires `ItemStack` wrapper in
+  PlayerInventory.
+- **Quick-equip from HUD** — click the HUD strip slot to open the
+  panel pre-filtered to that slot type.
+- **Inventory builder/placer editor tools** — `InventoryHUDBuilder`
+  and `InventoryPanelBuilder` menu items. Deferred until the manual
+  wiring above is validated; then the builder can codify the correct
+  hierarchy shape.
+
+### Lessons logged
+
+- **Active-subscriber + toggleable-child pattern**: when a
+  MonoBehaviour needs to subscribe to an input event in `OnEnable`
+  to receive open/close triggers AND the panel it controls is
+  visually hidden when closed, the script's own GameObject must stay
+  ACTIVE permanently. Toggling the script's own GameObject inactive
+  disables the subscription. Resolution: a `_panelRoot` child
+  SerializeField as the actual visual panel; toggle that child, never
+  the script host. This pattern is now established in the project —
+  future togglable panels should follow the same structure.
+- **`Time.timeScale`-driven pause**: the simplest pause approach.
+  Document caveats clearly so future milestones don't trip on them:
+  all `Update`/`FixedUpdate` code using `Time.deltaTime` halts;
+  coroutines using `WaitForSeconds` halt; `Time.unscaledDeltaTime`
+  and `WaitForSecondsRealtime` continue. Capturing the previous
+  timeScale into `_prevTimeScale` (rather than hardcoding restore to
+  `1f`) makes the system compatible with future slow-motion effects.
+- **`GetAllItems()` vs `Items` property**: both expose the same
+  backing data. `Items` returns `IReadOnlyList<ItemData>` (for count
+  + indexed access); `GetAllItems()` returns `IEnumerable<ItemData>`
+  (for foreach). Adding the alias keeps the existing API surface
+  stable (no M16/M17 callers broken) while giving the UI layer the
+  idiomatic foreach-friendly form. Pattern going forward: prefer
+  `IEnumerable` returns on UI-facing data access methods; prefer
+  `IReadOnlyList` returns on game-logic-facing data access methods.
+- **C# event vs UnityEvent endpoint naming collision (CS0102)**:
+  `PlayerInputReader` follows the convention `public void OnX(
+  InputAction.CallbackContext ctx)` for UnityEvent endpoint methods
+  (Unity's PlayerInput component resolves endpoints by the
+  `On<ActionName>` naming convention). The paired C# event must
+  therefore carry a distinct name — the project convention is the
+  `Performed` suffix: e.g. `OnToggleInventoryPerformed` for the
+  C# event vs. `OnToggleInventory` for the UnityEvent endpoint method.
+  This mirrors M15's `OnLockOnPerformed` / `OnLockOn` precedent.
+  A CC prompt that names the C# event `OnToggleInventory` (bare)
+  will produce CS0102 ("already defines a member named 'OnToggleInventory'
+  in class 'PlayerInputReader'"). Always read `PlayerInputReader.cs`
+  before generating input-event code.
+- **Input architecture invariant**: `PlayerInputReader` uses **UnityEvent
+  dispatch** (PlayerInput component, Behavior: Invoke Unity Events).
+  There is NO generated `InputSystem_Actions.cs` class and NO
+  `_input.Player.X.performed` subscription pattern anywhere in this
+  project. Every input action is a `public void OnX(InputAction.
+  CallbackContext ctx)` endpoint on `PlayerInputReader`, wired via the
+  PlayerInput Inspector. CC prompts must read `PlayerInputReader.cs`
+  before writing any input code — do not assume the generated-class
+  pattern.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

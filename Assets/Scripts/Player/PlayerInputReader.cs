@@ -72,6 +72,14 @@ namespace LevelGen.Player
         /// </summary>
         public event System.Action OnLockOnPerformed;
 
+        /// <summary>
+        /// Raised once per ToggleInventory button press (button-down edge,
+        /// ctx.performed). Subscribed to by InventoryPanel. Toggles the
+        /// inventory panel open / closed.
+        /// Not raised on hold or release.
+        /// </summary>
+        public event System.Action OnToggleInventoryPerformed;
+
         // ── UnityEvent endpoints ─────────────────────────────────────────────
         // Wired in the inspector to UnityEngine.InputSystem.PlayerInput's
         // per-action UnityEvents. Value-type actions (Move, Look) read every
@@ -167,6 +175,16 @@ namespace LevelGen.Player
         public void OnLockOn(InputAction.CallbackContext ctx)
         {
             if (ctx.performed) OnLockOnPerformed?.Invoke();
+        }
+
+        /// <summary>
+        /// ToggleInventory action endpoint. Raises <see cref="OnToggleInventoryPerformed"/>
+        /// on the performed phase (button-down edge). Consumed by
+        /// InventoryPanel. Toggles the inventory panel open / closed.
+        /// </summary>
+        public void OnToggleInventory(InputAction.CallbackContext ctx)
+        {
+            if (ctx.performed) OnToggleInventoryPerformed?.Invoke();
         }
     }
 }
