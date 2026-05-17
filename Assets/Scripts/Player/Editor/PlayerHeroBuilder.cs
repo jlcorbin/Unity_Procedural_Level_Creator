@@ -11,8 +11,10 @@
 //   PlayerCapsuleTuner.cs
 //
 // What this builder does NOT do:
-//   - Build the WeaponHitbox child (deep bone-tree surgery — owned by
-//     PlayerCombatHitboxBuilder which still exists separately).
+//   - Build a WeaponHitbox child. As of M20b, the weapon WorldPrefab itself
+//     acts as the hitbox — each weapon prefab must carry its own Collider
+//     (isTrigger=true), kinematic Rigidbody, and HitboxRelay. The static
+//     WeaponHitbox child under weapon_r has been retired.
 //   - Build the HUD prefab or wire CharacterStats_Player.asset assignment
 //     (owned by PlayerHUDBuilder).
 //   - Place the player in a scene or set up the Cinemachine camera
@@ -109,6 +111,7 @@ namespace LevelGen.Player.Editor
                 AddIfMissing<PlayerDodge>(contents, added, already);
                 AddIfMissing<MouseLook>(contents, added, already);
                 AddIfMissing<TargetLock>(contents, added, already);
+                AddIfMissing<PlayerEquipmentVisuals>(contents, added, already);
                 AddIfMissing<PlayerHero>(contents, added, already);
 
                 // ── Step 4: wire PlayerHero SerializeField refs ───────────
@@ -141,6 +144,10 @@ namespace LevelGen.Player.Editor
                     $"  UnityEvent bindings: {wired}/{s_Bindings.Length}\n" +
                     $"  Tag: Player; CameraTarget at local (0, 1.6, 0); " +
                     $"CC radius=0.4 (M11)."
+                );
+                Debug.Log(
+                    "[PlayerHeroBuilder] PlayerEquipmentVisuals added — " +
+                    "wire _weaponSocket manually (drag weapon_r bone in Inspector)."
                 );
 
                 // Reload + select for visual confirmation
@@ -360,6 +367,7 @@ namespace LevelGen.Player.Editor
             WireProp(so, "_hitReaction",         root.GetComponent<PlayerHitReaction>());
             WireProp(so, "_death",               root.GetComponent<PlayerDeath>());
             WireProp(so, "_interactor",          root.GetComponent<PlayerInteractor>());
+            WireProp(so, "_equipmentVisuals",    root.GetComponent<PlayerEquipmentVisuals>());
             WireProp(so, "_targetLock",          root.GetComponent<TargetLock>());
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(hero);

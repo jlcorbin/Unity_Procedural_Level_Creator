@@ -45,8 +45,9 @@ namespace LevelGen.Player.Editor
         private const string HUDPrefabPath           = "Assets/Prefabs/UI/PlayerHUD.prefab";
         private const string DamageNumberPrefabPath  = "Assets/Prefabs/UI/DamageNumber.prefab";
         private const string SpawnerPrefabPath       = "Assets/Prefabs/UI/DamageNumberSpawner.prefab";
-        private const string TargetableSrcPath       = "Assets/Scripts/Combat/Targetable.cs";
-        private const string SpawnerSrcPath          = "Assets/Scripts/UI/DamageNumberSpawner.cs";
+        private const string TargetableSrcPath         = "Assets/Scripts/Combat/Targetable.cs";
+        private const string SpawnerSrcPath            = "Assets/Scripts/UI/DamageNumberSpawner.cs";
+        private const string EquipmentVisualsSrcPath   = "Assets/Scripts/Player/PlayerEquipmentVisuals.cs";
 
         [MenuItem("LevelGen/Player/Validate Player_Hero")]
         public static void Run()
@@ -172,20 +173,12 @@ namespace LevelGen.Player.Editor
                 combatType.GetMethod("CancelAttack", BindingFlags.Public | BindingFlags.Instance,
                     null, Type.EmptyTypes, null) != null,
                 "reflection");
-            // WeaponHitbox child presence (owned by PlayerCombatHitboxBuilder)
-            bool hasHitbox = false;
-            string hitboxDetail = "weapon_r child not found";
-            var weaponR = FindChildRecursive(prefab.transform, "weapon_r");
-            if (weaponR == null) weaponR = FindChildRecursive(prefab.transform, "Weapon_R");
-            if (weaponR != null)
-            {
-                var wh = FindChildByName(weaponR, "WeaponHitbox");
-                hasHitbox = wh != null;
-                hitboxDetail = hasHitbox
-                    ? $"WeaponHitbox under '{weaponR.name}'"
-                    : $"weapon bone '{weaponR.name}' found but no WeaponHitbox child — run 'Add Weapon Hitbox to Player_Hero'";
-            }
-            Check("41 WeaponHitbox child under weapon_r", hasHitbox, hitboxDetail);
+            // Check 41 — RETIRED (M20b). The static WeaponHitbox child under
+            // weapon_r has been removed. Each weapon WorldPrefab now acts as its
+            // own hitbox and is wired at runtime by PlayerEquipmentVisuals.
+            // This check always passes with a note so numbering 1–67 remains stable.
+            Check("41 WeaponHitbox child under weapon_r [RETIRED — hitbox now lives on weapon WorldPrefab]",
+                true, "dynamic hitbox via PlayerEquipmentVisuals — no static child expected");
 
             // ── 42: PlayerDodge.IsDodging property ───────────────────────────
             Check("42 PlayerDodge.IsDodging property",
@@ -357,6 +350,47 @@ namespace LevelGen.Player.Editor
                     : $"subscribe={sub}, unsubscribe={unsub} (both required — static event leak prevention)";
             }
             Check("63 DamageNumberSpawner.cs subscribes+unsubscribes HandleAnyHit (leak check)", ok63, detail63);
+
+            // ════════════════════════════════════════════════════════════════
+            // 64-67: PlayerEquipmentVisuals (M20)
+            // ════════════════════════════════════════════════════════════════
+
+            // 64: Component present on prefab root
+            bool ok64 = prefab.GetComponent<PlayerEquipmentVisuals>() != null;
+            Check("64 PlayerEquipmentVisuals component present on Player_Hero.prefab root",
+                ok64,
+                ok64 ? "found" : "MISSING — run 'Build Player_Hero Prefab'");
+
+            // 65: PlayerHero._equipmentVisuals SerializeField ref is non-null
+            if (hero != null)
+            {
+                CheckRef(new SerializedObject(hero), "_equipmentVisuals", "65", ref pass, ref fail);
+            }
+            else
+            {
+                Check("65 PlayerHero._equipmentVisuals SerializeField ref", false,
+                    "PlayerHero component missing — see check 3");
+            }
+
+            // 66 & 67: Source-scan — subscribe (+= ) and unsubscribe (-=) present
+            bool ok66 = false, ok67 = false;
+            string detail66 = $"source missing at {EquipmentVisualsSrcPath}";
+            string detail67 = detail66;
+            string evSrcFull = Path.Combine(Application.dataPath, "..", EquipmentVisualsSrcPath);
+            if (File.Exists(evSrcFull))
+            {
+                string evSrc = File.ReadAllText(evSrcFull);
+                ok66 = evSrc.Contains("OnWeaponEquipped +=");
+                ok67 = evSrc.Contains("OnWeaponEquipped -=");
+                detail66 = ok66
+                    ? "OnWeaponEquipped += subscribe found"
+                    : "OnWeaponEquipped += not found — static event leak risk";
+                detail67 = ok67
+                    ? "OnWeaponEquipped -= unsubscribe found"
+                    : "OnWeaponEquipped -= not found — static event leak risk";
+            }
+            Check("66 PlayerEquipmentVisuals.cs subscribes to OnWeaponEquipped (+=)", ok66, detail66);
+            Check("67 PlayerEquipmentVisuals.cs unsubscribes from OnWeaponEquipped (-=)", ok67, detail67);
 
             Summary(pass, fail);
         }

@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 59752c36578a7e8438b0c9933082b539, type: 3}
+  m_Name: ItemData_Shield16
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Items.ItemData
+  _id: dark_shield
+  _displayName: Dark Shield
+  _description: 
+  _slot: 1
+  _damage: 5
+  _requiredLevel: 0
+  _icon: {fileID: 0}
+  _worldPrefab: {fileID: 3454139959118909620, guid: f744726a886cd1b40a8d1eb38911a583, type: 3}
+  _rarity: 0

@@ -48,10 +48,23 @@ namespace LevelGen.Player
         [Tooltip("Fallback damage when no weapon is equipped in the Melee slot (unarmed swing).")]
         [SerializeField] private int _fallbackDamage = 10;
 
-        [Tooltip("Trigger collider on the weapon. Enabled during the active " +
-                 "frames of an attack via OnHitboxOpen / OnHitboxClose " +
-                 "AnimationEvents. Default disabled.")]
-        [SerializeField] private Collider hitbox;
+        // ── Runtime hitbox (assigned by PlayerEquipmentVisuals on equip) ────
+        // Not a SerializeField — the weapon WorldPrefab acts as its own hitbox
+        // and is handed here by PlayerEquipmentVisuals after it instantiates the
+        // prefab under weapon_r. Will be null when the player is unarmed.
+        private Collider _hitbox;
+
+        /// <summary>
+        /// The active trigger collider on the currently-equipped weapon prefab.
+        /// Assigned at runtime by <see cref="PlayerEquipmentVisuals"/> when a
+        /// weapon is equipped or unequipped. <c>null</c> when unarmed —
+        /// <see cref="OnHitboxOpen"/> will log a warning and no-op in that state.
+        /// </summary>
+        public Collider Hitbox
+        {
+            get => _hitbox;
+            set => _hitbox = value;
+        }
 
         // ── Cached refs / state ─────────────────────────────────────────────
 
@@ -242,7 +255,7 @@ namespace LevelGen.Player
         {
             _attackBuffered = false;
             _currentAttackHitList.Clear();
-            if (hitbox != null) hitbox.enabled = false;
+            if (_hitbox != null) _hitbox.enabled = false;
         }
 
         // ── Public damage entry point ───────────────────────────────────────
@@ -279,14 +292,17 @@ namespace LevelGen.Player
         /// </summary>
         public void OnHitboxOpen()
         {
-            if (hitbox == null)
+            if (_hitbox == null)
             {
-                Debug.LogError("[PlayerCombat] OnHitboxOpen fired but 'hitbox' is unassigned. " +
-                               "Run 'LevelGen ▶ Combat ▶ Add Weapon Hitbox to Player_Hero'.", this);
+                // Expected when the player is unarmed — no weapon prefab is
+                // instantiated under weapon_r, so no hitbox collider has been
+                // handed to us by PlayerEquipmentVisuals. Log a warning (not an
+                // error) and return; this is not a misconfiguration.
+                Debug.LogWarning("[PlayerCombat] OnHitboxOpen fired but no hitbox is assigned — no weapon equipped.", this);
                 return;
             }
             _currentAttackHitList.Clear();
-            hitbox.enabled = true;
+            _hitbox.enabled = true;
         }
 
         /// <summary>
@@ -296,8 +312,8 @@ namespace LevelGen.Player
         /// </summary>
         public void OnHitboxClose()
         {
-            if (hitbox == null) return;
-            hitbox.enabled = false;
+            if (_hitbox == null) return;
+            _hitbox.enabled = false;
         }
 
         // ── Hitbox routing (called from HitboxRelay.OnTriggerEnter) ────────
@@ -362,8 +378,8 @@ namespace LevelGen.Player
             stats.ApplyDamage(dmg);
             _currentAttackHitList.Add(targetable);
 
-            Vector3 hitPoint = hitbox != null
-                ? other.ClosestPoint(hitbox.bounds.center)
+            Vector3 hitPoint = _hitbox != null
+                ? other.ClosestPoint(_hitbox.bounds.center)
                 : other.bounds.center;
             targetable.RaiseHit(hitPoint, dmg);
 

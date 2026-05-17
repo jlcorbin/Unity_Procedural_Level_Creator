@@ -5358,6 +5358,352 @@ existence check if a future milestone wants 43.
   before writing any input code — do not assume the generated-class
   pattern.
 
+## M20 — Visual Weapon Mesh Swap (2026-05-16)
+
+Closes the cosmetic gap left open by M17. Picking up a weapon now
+changes the visible mesh under the `weapon_r` bone in addition to
+changing how hard the player hits. Scripts only — no prefab edits
+(the `_weaponSocket` field requires a manual Inspector drag after
+each build, because `weapon_r` is an extra bone outside the Humanoid
+skeleton and cannot be resolved programmatically).
+
+### Architectural decisions (locked)
+
+- **Pure consumer pattern**: `PlayerEquipmentVisuals` subscribes to
+  `PlayerInventory.OnWeaponEquipped` in `OnEnable` and unsubscribes in
+  `OnDisable`. It never reaches back into `PlayerInventory` beyond the
+  event subscription. Single-direction dependency preserved.
+- **No fallback mesh**: empty hand is the correct unarmed state.
+  When `null` or `item.WorldPrefab == null` is received, all children of
+  the socket are destroyed and the socket is left empty. No default
+  "fist" prefab is spawned.
+- **Destroy (not DestroyImmediate)**: this is runtime code. Children
+  are iterated in reverse index order before the new prefab is
+  instantiated, preventing the loop from skipping children as the
+  count changes.
+- **`worldPositionStays: false` on Instantiate**: the `weapon_r` bone
+  already carries the correct world orientation baked into the rig.
+  Local identity (pos=0, rot=identity, scale=1) is therefore the correct
+  placement for any item prefab parented to it.
+- **`_weaponSocket` is NOT auto-resolved**: `weapon_r` is an extra
+  bone outside the standard Humanoid skeleton and is not returned by
+  `Animator.GetBoneTransform`. It must be wired manually by dragging the
+  bone from the `MaleCharacterPBR` hierarchy in the Inspector. The
+  builder logs a clear reminder after every build.
+- **`PlayerEquipmentVisuals` added to `PlayerHero` manifest**:
+  follows the established `[RequireComponent]` + SerializeField +
+  public property + Awake fallback pattern from M12-R. The
+  `_weaponSocket` field on `PlayerEquipmentVisuals` itself is NOT wired
+  by the builder (it requires a scene-time drag to a specific bone
+  child, not a root-level `GetComponent` lookup).
+
+### Single-direction dependency
+
+  PlayerInventory.OnWeaponEquipped → PlayerEquipmentVisuals.HandleWeaponEquipped
+    → Destroy existing children of _weaponSocket
+    → Instantiate(item.WorldPrefab, _weaponSocket)
+
+`PlayerEquipmentVisuals` never writes to `PlayerInventory`. The
+`OnWeaponEquipped` event fires whenever `PlayerInventory.Equip` or
+`PlayerInventory.Unequip` is called — the same event `InventoryHUD`
+(M18) already subscribes to. Multiple consumers of the same event are
+supported cleanly.
+
+### Files
+
+NEW (1):
+- `Assets/Scripts/Player/PlayerEquipmentVisuals.cs` — pure consumer of
+  `PlayerInventory.OnWeaponEquipped`. `[DisallowMultipleComponent]`.
+  One `[SerializeField] Transform _weaponSocket` with `[Tooltip]`.
+  `OnEnable` / `OnDisable` subscribe / unsubscribe with null guard on
+  `PlayerInventory.Instance`. `HandleWeaponEquipped(ItemData)` destroys
+  existing socket children, instantiates `item.WorldPrefab` as a new
+  child, logs the swap. No `Update`. No other public surface.
+
+MODIFIED (3):
+- `Assets/Scripts/Player/PlayerHero.cs` — added
+  `[RequireComponent(typeof(PlayerEquipmentVisuals))]`, a
+  `[SerializeField] PlayerEquipmentVisuals _equipmentVisuals` field
+  under a new "Equipment Visuals" header, a public
+  `EquipmentVisuals => _equipmentVisuals` property with XML doc, and
+  an Awake fallback `GetComponent<PlayerEquipmentVisuals>()`. No other
+  changes.
+- `Assets/Scripts/Player/Editor/PlayerHeroBuilder.cs` — added
+  `AddIfMissing<PlayerEquipmentVisuals>` to the component-add block and
+  `WireProp(so, "_equipmentVisuals", ...)` to `WirePlayerHeroRefs`.
+  Added a `Debug.Log` reminder to wire `_weaponSocket` manually. No
+  other changes.
+- `Assets/Scripts/Player/Editor/PlayerHeroValidator.cs` — added
+  `EquipmentVisualsSrcPath` const and appended checks 64–67:
+    64 — `PlayerEquipmentVisuals` component present on `Player_Hero.prefab` root
+    65 — `PlayerHero._equipmentVisuals` SerializeField ref is non-null
+    66 — Source scan: `OnWeaponEquipped +=` subscribe present
+    67 — Source scan: `OnWeaponEquipped -=` unsubscribe present (leak prevention)
+  Total: 67 checks (was 63 after M18 additions). Existing checks 1-63
+  untouched.
+
+### Pending follow-up (Jason runs after CC completes)
+
+1. Re-open Unity — let it compile. New `PlayerEquipmentVisuals` type
+   will appear in the Component menu.
+2. `LevelGen ▶ Player ▶ Build Player_Hero Prefab` — adds
+   `PlayerEquipmentVisuals` component to the prefab root, wires
+   `_equipmentVisuals` on `PlayerHero`. Logs the `_weaponSocket`
+   manual-wiring reminder.
+3. **Manual step — wire `_weaponSocket`**: open `Player_Hero.prefab`,
+   expand `MaleCharacterPBR` in the hierarchy, find the `weapon_r` bone
+   (under the right hand bones), and drag it into the `_weaponSocket`
+   field on the `PlayerEquipmentVisuals` component. Save the prefab.
+   This step must be repeated after every full prefab rebuild.
+4. `LevelGen ▶ Player ▶ Validate Player_Hero` — expect
+   67 PASS / 0 FAIL. Check 65 (`_equipmentVisuals` SerializeField ref)
+   should pass; check 64 (`PlayerEquipmentVisuals` present) should pass.
+   Note: check 65 verifies the ref to the component, NOT the
+   `_weaponSocket` socket itself — socket wiring is confirmed by
+   play-mode smoke test only.
+5. Author a weapon `ItemData` asset with a `WorldPrefab` slot filled
+   (e.g. drag `OHS03PBR.prefab` into the `World Prefab` field on
+   `ItemData_LightSword.asset`).
+6. Play-mode smoke test: place a `WorldItem` in the test scene wired to
+   the item asset → walk over → press E → weapon mesh appears on the
+   `weapon_r` socket, replacing the default equipped mesh. Press I →
+   click Unequip → socket clears. Re-equip → mesh returns.
+
+### Deferred / out of scope
+
+- Auto-resolving `_weaponSocket` at runtime (would require iterating
+  the full bone hierarchy by name — fragile if the rig is replaced).
+- OffHand / shield socket swapping (same pattern; needs a `_shieldSocket`
+  field and a slot filter on the event payload).
+- Scale / rotation adjustments per weapon prefab (currently local
+  identity — the `weapon_r` bone orientation baked in the rig is the
+  canonical placement. Per-weapon offset would need an additional
+  `ItemData` field for local transform overrides).
+- Weapon drop on unequip (spawn the `WorldPrefab` at the player's feet
+  as a pickup — requires a new WorldItem spawn call in `PlayerInventory.
+  Unequip`, which is separate from the visual swap).
+
+### Lessons logged
+
+- `weapon_r` is an extra bone appended to the World Bundle rig, not
+  part of the standard Humanoid avatar body. `Animator.GetBoneTransform`
+  only returns bones in the standard Humanoid set (HumanBodyBones enum);
+  extra bones are invisible to it. Manual `Transform` drag is the only
+  reliable way to wire a reference to a non-Humanoid bone in a prefab.
+- `Instantiate(prefab, parent)` with no additional args uses
+  `worldPositionStays: false` by default in Unity 6.x, which is the
+  desired behaviour here (local identity relative to the socket bone).
+  The overload is called out explicitly in comments so future readers
+  understand the choice.
+- The `OnWeaponEquipped` event fires on both `Equip` and `Unequip`.
+  The null-check inside `HandleWeaponEquipped` (`if (item == null …
+  return`) handles the unequip path cleanly without a separate event.
+  Future systems that need to differentiate equip vs. unequip can
+  inspect the `EquipSlot` via a richer event payload — that would be a
+  separate `OnWeaponUnequipped` event or an `Action<EquipSlot,
+  ItemData>` signature change.
+
+### M20b — Weapon Prefab as Hitbox (2026-05-16)
+
+Follow-up to M20. Instead of a static `WeaponHitbox` child baked into
+the `Player_Hero.prefab` hierarchy, the weapon's `WorldPrefab` itself
+is now the hitbox. `PlayerEquipmentVisuals` wires the collider and relay
+at runtime when a weapon is instantiated under `weapon_r`. This removes
+the hard dependency on a pre-built hitbox child and makes every weapon
+prefab self-contained for collision.
+
+#### Weapon prefab authoring standard
+
+Every weapon `WorldPrefab` (referenced via `ItemData.WorldPrefab`) MUST
+carry the following three components to participate in the hitbox system:
+
+1. **Collider** (convex `MeshCollider` or `BoxCollider`): `isTrigger = true`,
+   `enabled = false` by default. Enabled only for the active damage frames
+   of a swing by `PlayerCombat.OnHitboxOpen / OnHitboxClose`.
+2. **Rigidbody** (`isKinematic = true`, `useGravity = false`): required for
+   `OnTriggerEnter` to fire on a collider that moves via skeletal animation.
+   Unity treats a kinematic-less collider on a moving bone as a static
+   collider that teleports — trigger events do not dispatch. This is the
+   same lesson from M3 / M11 (Dummy weapon hitbox). Same rule, now applied
+   per-weapon-prefab.
+3. **HitboxRelay**: `combat` reference left `null` in the prefab asset.
+   `PlayerEquipmentVisuals.HandleWeaponEquipped` writes `relay.Combat = pc`
+   at runtime after instantiation. Never wire it in the prefab — the
+   `PlayerCombat` reference must come from the scene's player, not from
+   a baked prefab reference.
+
+This standard applies to all equipment slots: melee swords, shields
+(OffHand), wands (ranged), etc. An OffHand prefab that should NOT deal
+damage (purely visual) may omit the Collider and HitboxRelay entirely.
+
+#### Changes shipped in M20b
+
+**PlayerCombat.cs** (modified):
+- `hitbox` `[SerializeField]` replaced by a private `_hitbox` backing field
+  and a public `Collider Hitbox { get; set; }` property. All internal
+  references updated to `_hitbox`.
+- `OnHitboxOpen`: null `_hitbox` now emits `Debug.LogWarning` (not
+  `LogError`) — expected when unarmed — and returns early.
+- No other behaviour changes.
+
+**PlayerEquipmentVisuals.cs** (modified from M20 base):
+- After instantiating the weapon `WorldPrefab`, resolves `HitboxRelay` and
+  `Collider` from the new instance; resolves `PlayerCombat` via
+  `GetComponentInParent`; sets `pc.Hitbox = col` and `relay.Combat = pc`
+  (both null-guarded).
+- On unequip (null item or null `WorldPrefab`), after destroying children,
+  gets `PlayerCombat` via `GetComponentInParent` and sets `pc.Hitbox = null`.
+
+**HitboxRelay.cs** (modified):
+- Added public `PlayerCombat Combat { get => combat; set => combat = value; }`
+  property wrapping the existing private `combat` field. No other changes.
+
+**PlayerHeroValidator.cs** (modified):
+- Check 41 retired: always passes with label
+  `41 WeaponHitbox child [RETIRED — hitbox now lives on weapon WorldPrefab]`
+  and detail `dynamic hitbox via PlayerEquipmentVisuals — no static child expected`.
+  Total check count remains 67.
+
+**PlayerHeroBuilder.cs** (modified):
+- All WeaponHitbox-building code removed. The builder header comment
+  explicitly notes the static hitbox child has been retired and describes
+  the new per-weapon-prefab authoring requirement. A log reminder asks the
+  user to wire `_weaponSocket` manually and author weapon prefabs per the
+  standard above.
+
+#### Files changed
+
+- `Assets/Scripts/Player/PlayerCombat.cs` (`Hitbox` property, `_hitbox` field,
+  `OnHitboxOpen` warning)
+- `Assets/Scripts/Player/PlayerEquipmentVisuals.cs` (equip + unequip hitbox wiring)
+- `Assets/Scripts/Combat/HitboxRelay.cs` (`Combat` property added)
+- `Assets/Scripts/Player/Editor/PlayerHeroValidator.cs` (check 41 retired)
+- `Assets/Scripts/Player/Editor/PlayerHeroBuilder.cs` (WeaponHitbox code removed)
+
+#### Pending follow-up
+
+- Author weapon `WorldPrefab` assets per the authoring standard above
+  (Collider + kinematic Rigidbody + HitboxRelay with null combat ref).
+- Verify play-mode: equip a weapon → swing → damage numbers appear on hit.
+  Unequip → swing → `[PlayerCombat] OnHitboxOpen fired but no hitbox is
+  assigned — no weapon equipped.` warning appears (expected, not an error).
+
+#### WeaponPrefabBuilder (added post-M20b, 2026-05-16)
+
+`Assets/Scripts/Items/Editor/WeaponPrefabBuilder.cs` — idempotent editor
+builder for weapon `WorldPrefab` assets. Namespace `LevelGen.Items.Editor`.
+Menu: `LevelGen ▶ Weapons ▶ Build OHS04_Sword Weapon Prefab`.
+
+On first run: creates `Assets/Prefabs/Weapons/WeaponPrefab_OHS04_Sword.prefab`
+(OHS04 FBX as a child mesh + disabled trigger BoxCollider + kinematic Rigidbody
++ HitboxRelay with `combat = null`) and `Assets/Data/Items/ItemData_OHS04_Sword.asset`
+(id=`ohs04_sword`, slot=`Melee`, damage=15, rarity=`Common`, `worldPrefab` → the
+built prefab). On subsequent runs the prefab is overwritten in place (GUID
+preserved) and only the ItemData `worldPrefab` field is updated (user-tuned values
+such as damage are not overwritten).
+
+The real work lives in a private `BuildWeapon(fbxPath, prefabName, itemId,
+displayName, slot, damage, rarity, colliderCenter, colliderSize)` parameterised
+method. Adding a new weapon is: (1) add a constant block for the weapon's paths
+and values, (2) add a `[MenuItem]` method that calls `BuildWeapon()` with those
+values. No registry or loop system needed.
+
+BoxCollider dimensions in the current build are UNVERIFIED first-pass estimates
+(`center=(0,0,0.35)`, `size=(0.1,0.1,0.7)`). Open `WeaponPrefab_OHS04_Sword.prefab`
+in Prefab Mode and use the collider bounds handle gizmo to verify and tune against
+the actual sword mesh before shipping to play-test.
+
+Remaining manual steps after running the builder:
+1. Collider tuning in Prefab Mode (see above).
+2. WorldItem scene wiring: create a `WorldItem` GameObject in the test scene,
+   drag `ItemData_OHS04_Sword.asset` into its `_itemData` slot.
+3. Play-mode smoke test: walk near the WorldItem → press E → OHS04 mesh appears
+   on the `weapon_r` socket → attack a Grunt → damage numbers show 15 (not 10
+   unarmed fallback) → Assassinate still shows 99999 (override path intact).
+
+### M20c — Full weapon library + validator (2026-05-16)
+
+Expands M20b's single-weapon builder into the complete 57-weapon library and
+fixes the grey-mesh issue caused by sourcing from raw FBX files.
+
+**Mesh source fix**: `BuildWeapon` now loads the publisher's pre-built
+`Prefab/Weapons/{PrefabName}.prefab` (carries correct URP materials) instead
+of the raw `Mesh/Weapons/{PrefabName}.fbx`. The publisher prefab is
+instantiated as a child at local identity under the weapon prefab root; the
+root still owns BoxCollider + Rigidbody + HitboxRelay.
+
+**Single source-of-truth table**: `WeaponPrefabBuilder.AllWeapons` is an
+`internal static WeaponEntry[]` covering all 57 canonical Wave PBR weapons.
+`WeaponEntry` is an `internal struct` in the same `LevelGen.Items.Editor`
+namespace (defined at the bottom of `WeaponPrefabBuilder.cs`). Both the
+builder and the validator iterate this table — no drift possible between
+"what is built" and "what is checked".
+
+**Category defaults** (written on first ItemData creation only; preserved on re-run):
+
+| Category | Slot | Damage | Collider center | Collider size |
+|----------|------|--------|----------------|---------------|
+| OHS | Melee | 15 | (0, 0, 0.35) | (0.10, 0.10, 0.70) |
+| THS | Melee | 25 | (0, 0, 0.50) | (0.12, 0.12, 1.00) |
+| Spear | Melee | 20 | (0, 0, 0.60) | (0.08, 0.08, 1.20) |
+| Shield | OffHand | 5 | (0, 0, 0.05) | (0.50, 0.60, 0.10) |
+| Bow | Ranged | 18 | (0, 0, 0.30) | (0.08, 0.50, 0.08) |
+| Arrows | Ranged | 0 | (0, 0, 0.20) | (0.05, 0.05, 0.40) |
+| Wand | Ranged | 18 | (0, 0, 0.30) | (0.06, 0.06, 0.60) |
+
+BoxCollider values are first-pass category estimates — tune each weapon in
+Prefab Mode using the collider bounds handle gizmo.
+
+**Idempotency**: on re-run, `_worldPrefab` is refreshed; `_damage`, `_rarity`,
+`_id`, `_displayName`, `_slot` are NOT overwritten on existing ItemData assets.
+
+**Duo duplicates skipped**: `OHS03PBR`, `OHS06PBR`, `Shield05PBR`, `Shield08PBR`
+are not in the Wave PBR `Prefab/Weapons/` folder and have no entries in
+`AllWeapons` — they are excluded by omission, not by explicit skip logic.
+
+**Menu structure** (final, under `LevelGen ▶ Weapons`):
+
+| Menu item | File | Description |
+|-----------|------|-------------|
+| Build All Weapon Prefabs | WeaponPrefabBuilder.cs | Builds all 57 prefabs + ItemData assets |
+| Validate Weapon Prefabs | WeaponPrefabValidator.cs | 114 read-only checks (57 × 2) |
+
+The old `Build OHS04_Sword Weapon Prefab` single-weapon menu has been removed.
+
+**Validator** (`Assets/Scripts/Items/Editor/WeaponPrefabValidator.cs`):
+Menu: `LevelGen ▶ Weapons ▶ Validate Weapon Prefabs`. 114 checks (57 weapons
+× 2 checks each). For each weapon: (1) `WeaponPrefab_{Name}.prefab` exists at
+`Assets/Prefabs/Weapons/`; (2) `ItemData_{Name}.asset` exists at
+`Assets/Data/Items/` AND has a non-null `_worldPrefab` field (read via
+SerializedObject). Summary line: `[WeaponPrefabValidator] X PASS / Y FAIL out
+of 114 checks`.
+
+**Files created/modified**:
+- `Assets/Scripts/Items/Editor/WeaponPrefabBuilder.cs` (MODIFIED — full rewrite;
+  57-weapon AllWeapons table; publisher-prefab mesh source; Build All menu;
+  WeaponEntry internal struct)
+- `Assets/Scripts/Items/Editor/WeaponPrefabValidator.cs` (NEW — 114 checks,
+  reads WeaponPrefabBuilder.AllWeapons as single source of truth)
+
+**Pending follow-up** (Jason runs after CC completes):
+1. `LevelGen ▶ Weapons ▶ Build All Weapon Prefabs` — builds 57 prefabs and
+   ItemData assets. Expect 57 log lines + a summary "57 built / 0 skipped".
+2. `LevelGen ▶ Weapons ▶ Validate Weapon Prefabs` — expect 114 PASS / 0 FAIL.
+3. Open any weapon prefab in Prefab Mode, verify it shows the publisher's
+   textured mesh as a child (not a grey untextured primitive).
+4. Tune BoxCollider bounds per weapon category using the green bounds handle gizmo.
+5. Smoke test in Play mode: pick up a weapon via WorldItem → it appears on
+   weapon_r socket with correct materials.
+
+## Session log — 2026-05-17
+
+M20 (Visual Weapon Mesh Swap), M20b (Weapon Prefab as Hitbox), and M20c (Full
+Weapon Library — 57 weapons) shipped. Validators: Player_Hero 67/67 PASS,
+Weapon Prefabs 114/114 PASS. Static WeaponHitbox child removed from Player_Hero;
+hitbox now lives on each weapon WorldPrefab, wired at runtime by
+PlayerEquipmentVisuals. Session closed. Recommended next: M19 (Enemy AI) or
+M22 (Loot drops on enemy death).
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

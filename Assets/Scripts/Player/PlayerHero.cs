@@ -52,6 +52,7 @@ namespace LevelGen.Player
     [RequireComponent(typeof(PlayerDeath))]
     [RequireComponent(typeof(PlayerInteractor))]
     [RequireComponent(typeof(PlayerInventory))]
+    [RequireComponent(typeof(PlayerEquipmentVisuals))]
     [RequireComponent(typeof(MouseLook))]
     [RequireComponent(typeof(TargetLock))]
     [DisallowMultipleComponent]
@@ -86,6 +87,12 @@ namespace LevelGen.Player
         [Header("Interaction")]
         [SerializeField] private PlayerInteractor _interactor;
 
+        // ── Equipment Visuals (M20) ─────────────────────────────────────────
+        [Header("Equipment Visuals")]
+        [Tooltip("Swaps the visible weapon mesh when an item is equipped. " +
+                 "Wire _weaponSocket manually in the Inspector after build.")]
+        [SerializeField] private PlayerEquipmentVisuals _equipmentVisuals;
+
         // ── Target Lock (M15) ───────────────────────────────────────────────
         [Header("Target Lock")]
         [SerializeField] private TargetLock _targetLock;
@@ -105,6 +112,14 @@ namespace LevelGen.Player
         public PlayerHitReaction HitReaction           => _hitReaction;
         public PlayerDeath Death                       => _death;
         public PlayerInteractor Interactor             => _interactor;
+
+        /// <summary>
+        /// Swaps the visible weapon mesh under the <c>weapon_r</c> socket
+        /// in response to <see cref="PlayerInventory.OnWeaponEquipped"/>.
+        /// Wire <c>_weaponSocket</c> manually in the Inspector.
+        /// </summary>
+        public PlayerEquipmentVisuals EquipmentVisuals => _equipmentVisuals;
+
         public TargetLock TargetLock                   => _targetLock;
 
         // ── Lifecycle ───────────────────────────────────────────────────────
@@ -130,8 +145,9 @@ namespace LevelGen.Player
             if (_combat              == null) _combat              = GetComponent<PlayerCombat>();
             if (_hitReaction         == null) _hitReaction         = GetComponent<PlayerHitReaction>();
             if (_death               == null) _death               = GetComponent<PlayerDeath>();
-            if (_interactor          == null) _interactor          = GetComponent<PlayerInteractor>();
-            if (_targetLock          == null) _targetLock          = GetComponent<TargetLock>();
+            if (_interactor           == null) _interactor           = GetComponent<PlayerInteractor>();
+            if (_equipmentVisuals     == null) _equipmentVisuals     = GetComponent<PlayerEquipmentVisuals>();
+            if (_targetLock           == null) _targetLock           = GetComponent<TargetLock>();
 
             // M15: inject the input reader so TargetLock can subscribe to
             // OnLockOnPerformed. PlayerHero owns this call site; TargetLock
