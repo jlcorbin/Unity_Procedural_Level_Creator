@@ -67,8 +67,17 @@ namespace LevelGen.Input
             if (!hasFocus) Unlock();
         }
 
+        /// <summary>
+        /// Set to true by <see cref="Lock"/> each time the cursor is locked.
+        /// <c>PlayerInputReader.OnLook</c> reads and clears this flag to
+        /// suppress the OS cursor-warp delta that the Input System reports
+        /// as a mouse-delta event on the frame the lock engages.
+        /// </summary>
+        public static bool SuppressLookThisFrame;
+
         private void Lock()
         {
+            SuppressLookThisFrame = true;
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
             IsLocked = true;

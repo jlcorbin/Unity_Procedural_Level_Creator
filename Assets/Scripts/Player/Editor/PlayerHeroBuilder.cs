@@ -62,6 +62,7 @@ namespace LevelGen.Player.Editor
             ("Next",     "OnNext"),
             ("Sprint",   "OnSprint"),
             ("Dodge",    "OnDodge"),
+            ("Sneak",    "OnSneak"),
             ("LockOn",   "OnLockOn"),
         };
 
@@ -109,6 +110,7 @@ namespace LevelGen.Player.Editor
                 AddIfMissing<PlayerInteractor>(contents, added, already);
                 AddIfMissing<PlayerStamina>(contents, added, already);
                 AddIfMissing<PlayerDodge>(contents, added, already);
+                AddIfMissing<PlayerSneak>(contents, added, already);
                 AddIfMissing<MouseLook>(contents, added, already);
                 AddIfMissing<TargetLock>(contents, added, already);
                 AddIfMissing<PlayerEquipmentVisuals>(contents, added, already);
@@ -363,6 +365,7 @@ namespace LevelGen.Player.Editor
             WireProp(so, "_animator",            root.GetComponent<PlayerAnimator>());
             WireProp(so, "_stamina",             root.GetComponent<PlayerStamina>());
             WireProp(so, "_dodge",               root.GetComponent<PlayerDodge>());
+            WireProp(so, "_sneak",               root.GetComponent<PlayerSneak>());
             WireProp(so, "_combat",              root.GetComponent<PlayerCombat>());
             WireProp(so, "_hitReaction",         root.GetComponent<PlayerHitReaction>());
             WireProp(so, "_death",               root.GetComponent<PlayerDeath>());

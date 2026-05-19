@@ -32,6 +32,7 @@ namespace LevelGen.Player
         private const string ParamDeath       = "Death";
         private const string ParamDodgeTrigger   = "DodgeTrigger";
         private const string ParamDodgeDirection = "DodgeDirection";
+        private const string ParamSneak          = "Sneak";
 
         // ── Cached state ────────────────────────────────────────────────────
         private Animator _animator;
@@ -47,6 +48,7 @@ namespace LevelGen.Player
         private int _hashDeath;
         private int _hashDodgeTrigger;
         private int _hashDodgeDirection;
+        private int _hashSneak;
         private bool _ready;
 
         // ── Public API ──────────────────────────────────────────────────────
@@ -204,6 +206,19 @@ namespace LevelGen.Player
             _animator.SetTrigger(_hashDodgeTrigger);
         }
 
+        /// <summary>
+        /// Sets the Sneak bool on the Animator. Called each frame by
+        /// <see cref="PlayerSneak"/> to keep the Animator in sync with
+        /// the sneak input state. Safe to call before Awake — silently
+        /// dropped if the Animator is not yet resolved.
+        /// </summary>
+        /// <param name="isSneaking">True while the Sneak key is held.</param>
+        public void SetSneak(bool isSneaking)
+        {
+            if (!_ready) return;
+            _animator.SetBool(_hashSneak, isSneaking);
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -227,6 +242,7 @@ namespace LevelGen.Player
             _hashDeath       = Animator.StringToHash(ParamDeath);
             _hashDodgeTrigger   = Animator.StringToHash(ParamDodgeTrigger);
             _hashDodgeDirection = Animator.StringToHash(ParamDodgeDirection);
+            _hashSneak          = Animator.StringToHash(ParamSneak);
             _ready = true;
         }
     }

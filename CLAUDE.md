@@ -5704,6 +5704,72 @@ hitbox now lives on each weapon WorldPrefab, wired at runtime by
 PlayerEquipmentVisuals. Session closed. Recommended next: M19 (Enemy AI) or
 M22 (Loot drops on enemy death).
 
+## Session log — 2026-05-18
+
+- **CinemachineAutoBind vertical-axis reset**: `TryBind()` in
+  `Assets/Scripts/Player/CinemachineAutoBind.cs` now resets
+  `CinemachineOrbitalFollow.VerticalAxis.Value` to its `Center` immediately
+  after a successful bind. Fixes the camera pointing at the ground on Play
+  when Cinemachine serialized the last-used axis value into the scene.
+  `using Unity.Cinemachine` was already present — no new directive needed.
+- **Cursor-warp look suppression**: `MouseLook` gained a `public static bool
+  SuppressLookThisFrame` flag, set to `true` inside `Lock()` each time the
+  cursor is locked. `PlayerInputReader.OnLook` checks and clears the flag
+  before storing the delta — if the flag is set the look value is discarded
+  and the method returns early. This prevents the OS cursor-warp delta (reported
+  by the Input System as a mouse-delta event) from rotating the camera on the
+  frame that cursor lock engages. `using LevelGen.Input` added to
+  `PlayerInputReader.cs` (was not previously present).
+- **Walk speed 2 → 3.5 / sprint removed from movement / Dodge rebound V → Left Shift**:
+  `PlayerController.cs` — `walkSpeed` default raised from `2.0f` to `3.5f`. Sprint
+  logic removed from the movement pipeline: the `wantSprint` local, the
+  `sprintMultiplier` application, and the `_stamina` cached ref (field declaration
+  + `GetComponent<PlayerStamina>()` in Awake, both added in M9) are all gone;
+  `currentSpeed = walkSpeed` unconditionally. Removing `_stamina` is safe — its
+  only reader was the now-deleted `_stamina.CanSprint` sprint gate.
+  `IsSprintingNow` is kept (always `false`) so `PlayerStamina` and `PlayerAnimator`
+  dependents compile without change. `sprintMultiplier` SerializeField is retained in
+  the inspector but no longer affects movement. `InputSystem_Actions.inputactions` —
+  Dodge action's `<Keyboard>/v` binding (GUID `b3d8e5f2-...`) replaced with
+  `<Keyboard>/leftShift` (new GUID `c6e1f8a2-...`); Sprint action's
+  `<Keyboard>/leftShift` binding (GUID `f2e9ba44-...`) removed entirely; Sprint action
+  and its Gamepad / XR bindings remain so `PlayerInputReader.OnSprint` / `IsSprinting`
+  continue to compile. No changes to `PlayerInputReader.cs`, `PlayerStamina.cs`,
+  or `PlayerAnimator.cs`.
+- **LockIndicator world-space → local-space fix**: `LockIndicator.Init()` previously
+  stored `enemyRoot.position + Vector3.up * _yOffset` as a world-space `_basePosition`,
+  parented with `worldPositionStays: true`, and set `transform.position`. Because
+  `Update()` wrote the same baked world position back every frame, the indicator was
+  pinned to the enemy's spawn location and did not follow movement. Fixed by storing
+  `Vector3.up * _yOffset` as a local offset, parenting with `worldPositionStays: false`,
+  and using `transform.localPosition` in both `Init()` and `Update()`. The indicator
+  now rides the parent enemy transform correctly.
+- **M-Sneak — hold-to-sneak system**: V key (plain Button action, no Hold
+  interaction — a literal Hold interaction adds an activation delay; plain
+  Button gives "true while held, false on release" semantics) added to the
+  Player action map in `InputSystem_Actions.inputactions`. `PlayerInputReader`
+  gained an `IsSneaking` bool property (set true on started, false on canceled
+  via `OnSneak`) and the `OnSneak(InputAction.CallbackContext)` UnityEvent
+  endpoint. `PlayerController` gained a `_sneakSpeed = 2.0f` SerializeField;
+  the movement pipeline applies it as `currentSpeed = _sneakSpeed` while
+  `_input.IsSneaking` is true (overrides `walkSpeed` for that frame).
+  `PlayerAnimator` gained the `Sneak` bool parameter hash (`_hashSneak`,
+  const `ParamSneak = "Sneak"`) and a public `SetSneak(bool)` method,
+  `_ready`-gated like all sibling param setters. New `PlayerSneak` MonoBehaviour
+  bridges the input to the Animator each Update (`_animator.SetSneak(
+  _input.IsSneaking)`); it owns no movement logic and no clip selection.
+  `PlayerHero` manifest updated: `[RequireComponent(typeof(PlayerSneak))]`,
+  `[SerializeField] private PlayerSneak _sneak` (under "Movement & Animation"
+  header), public `Sneak` property, and Awake fallback
+  `if (_sneak == null) _sneak = GetComponent<PlayerSneak>()` placed after
+  the `_dodge` fallback. `PlayerHeroBuilder` updated: `AddIfMissing<PlayerSneak>`
+  after `AddIfMissing<PlayerDodge>`, `WireProp(so, "_sneak", ...)` after the
+  `_dodge` wiring call, and `("Sneak", "OnSneak")` added to `s_Bindings`
+  between Dodge and LockOn. Animator clip swap (sneak walk clip in the
+  override controller) is manual designer work — not driven by code.
+  Run `LevelGen ▶ Player ▶ Build Player_Hero Prefab` to apply the component
+  add and UnityEvent wiring to the prefab.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

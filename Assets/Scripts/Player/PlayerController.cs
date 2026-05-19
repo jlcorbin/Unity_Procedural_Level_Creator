@@ -35,10 +35,10 @@ namespace LevelGen.Player
     public class PlayerController : MonoBehaviour
     {
         [Header("Movement")]
-        [Tooltip("Walk speed in m/s. Tuned for milestone 1.")]
-        [SerializeField] private float walkSpeed = 2.0f;
+        [Tooltip("Walk speed in m/s.")]
+        [SerializeField] private float walkSpeed = 3.5f;
 
-        [Tooltip("Sprint speed multiplier applied to walkSpeed when IsSprinting && MoveZ > 0.7. Default 1.75 (3.5 m/s at 2.0 walk).")]
+        [Tooltip("Sprint speed multiplier. Sprint logic has been removed from the movement pipeline; this field is retained for inspector visibility but no longer affects movement speed.")]
         [SerializeField] private float sprintMultiplier = 1.75f;
 
         [Tooltip("Gravity acceleration in m/s². Negative.")]
@@ -54,6 +54,10 @@ namespace LevelGen.Player
         [Tooltip("Jump height in meters at the peak of the arc. Fixed-height jump; gravity completes the arc. Air-time ≈ 2 * sqrt(2h/|g|) ≈ 0.99s at default 1.2m / -9.81 gravity.")]
         [SerializeField] private float jumpHeight = 1.2f;
 
+        [Header("Sneak")]
+        [Tooltip("Movement speed in m/s while sneaking.")]
+        [SerializeField] private float _sneakSpeed = 2.0f;
+
         [Header("Target Lock")]
         [Tooltip("Slerp rate per second used to rotate the player body toward a locked target. " +
                  "Higher values snap faster; lower values feel more fluid.")]
@@ -68,7 +72,6 @@ namespace LevelGen.Player
         private PlayerInputReader _input;
         private PlayerAnimator _anim;
         private PlayerCombat _combat;        // optional — null tolerated (gate disabled)
-        private PlayerStamina _stamina;      // optional — null tolerated (sprint always allowed)
         private PlayerDodge _dodge;          // optional — null tolerated (no dodge gate)
         private float _verticalVelocity;
 
@@ -104,7 +107,6 @@ namespace LevelGen.Player
             _input = GetComponent<PlayerInputReader>();
             _anim = GetComponent<PlayerAnimator>();
             _combat = GetComponent<PlayerCombat>();   // optional — null tolerated
-            _stamina = GetComponent<PlayerStamina>(); // optional — null tolerated (sprint always allowed if missing)
             _dodge   = GetComponent<PlayerDodge>();   // optional — null tolerated (no dodge gate if missing)
 
             if (cameraTransform == null)
@@ -166,15 +168,13 @@ namespace LevelGen.Player
             //    the target); otherwise use the standard camera-relative path.
             Vector3 moveDirXZ = BuildMoveVector(input);
 
-            // 4) Compose horizontal motion. Sprint multiplier kicks in when:
-            //    - the player is holding Sprint, AND
-            //    - input is mostly forward (matches Animator gate of MoveZ > 0.7), AND
-            //    - stamina permits (M9; null-tolerant — sprint always allowed if PlayerStamina missing)
-            bool wantSprint = _input.IsSprinting
-                              && input.y > 0.7f
-                              && (_stamina == null || _stamina.CanSprint);
-            IsSprintingNow = wantSprint;
-            float currentSpeed = walkSpeed * (wantSprint ? sprintMultiplier : 1f);
+            // 4) Compose horizontal motion. Sprint logic has been removed from the
+            //    movement pipeline — walkSpeed is the single movement speed.
+            //    IsSprintingNow is kept inert (always false) so PlayerStamina
+            //    and PlayerAnimator dependents continue to compile cleanly.
+            IsSprintingNow = false;
+            float currentSpeed = walkSpeed;
+            if (_input.IsSneaking) currentSpeed = _sneakSpeed;
             Vector3 motion = moveDirXZ * currentSpeed;
 
             // 4.5) Root in place during Attack / Hit. Animator MoveX/MoveZ
@@ -225,11 +225,10 @@ namespace LevelGen.Player
             //    drives Speed (computed inside SetMove).
             _anim.SetMove(input.x, input.y);
 
-            // 9) Push sprint bool to animator. Read by the
-            //    Locomotion → Sprint and Sprint → Locomotion transitions.
-            //    Pass IsSprintingNow (post-stamina-gate), not raw input —
-            //    otherwise the Animator would play Sprint clip while
-            //    physically walking (stamina-empty case).
+            // 9) Push sprint bool to animator. IsSprintingNow is always false
+            //    (sprint logic removed from movement pipeline); this call is
+            //    kept so the Animator's IsSprinting parameter is reliably
+            //    cleared each frame and dependents compile unchanged.
             _anim.SetSprinting(IsSprintingNow);
         }
 

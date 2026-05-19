@@ -106,6 +106,15 @@ namespace LevelGen.Player
             _vcam.Follow = target;
             _vcam.LookAt = target;
             _isBound = true;
+            // Reset vertical axis to its center value so the camera starts at the
+            // correct elevation regardless of where it was when the scene was saved.
+            var orbital = _vcam.GetComponent<CinemachineOrbitalFollow>();
+            if (orbital != null)
+            {
+                var vAxis = orbital.VerticalAxis;
+                vAxis.Value = vAxis.Center;
+                orbital.VerticalAxis = vAxis;
+            }
             Debug.Log($"[CinemachineAutoBind] Bound '{_vcam.name}' to '{player.name}/{target.name}'.", this);
             return true;
         }

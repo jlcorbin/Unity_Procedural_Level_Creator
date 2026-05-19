@@ -14,6 +14,7 @@
 // Events on the PlayerInput component). Method names below match
 // the InputSystem_Actions Player map exactly.
 
+using LevelGen.Input;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -38,6 +39,9 @@ namespace LevelGen.Player
 
         /// <summary>True while the Sprint action is held. Read by PlayerController each frame.</summary>
         public bool IsSprinting { get; private set; }
+
+        /// <summary>True while the Sneak action is held. Read by PlayerController and PlayerSneak each frame.</summary>
+        public bool IsSneaking { get; private set; }
 
         /// <summary>
         /// Raised once per Attack button press (button-down edge). Subscribed
@@ -95,6 +99,11 @@ namespace LevelGen.Player
         /// <summary>Look action endpoint (Vector2). Stores the latest mouse / right-stick delta.</summary>
         public void OnLook(InputAction.CallbackContext ctx)
         {
+            if (MouseLook.SuppressLookThisFrame)
+            {
+                MouseLook.SuppressLookThisFrame = false;
+                return;
+            }
             LookInput = ctx.ReadValue<Vector2>();
         }
 
@@ -140,6 +149,18 @@ namespace LevelGen.Player
         public void OnSprint(InputAction.CallbackContext ctx)
         {
             IsSprinting = ctx.ReadValueAsButton();
+        }
+
+        /// <summary>
+        /// Sneak is hold-to-activate. Updates <see cref="IsSneaking"/> from
+        /// the action's phase on every callback so we correctly track press,
+        /// hold, and release. True during Started and Performed phases
+        /// (key held); false during Canceled (key released).
+        /// </summary>
+        public void OnSneak(InputAction.CallbackContext ctx)
+        {
+            IsSneaking = ctx.phase == InputActionPhase.Performed
+                      || ctx.phase == InputActionPhase.Started;
         }
 
         /// <summary>Previous stub. M1: log on press only.</summary>

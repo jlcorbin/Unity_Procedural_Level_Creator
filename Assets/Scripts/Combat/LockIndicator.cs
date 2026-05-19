@@ -91,7 +91,7 @@ namespace LevelGen
 
             // Bob: sinusoidal vertical displacement around the base position.
             float bob = Mathf.Sin(Time.time * _bobSpeed * Mathf.PI * 2f) * _bobAmplitude;
-            transform.position = _basePosition + Vector3.up * bob;
+            transform.localPosition = _basePosition + Vector3.up * bob;
 
             // Billboard: align this transform's rotation to the camera so the
             // triangle always faces the viewer. Using the camera's own rotation
@@ -109,9 +109,9 @@ namespace LevelGen
         /// <param name="enemyRoot">The enemy's root transform.</param>
         public void Init(Transform enemyRoot)
         {
-            _basePosition = enemyRoot.position + Vector3.up * _yOffset;
-            transform.SetParent(enemyRoot, worldPositionStays: true);
-            transform.position = _basePosition;
+            _basePosition = Vector3.up * _yOffset;
+            transform.SetParent(enemyRoot, worldPositionStays: false);
+            transform.localPosition = _basePosition;
         }
 
         // ── Private helpers ──────────────────────────────────────────────────

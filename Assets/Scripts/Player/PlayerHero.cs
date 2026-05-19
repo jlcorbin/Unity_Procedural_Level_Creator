@@ -48,6 +48,7 @@ namespace LevelGen.Player
     [RequireComponent(typeof(PlayerCombat))]
     [RequireComponent(typeof(PlayerStamina))]
     [RequireComponent(typeof(PlayerDodge))]
+    [RequireComponent(typeof(PlayerSneak))]
     [RequireComponent(typeof(PlayerHitReaction))]
     [RequireComponent(typeof(PlayerDeath))]
     [RequireComponent(typeof(PlayerInteractor))]
@@ -76,6 +77,7 @@ namespace LevelGen.Player
         [SerializeField] private PlayerAnimator _animator;
         [SerializeField] private PlayerStamina _stamina;
         [SerializeField] private PlayerDodge _dodge;
+        [SerializeField] private PlayerSneak _sneak;
 
         // ── Combat ──────────────────────────────────────────────────────────
         [Header("Combat")]
@@ -108,6 +110,13 @@ namespace LevelGen.Player
         public PlayerAnimator Animator                 => _animator;
         public PlayerStamina Stamina                   => _stamina;
         public PlayerDodge Dodge                       => _dodge;
+
+        /// <summary>
+        /// Bridges <see cref="PlayerInputReader.IsSneaking"/> to the Animator's
+        /// Sneak bool parameter. Movement-speed reduction is owned by
+        /// <see cref="PlayerController._sneakSpeed"/>.
+        /// </summary>
+        public PlayerSneak Sneak                       => _sneak;
         public PlayerCombat Combat                     => _combat;
         public PlayerHitReaction HitReaction           => _hitReaction;
         public PlayerDeath Death                       => _death;
@@ -142,6 +151,7 @@ namespace LevelGen.Player
             if (_animator            == null) _animator            = GetComponent<PlayerAnimator>();
             if (_stamina             == null) _stamina             = GetComponent<PlayerStamina>();
             if (_dodge               == null) _dodge               = GetComponent<PlayerDodge>();
+            if (_sneak               == null) _sneak               = GetComponent<PlayerSneak>();
             if (_combat              == null) _combat              = GetComponent<PlayerCombat>();
             if (_hitReaction         == null) _hitReaction         = GetComponent<PlayerHitReaction>();
             if (_death               == null) _death               = GetComponent<PlayerDeath>();
