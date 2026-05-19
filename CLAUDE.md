@@ -5770,6 +5770,31 @@ M22 (Loot drops on enemy death).
   Run `LevelGen ▶ Player ▶ Build Player_Hero Prefab` to apply the component
   add and UnityEvent wiring to the prefab.
 
+## Session log — 2026-05-19
+
+Cleanup-pass close-out. The code edits from this pass are logged in
+detail under "Session log — 2026-05-18" above (CinemachineAutoBind
+vertical-axis reset, cursor-warp look suppression, walk speed / sprint
+removal / Dodge rebind, LockIndicator world→local fix, M-Sneak). Two
+editor-side items completed this pass that are NOT covered above:
+
+- **Enemy layer + TargetLock scoping**: an `Enemy` layer was added to
+  `ProjectSettings/TagManager.asset`; `Enemy_Grunt.prefab` is assigned
+  to it; `TargetLock._targetLayer` is scoped to the `Enemy` layer only.
+  The lock-on sphere-cast now hits only enemy colliders. Follow-up:
+  `EnemyBaseBuilder` does NOT yet stamp the `Enemy` layer on built
+  prefabs — future enemy archetypes need the layer set by hand until
+  the builder is extended.
+- **SneakLocomotion blend tree**: a `SneakLocomotion` blend tree was
+  added to `PlayerBaseController` driven by the `Sneak` bool, using
+  `NoWeapon` clips; the `OnSneak` UnityEvent was wired on the prefab.
+  This completes the manual designer work the M-Sneak entry flagged as
+  "not driven by code".
+
+`Documentation/Session_Handoff.md` rewritten for 2026-05-19. Recommended
+next work item: the combo system (per-weapon-type attack chains) — the
+player has asked for it and the M2-B / M17 / M20c foundation is in place.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
