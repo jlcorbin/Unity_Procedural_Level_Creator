@@ -68,10 +68,10 @@ namespace LevelGen.Player
 
         // ── Cached refs / state ─────────────────────────────────────────────
 
-        private PlayerInputReader     _input;
-        private PlayerAnimator        _animator;
+        private PlayerInputReader _input;
+        private PlayerAnimator _animator;
         private CharacterStatsRuntime _stats;
-        private bool                  _attackBuffered;
+        private bool _attackBuffered;
 
         // Set to a positive integer to override the next swing's damage
         // for ONE successful hitbox-target hit, then auto-cleared. Used
@@ -84,10 +84,22 @@ namespace LevelGen.Player
         // Prevents double-hits when the collider re-enters the same trigger.
         private readonly HashSet<Targetable> _currentAttackHitList = new HashSet<Targetable>();
 
-        private static readonly int AttackStateHash   = Animator.StringToHash("Attack");
+        private static readonly int AttackStateHash = Animator.StringToHash("Attack");
         private static readonly int Attack02StateHash = Animator.StringToHash("Attack02");
         private static readonly int Attack03StateHash = Animator.StringToHash("Attack03");
-        private static readonly int HitStateHash      = Animator.StringToHash("Hit");
+        private static readonly int HitStateHash = Animator.StringToHash("Hit");
+        private static readonly int Attack_OHSStateHash = Animator.StringToHash("Attack_OHS");
+        private static readonly int Attack02_OHSStateHash = Animator.StringToHash("Attack02_OHS");
+        private static readonly int Attack03_OHSStateHash = Animator.StringToHash("Attack03_OHS");
+        private static readonly int Attack_THSStateHash = Animator.StringToHash("Attack_THS");
+        private static readonly int Attack02_THSStateHash = Animator.StringToHash("Attack02_THS");
+        private static readonly int Attack03_THSStateHash = Animator.StringToHash("Attack03_THS");
+        private static readonly int Attack_SpearStateHash = Animator.StringToHash("Attack_Spear");
+        private static readonly int Attack02_SpearStateHash = Animator.StringToHash("Attack02_Spear");
+        private static readonly int Attack03_SpearStateHash = Animator.StringToHash("Attack03_Spear");
+        private static readonly int Attack_UnarmedStateHash = Animator.StringToHash("Attack_Unarmed");
+        private static readonly int Attack02_UnarmedStateHash = Animator.StringToHash("Attack02_Unarmed");
+        private static readonly int Attack03_UnarmedStateHash = Animator.StringToHash("Attack03_Unarmed");
 
         // Resolved lazily — PlayerAnimator.Awake may run after ours since
         // sibling-Awake order is non-deterministic. Access via this property
@@ -131,12 +143,12 @@ namespace LevelGen.Player
 
         private void Awake()
         {
-            _input    = GetComponent<PlayerInputReader>();
+            _input = GetComponent<PlayerInputReader>();
             _animator = GetComponent<PlayerAnimator>();
             // Null-tolerant — PlayerCombat does not [RequireComponent]
             // CharacterStatsRuntime (matches EnemyHitReaction's
             // null-guarded pattern).
-            _stats    = GetComponent<CharacterStatsRuntime>();
+            _stats = GetComponent<CharacterStatsRuntime>();
         }
 
         private void OnEnable()
@@ -158,7 +170,19 @@ namespace LevelGen.Player
 
             var info = anim.GetCurrentAnimatorStateInfo(0);
             int hash = info.shortNameHash;
-            if (hash != AttackStateHash && hash != Attack02StateHash) return;
+            bool isHit1 = hash == AttackStateHash
+                        || hash == Attack_OHSStateHash
+                        || hash == Attack_THSStateHash
+                        || hash == Attack_SpearStateHash
+                        || hash == Attack_UnarmedStateHash;
+
+            bool isHit2 = hash == Attack02StateHash
+                       || hash == Attack02_OHSStateHash
+                       || hash == Attack02_THSStateHash
+                       || hash == Attack02_SpearStateHash
+                       || hash == Attack02_UnarmedStateHash;
+
+            if (!isHit1 && !isHit2) return;
 
             float n = info.normalizedTime % 1.0f;
             if (n >= bufferConsumeAt)
@@ -196,13 +220,28 @@ namespace LevelGen.Player
             // Combo cap: Attack03 is the finisher. Drop deliberately rather
             // than depending on the Animator graph having no outgoing
             // Attack-trigger transition from Attack03.
-            if (hash == Attack03StateHash) return;
-
-            bool inActiveAttack = hash == AttackStateHash || hash == Attack02StateHash;
+            if (hash == Attack03StateHash
+            || hash == Attack03_OHSStateHash
+            || hash == Attack03_THSStateHash
+            || hash == Attack03_SpearStateHash
+            || hash == Attack03_UnarmedStateHash) return;
+            
+            bool inActiveAttack = hash == AttackStateHash
+                || hash == Attack02StateHash
+                || hash == Attack_OHSStateHash     || hash == Attack02_OHSStateHash
+                || hash == Attack_THSStateHash     || hash == Attack02_THSStateHash
+                || hash == Attack_SpearStateHash   || hash == Attack02_SpearStateHash
+                || hash == Attack_UnarmedStateHash || hash == Attack02_UnarmedStateHash;
 
             if (!inActiveAttack)
             {
                 // Idle / Locomotion / Sprint — fire immediately.
+                // Resolve and push weapon type so the Animator routes to the correct chain.
+                var inv = PlayerInventory.Instance;
+                var meleeItem = inv != null ? inv.GetEquipped(EquipSlot.Melee) : null;
+                var offHandItem = inv != null ? inv.GetEquipped(EquipSlot.OffHand) : null;
+                var weaponType = WeaponTypeResolver.Resolve(meleeItem, offHandItem);
+                _animator.SetWeaponType(weaponType);
                 _animator.SetAttackTrigger();
                 _attackBuffered = false;
                 return;

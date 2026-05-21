@@ -38,6 +38,9 @@ namespace LevelGen.Player
                  "Animator.GetBoneTransform because it is outside the Humanoid skeleton.")]
         [SerializeField] private Transform _weaponSocket;
 
+[Tooltip("The weapon_l bone Transform in the MaleCharacterPBR hierarchy. " +
+         "Drag the bone here manually for off-hand items (shields).")]
+[SerializeField] private Transform _offHandSocket;
         // ── Lifecycle ──────────────────────────────────────────────────────
 
         private void OnEnable()
@@ -70,46 +73,50 @@ namespace LevelGen.Player
         /// The newly equipped item, or null when the slot was unequipped.
         /// </param>
         private void HandleWeaponEquipped(ItemData item)
+{
+    // Pick the correct socket based on slot
+    Transform socket = (item != null && item.Slot == EquipSlot.OffHand)
+        ? _offHandSocket
+        : _weaponSocket;
+
+    if (socket == null)
+    {
+        Debug.LogError($"[PlayerEquipmentVisuals] Socket is null for slot " +
+                       $"{(item != null ? item.Slot.ToString() : "null")}. " +
+                       "Drag the correct bone into the Inspector field.");
+        return;
+    }
+
+    // Destroy existing children of this socket only
+    for (int i = socket.childCount - 1; i >= 0; i--)
+        Object.Destroy(socket.GetChild(i).gameObject);
+
+    if (item == null || item.WorldPrefab == null)
+    {
+        // Only clear the hitbox reference when it's the melee slot
+        if (item == null || item.Slot == EquipSlot.Melee)
         {
-            if (_weaponSocket == null)
-            {
-                Debug.LogError("[PlayerEquipmentVisuals] _weaponSocket is null. " +
-                               "Drag the weapon_r bone into the Inspector field on this component.");
-                return;
-            }
-
-            // Destroy all existing children of the socket (the previously-equipped mesh).
-            for (int i = _weaponSocket.childCount - 1; i >= 0; i--)
-                Object.Destroy(_weaponSocket.GetChild(i).gameObject);
-
-            // Null item or null WorldPrefab = empty hand; leave socket empty and
-            // clear the hitbox reference so PlayerCombat knows it is unarmed.
-            if (item == null || item.WorldPrefab == null)
-            {
-                var pcUnequip = GetComponentInParent<PlayerCombat>();
-                if (pcUnequip != null) pcUnequip.Hitbox = null;
-                return;
-            }
-
-            // Instantiate the new weapon mesh under the socket.
-            // worldPositionStays: false — the socket bone already carries the
-            // correct world orientation baked in from the rig, so local identity
-            // (pos=0, rot=identity, scale=1) is the correct placement.
-            var instance = Instantiate(item.WorldPrefab, _weaponSocket);
-
-            // M20b: hand the weapon's trigger collider + HitboxRelay to PlayerCombat
-            // so OnHitboxOpen / OnHitboxClose can enable/disable it per swing.
-            // The kinematic Rigidbody on the weapon prefab is an authoring requirement
-            // (trigger events on moving skeletal bones require it — M3 lesson).
-            var relay = instance.GetComponent<HitboxRelay>();
-            var col   = instance.GetComponent<Collider>();
-            var pc    = GetComponentInParent<PlayerCombat>();
-            if (pc != null)
-                pc.Hitbox = col; // null-safe: col may be null if prefab has no collider yet
-            if (relay != null && pc != null)
-                relay.Combat = pc; // wire relay → PlayerCombat at runtime
-
-            Debug.Log($"[PlayerEquipmentVisuals] Equipped '{item.DisplayName}' mesh under weapon_r.");
+            var pcUnequip = GetComponentInParent<PlayerCombat>();
+            if (pcUnequip != null) pcUnequip.Hitbox = null;
         }
+        return;
+    }
+
+    var instance = Instantiate(item.WorldPrefab, socket);
+
+    // Only wire hitbox relay for melee weapons — shields have no hitbox
+    if (item.Slot == EquipSlot.Melee)
+    {
+        var relay = instance.GetComponent<HitboxRelay>();
+        var col   = instance.GetComponent<Collider>();
+        var pc    = GetComponentInParent<PlayerCombat>();
+        if (pc != null)
+            pc.Hitbox = col;
+        if (relay != null && pc != null)
+            relay.Combat = pc;
+    }
+
+    Debug.Log($"[PlayerEquipmentVisuals] Equipped '{item.DisplayName}' mesh under {socket.name}.");
+}
     }
 }

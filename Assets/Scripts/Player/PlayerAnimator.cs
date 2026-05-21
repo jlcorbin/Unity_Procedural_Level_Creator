@@ -9,6 +9,7 @@
 // GetComponentInChildren so we don't need RequireComponent.
 
 using UnityEngine;
+using LevelGen.Items;
 
 namespace LevelGen.Player
 {
@@ -33,6 +34,7 @@ namespace LevelGen.Player
         private const string ParamDodgeTrigger   = "DodgeTrigger";
         private const string ParamDodgeDirection = "DodgeDirection";
         private const string ParamSneak          = "Sneak";
+        private const string ParamWeaponType     = "WeaponType";
 
         // ── Cached state ────────────────────────────────────────────────────
         private Animator _animator;
@@ -49,6 +51,7 @@ namespace LevelGen.Player
         private int _hashDodgeTrigger;
         private int _hashDodgeDirection;
         private int _hashSneak;
+        private int _hashWeaponType;
         private bool _ready;
 
         // ── Public API ──────────────────────────────────────────────────────
@@ -219,6 +222,18 @@ namespace LevelGen.Player
             _animator.SetBool(_hashSneak, isSneaking);
         }
 
+        /// <summary>
+        /// Writes the <c>WeaponType</c> int parameter so the Animator routes
+        /// the Attack trigger to the correct per-type combo chain.
+        /// Call once at swing-start, before <see cref="SetAttackTrigger"/>.
+        /// </summary>
+        /// <param name="weaponType">The resolved weapon type for this swing.</param>
+        public void SetWeaponType(WeaponType weaponType)
+        {
+            if (!_ready) return;
+            _animator.SetInteger(_hashWeaponType, (int)weaponType);
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -243,6 +258,7 @@ namespace LevelGen.Player
             _hashDodgeTrigger   = Animator.StringToHash(ParamDodgeTrigger);
             _hashDodgeDirection = Animator.StringToHash(ParamDodgeDirection);
             _hashSneak          = Animator.StringToHash(ParamSneak);
+            _hashWeaponType     = Animator.StringToHash(ParamWeaponType);
             _ready = true;
         }
     }

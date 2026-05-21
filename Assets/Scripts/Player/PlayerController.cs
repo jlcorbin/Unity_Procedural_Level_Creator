@@ -38,9 +38,9 @@ namespace LevelGen.Player
         [Tooltip("Walk speed in m/s.")]
         [SerializeField] private float walkSpeed = 3.5f;
 
-        [Tooltip("Sprint speed multiplier. Sprint logic has been removed from the movement pipeline; this field is retained for inspector visibility but no longer affects movement speed.")]
-        [SerializeField] private float sprintMultiplier = 1.75f;
-
+        //[Tooltip("Sprint speed multiplier. Sprint logic has been removed from the movement pipeline; this field is retained for inspector visibility but no longer affects movement speed.")]
+        //[SerializeField] private float sprintMultiplier = 1.75f; 
+        
         [Tooltip("Gravity acceleration in m/s². Negative.")]
         [SerializeField] private float gravity = -9.81f;
 

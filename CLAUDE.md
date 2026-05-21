@@ -5795,6 +5795,72 @@ editor-side items completed this pass that are NOT covered above:
 next work item: the combo system (per-weapon-type attack chains) — the
 player has asked for it and the M2-B / M17 / M20c foundation is in place.
 
+## M21 — Per-weapon combo system (2026-05-21): COMPLETE.
+
+  Attacks branch into weapon-type-aware combo chains instead of the
+  single shared 3-hit chain from M2-B. The equipped Melee weapon (plus
+  off-hand shield state) resolves to a WeaponType at swing-start; that
+  int routes the Animator to the correct chain. Code layer + Animator
+  graph + prefab edits all complete and validated.
+
+  Code layer:
+  - WeaponType enum (Unarmed=0, OHS=1, OHSShield=2, THS=3, Spear=4) at
+    Assets/Scripts/Items/WeaponType.cs.
+  - WeaponTypeResolver static helper at
+    Assets/Scripts/Items/WeaponTypeResolver.cs. Prefix-matches the Melee
+    item's WorldPrefab.name (THS*/Spear*/OHS*); OHS + an EquipSlot.OffHand
+    item → OHSShield; null melee → Unarmed; unknown prefix → Unarmed +
+    Debug.LogWarning. No new field on ItemData — derives from the existing
+    prefab name.
+  - PlayerAnimator: ParamWeaponType const ("WeaponType") + _hashWeaponType
+    field + hash assignment in Awake + public SetWeaponType(WeaponType)
+    (_ready-gated; single-writer invariant preserved). using LevelGen.Items.
+  - PlayerCombat: registered 15 attack-state hashes — the 3 shared
+    Attack/Attack02/Attack03 (original M2-B SwordAndShield states) plus
+    4 new chains × 3 states (Attack[_/02_/03_]OHS, _THS, _Spear,
+    _Unarmed). All three combo gates widened to recognise every chain's
+    states: inActiveAttack (buffer-window eligibility), the Attack03
+    combo-cap early-return, and the Hit-state interruption check.
+    SetWeaponType call injected at swing-start in OnAttackPressed's
+    !inActiveAttack branch, immediately before SetAttackTrigger. The
+    buffered-combo machine (_attackBuffered, comboWindowOpen/Close,
+    bufferConsumeAt, SetComboNext) is unchanged — chain progression is
+    type-agnostic.
+  - PlayerEquipmentVisuals: dual-socket routing. Added _offHandSocket
+    SerializeField alongside _weaponSocket; HandleWeaponEquipped picks
+    the socket by item.Slot == EquipSlot.OffHand (off-hand bone for
+    shields, weapon_r otherwise), destroys only that socket's children,
+    and wires PlayerCombat.Hitbox + HitboxRelay.Combat ONLY for Melee
+    items (shields have no hitbox). Unequip clears the hitbox ref only
+    when the cleared slot is Melee.
+
+  Editor / prefab work:
+  - Animator graph: WeaponType int drives 5 Any State entry transitions
+    (one per enum value) → 4 new 3-hit chains plus the original. OHSShield
+    reuses the pre-existing SwordAndShield Attack/Attack02/Attack03 chain
+    (no Attack_OHSShield state exists — code-confirmed by the absent
+    hash); the other four route to Attack_OHS / Attack_THS / Attack_Spear
+    / Attack_Unarmed. Override-controller slots added for the new chains.
+  - Player_Hero.prefab: baked-in Shield08 mesh removed so the off-hand
+    now shows whatever shield is equipped via PlayerEquipmentVisuals.
+  - 3 compiler warnings cleared (cleanup folded into this milestone).
+
+  Validator: LevelGen ▶ Player ▶ Validate Combo WeaponType (M21) — 8
+  read-only checks (file presence, enum value count, SetWeaponType +
+  _hashWeaponType surface, SetWeaponType-before-SetAttackTrigger source
+  order, Resolve(null,null)==Unarmed). Does NOT check the Animator graph
+  / override slots — those are play-test-verified editor artifacts.
+
+  Validators all green this session: Player_Hero 67/67, Combo WeaponType
+  (M21) 8/8, Enemy 49/49, Interaction 42/42.
+
+  Deferred: two-handed grip visual (THS/Spear resolve the right
+  animation chain but the mesh still mounts to weapon_r single-handed —
+  needs off-hand IK or a dedicated mount); OHSShield is coupled to the
+  original SwordAndShield states (renaming/retiring them silently breaks
+  the OHSShield path); enemy combos (apply the same per-type pattern to
+  EnemyCombat). See Documentation/Session_Handoff.md (2026-05-21).
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable
