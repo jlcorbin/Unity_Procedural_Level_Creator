@@ -281,6 +281,7 @@ GameObject:
   - component: {fileID: 6915951910179493558}
   - component: {fileID: 6365929194418165416}
   - component: {fileID: 1121985850164904074}
+  - component: {fileID: 1385629763926443138}
   m_Layer: 0
   m_Name: Enemy_Grunt
   m_TagString: Untagged
@@ -443,6 +444,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Combat.EnemyCombat
   _attackDamage: 10
+  _iFrameDuration: 0.5
   _hitbox: {fileID: 2903957709641623760}
 --- !u!114 &6365929194418165416
 MonoBehaviour:
@@ -482,6 +484,22 @@ MonoBehaviour:
   _showRadius: 12
   _pollInterval: 0.2
   _playerTag: Player
+--- !u!114 &1385629763926443138
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3098314498965237081}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b79e7818ce7cf0e4d80d70c4cfeb3d2e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Combat.LootDropper
+  _lootTable: {fileID: 11400000, guid: baf7377385321cc40966feda42c6cc97, type: 2}
+  _scatterRadius: 0.6
+  _dropHeight: 0.6
+  _blockScale: 0.3
 --- !u!1 &3822233291298157252
 GameObject:
   m_ObjectHideFlags: 0

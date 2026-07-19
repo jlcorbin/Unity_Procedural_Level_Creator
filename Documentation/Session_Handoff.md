@@ -1,67 +1,57 @@
-# Session Handoff — 2026-07-18 (end of day)
+# Session Handoff — 2026-07-19
 
-## Status: M22 UE5 Player Parity Port — COMPLETE & PLAY-VERIFIED
+## Status: M22 port done. Loot PICKUP loop done + play-verified. UI design in progress.
 
-The full UE5 `BP_RPG_PlayerCharacter` port is working in Play mode. Details +
-the integration fixes are in `CLAUDE.md` under **"M22 … COMPLETE + PLAY-VERIFIED"**;
-the full plan/decisions/unit table are in `Documentation/UE5_Port_Plan.md`.
+The UE5 player port (M22), bow/arrow separation, and cleanup are complete
+(see `CLAUDE.md`). This session added the **first half of the loot/equip/upgrade
+loop** — enemies drop items, player picks them up, materials stack. Details in
+`CLAUDE.md` under "M-Loot — pickup loop (2026-07-19)".
 
-Verified working: over-the-shoulder orbital camera, 6 m/s strafe movement,
-8-stance **Q** dev-cycle with correct weapon rotations (both hands), per-stance
-3-hit melee combo dealing damage, ranged charge/release with frame-accurate
-arrow spawn, dodge (Left Ctrl), RMB target lock. All `[M22-DIAG]` logs removed.
+## Done this session
+- **Loot pickup loop (placeholder blocks).** Enemies roll a `LootTable` on death
+  and drop runtime-tinted primitives (**cube=gear, sphere=material,
+  color=rarity**) carrying `WorldItem`s. E to pick up; materials stack; gear
+  bags. `LevelGen ▶ Combat ▶ Set Up Placeholder Loot (Grunt)` wires it all.
+  Play-verified on Enemy_Grunt. Odds kept as-is (Mat1 80%, Mat2 30%, Mat3 5%,
+  weapon 25%).
+- **Data foundations:** `ItemKind {Gear, Material}`, `Legendary` rarity,
+  `RarityColors`, material stacking in `PlayerInventory`, `WorldItem.Initialize`
+  + count, auto-equip gated OFF (equip is UI-later).
 
-## ▶ START HERE TOMORROW: bow + arrow mesh separation
+## The big picture — where the loot/equip/upgrade loop stands
+The loop is: **kill → collect gear + materials → equip gear → upgrade weapons
+with materials → repeat.** We've built **collect**. Still to build:
+1. **Inventory + upgrade UI** — DESIGN IN PROGRESS. Brief:
+   `Documentation/Inventory_UI_Design_Handoff.md`; references: `Assets/images/`.
+   Jason is getting mockups from a design session; when they land, CC implements
+   them in Unity UGUI and wires to `PlayerInventory`.
+2. **Weapon INSTANCES + leveling + the upgrade action.** ← the key remaining
+   foundation. Right now `ItemData` is a shared SO, so a weapon can't carry its
+   own +level. Before/with the upgrade UI we need a runtime **item-instance**
+   model `{template: ItemData, level, ...}`; inventory becomes a list of
+   instances. Upgrade model (decided): Weapon + materials → +1, linear damage;
+   escalating cost + higher-tier "special" mats at higher levels; **rarity is
+   driven by level** (Sword = Common … Sword +3 = Legendary). Materials:
+   Mat 1/2/3 = Common/Rare/Legendary.
 
-**Goal:** `WeaponPrefab_Bows` (and the arrow rig) ship with *many* meshes layered
-together, so the BowAndArrow stance shows a pile of bows/arrows instead of one.
-Separate them so only the intended single bow + nocked arrow render.
+## ▶ Likely next steps (Jason picks)
+- **Wait for UI mockups**, then implement the inventory/upgrade screens.
+- OR build the **item-instance + weapon-leveling + upgrade logic** foundation
+  now (headless, testable via Console/`SpendMaterial`), so the UI has something
+  real to bind to when it arrives.
+- Smaller: loot on other enemy types, drop animation/juice, auto-pickup.
 
-Starting context for that task:
-- The bow is a **skinned mesh** (`BowsSkinnedMesh.fbx`) with its own flex-idle
-  controller (`BowsCTRL.controller`), not a static mesh like the other weapons.
-  Wrapper prefab: `Assets/Prefabs/Weapons/WeaponPrefab_Bows.prefab`. Arrow rig:
-  `WeaponPrefab_Arrows.prefab` (`ArrowsSkinnedMesh.fbx`, `ArrowsCTRL.controller`).
-- Pack source: `Assets/AssetPacks/RPG Tiny Hero World Bundle/RPGTinyHeroWavePBR/`
-  — `Mesh/Weapons/BowsSkinnedMesh.fbx`, `Mesh/Weapons/ArrowsSkinnedMesh.fbx`,
-  and static arrow projectiles under `Mesh/Weapons/Projectile/Arrow01–05Projectile.fbx`.
-- The bow mounts to the LEFT hand in stance 7 (`BowAndArrow.asset`,
-  `leftHandEuler = (0,-90,180)`). The fired projectile is the separate
-  `Arrow_Projectile.prefab` (built by `RangedSetupBuilder`), independent of the
-  visual nocked-arrow rig.
-- Likely approach: the skinned FBX contains all bow variants as sub-meshes/bones;
-  isolate the one intended bow (and one arrow) — either by deleting the extra
-  SkinnedMeshRenderers/sub-objects in the wrapper prefab, or authoring a wrapper
-  that references only the target mesh. Investigate the FBX hierarchy first.
+## Load-bearing gotchas (don't undo)
+- **Equipping is UI-later:** `WorldItem._autoEquipOnPickup` defaults OFF. Pickup
+  only bags items. Q dev-cycle + the equip API still work for testing.
+- **LootDropper is dropped by an EnemyBaseBuilder clean rebuild** — re-run
+  `Set Up Placeholder Loot (Grunt)` after rebuilding Enemy_Grunt.
+- **Materials are stacks, gear is unique** — `PlayerInventory` keeps them in
+  separate structures; don't merge them without the item-instance refactor.
+- Real loot art later = spawn `item.WorldPrefab` instead of the primitive in
+  `LootDropper.SpawnPickup` (one line).
 
-## THEN: cleanup pass (before next phase)
-
-After bow/arrow is sorted, do a cleanup pass. Candidates:
-- **Delete `StanceDevCycler`** if stance-testing is done (Q cycle was always
-  dev-only; nothing depends on it — the inventory equip→stance bridge is the
-  real path). Also remove the `SwitchStance` input action/binding if Q is retired.
-- Consider the **corrective off-hand mount** so off-hand rotations are also
-  correct in the inventory equip path (currently `LeftHandEuler` fixes only the
-  dev-cycle path). Offered builder: an empty child under the off-hand bone with
-  the corrective rotation, wired as both `StanceController._leftHandSocket` and
-  `PlayerEquipmentVisuals._offHandSocket`; then zero the `LeftHandEuler` values.
-- Prune any now-unused scaffolding (e.g. the `StanceDefinition.rightHandEuler`
-  field is no longer applied; `TargetLock._eyeHeight` still used).
-- Re-run `LevelGen ▶ Player ▶ Validate UE5 Port` (expect 20/0) and the other
-  domain validators as a regression sweep.
-
-## Key gotchas to remember
-- **Input:** LockOn/SwitchStance use DIRECT action subscription in
-  PlayerInputReader, NOT UnityEvent wiring (the UnityEvent path silently didn't
-  fire). Don't "fix" this back to UnityEvents.
-- **Blend trees** must use the float `StanceBlend` param, not the int `WeaponType`.
-- **Melee damage** needs the OnHitboxOpen/Close events on clips — re-run
-  `Add Hitbox Events to Stance Attack Clips` after any clip reimport.
-- Re-running `Build Stance Animator (M22 12-14)` rebuilds the melee chains
-  (idempotent) — re-apply any hand-tweaks to attack states afterward.
-- Serialized prefab values that C# defaults can't reach are set on
-  `Player_Hero.prefab` (walkSpeed 6, jumpHeight 0.9, TargetLock 30/1.25/35).
-
-## Deferred (unchanged from spec)
-Enemy-side parity, root-motion dodge, held-draw pose + charge→power scaling,
-wand cast VFX, lock-on bracket UI.
+## Earlier deferrals still standing
+- M22: `StanceDevCycler`/Q kept (retire near ship); corrective off-hand mount
+  deferred until off-hand items are equipped via inventory.
+- Spec: enemy-side parity, held-draw pose, wand VFX, lock-on bracket UI.

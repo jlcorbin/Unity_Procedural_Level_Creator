@@ -43,6 +43,10 @@ namespace LevelGen.Player
         private readonly List<ItemData> _items = new List<ItemData>();
         private readonly Dictionary<EquipSlot, ItemData> _equipped =
             new Dictionary<EquipSlot, ItemData>();
+        // Stackable upgrade materials (ItemKind.Material) — kept separate from the
+        // unique gear list. Key = material ItemData, value = quantity held.
+        private readonly Dictionary<ItemData, int> _materials =
+            new Dictionary<ItemData, int>();
 
         // ── Events ─────────────────────────────────────────────────────────────
 
@@ -91,13 +95,30 @@ namespace LevelGen.Player
         /// Fires <see cref="OnItemAdded"/> on success.
         /// </summary>
         /// <param name="item">The item to add. Null is a silent no-op.</param>
-        public bool AddItem(ItemData item)
+        /// <param name="count">How many to add (materials stack; gear adds copies). Default 1.</param>
+        public bool AddItem(ItemData item, int count = 1)
         {
-            if (item == null) return false;
-            if (_items.Count >= _capacity) return false;
-            _items.Add(item);
-            OnItemAdded?.Invoke(item);
-            return true;
+            if (item == null || count <= 0) return false;
+
+            // Materials stack in a separate dictionary (no per-slot capacity).
+            if (item.IsMaterial)
+            {
+                _materials.TryGetValue(item, out int have);
+                _materials[item] = have + count;
+                OnItemAdded?.Invoke(item);
+                return true;
+            }
+
+            // Gear is unique and capacity-limited.
+            bool addedAny = false;
+            for (int i = 0; i < count; i++)
+            {
+                if (_items.Count >= _capacity) break;
+                _items.Add(item);
+                OnItemAdded?.Invoke(item);
+                addedAny = true;
+            }
+            return addedAny;
         }
 
         /// <summary>
@@ -132,8 +153,32 @@ namespace LevelGen.Player
         /// </summary>
         public IReadOnlyList<ItemData> Items => _items;
 
-        /// <summary>Current number of items in the inventory.</summary>
+        /// <summary>Current number of gear items in the inventory (materials excluded).</summary>
         public int Count => _items.Count;
+
+        /// <summary>Quantity of a stackable material held (0 if none).</summary>
+        /// <param name="item">The material to query.</param>
+        public int GetMaterialCount(ItemData item)
+            => (item != null && _materials.TryGetValue(item, out int n)) ? n : 0;
+
+        /// <summary>Read-only view of all held materials and their counts.</summary>
+        public IReadOnlyDictionary<ItemData, int> Materials => _materials;
+
+        /// <summary>
+        /// Consumes <paramref name="amount"/> of a material (for the future weapon
+        /// upgrade system). Returns false if fewer than <paramref name="amount"/>
+        /// are held. Fires <see cref="OnItemRemoved"/> on success.
+        /// </summary>
+        public bool SpendMaterial(ItemData item, int amount)
+        {
+            if (item == null || amount <= 0) return false;
+            if (!_materials.TryGetValue(item, out int have) || have < amount) return false;
+            int left = have - amount;
+            if (left > 0) _materials[item] = left;
+            else _materials.Remove(item);
+            OnItemRemoved?.Invoke(item);
+            return true;
+        }
 
         /// <summary>
         /// Equips the item into its slot. Replaces any previously equipped

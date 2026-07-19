@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+</helmet>
+<div style="width:100%;box-sizing:border-box;background:{{ t.cardBg }};border-radius:22px;padding:18px;font-family:'Nunito',system-ui,sans-serif;">
+  <div style="background:{{ t.panelBg }};border:{{ t.panelBorder }};border-radius:16px;box-shadow:{{ t.panelShadow }};padding:16px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <div style="font:600 20px/1 Fredoka;color:{{ t.titleColor }};">⚒️ Weapon Forge</div>
+      <div style="flex:1;"></div>
+      <div style="font:800 11px/1 Nunito;color:{{ stateColor }};background:{{ stateBg }};padding:5px 10px;border-radius:8px;">{{ stateLabel }}</div>
+    </div>
+    <div style="display:flex;align-items:stretch;gap:10px;">
+      <div style="flex:1;background:{{ cur.soft }};border:2px solid {{ cur.main }};border-radius:16px;padding:14px 8px 12px;text-align:center;position:relative;">
+        <div style="position:absolute;top:8px;left:8px;font:800 13px/1 Fredoka;color:#fff;background:{{ cur.main }};padding:3px 7px;border-radius:8px;">{{ cur.level }}</div>
+        <div style="width:56px;height:56px;margin:4px auto 8px;border-radius:14px;background:#fff;border:2px solid {{ cur.main }};display:flex;align-items:center;justify-content:center;font-size:30px;">{{ weaponIcon }}</div>
+        <div style="font:800 13px/1.1 Nunito;color:#2A2A2E;">{{ weaponName }}</div>
+        <div style="display:inline-block;margin-top:6px;font:800 9px/1 Nunito;color:{{ cur.text }};background:#fff;border:1.5px solid {{ cur.main }};padding:4px 9px;border-radius:20px;letter-spacing:.3px;">{{ cur.name }}</div>
+        <div style="margin-top:12px;font:800 8px/1 Nunito;color:#8A8172;letter-spacing:.5px;">CURRENT DMG</div>
+        <div style="font:600 32px/1 Fredoka;color:#7A7062;margin-top:2px;">{{ curDmg }}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:none;">
+        <div style="font:800 9px/1 Nunito;color:#8A8172;letter-spacing:.3px;">UPGRADE</div>
+        <div style="font-size:26px;color:{{ next.main }};">➜</div>
+      </div>
+      <div style="flex:1;background:{{ next.soft }};border:2px solid {{ next.main }};border-radius:16px;padding:14px 8px 12px;text-align:center;position:relative;box-shadow:0 0 0 3px rgba(240,163,46,.16),0 8px 22px rgba(240,163,46,.22);">
+        <div style="position:absolute;top:8px;left:8px;font:800 13px/1 Fredoka;color:#fff;background:{{ next.main }};padding:3px 7px;border-radius:8px;">{{ next.level }}</div>
+        <div style="position:absolute;top:8px;right:8px;font-size:14px;">✨</div>
+        <div style="width:56px;height:56px;margin:4px auto 8px;border-radius:14px;background:#fff;border:2px solid {{ next.main }};display:flex;align-items:center;justify-content:center;font-size:30px;box-shadow:0 0 14px rgba(240,163,46,.4);">{{ weaponIcon }}</div>
+        <div style="font:800 13px/1.1 Nunito;color:#2A2A2E;">{{ weaponName }}</div>
+        <div style="display:inline-block;margin-top:6px;font:800 9px/1 Nunito;color:#fff;background:{{ next.main }};padding:4px 9px;border-radius:20px;letter-spacing:.3px;">{{ next.name }} ▲</div>
+        <div style="margin-top:12px;font:800 8px/1 Nunito;color:#8A8172;letter-spacing:.5px;">AFTER UPGRADE</div>
+        <div style="font:600 32px/1 Fredoka;color:#38A85E;margin-top:2px;">{{ nextDmg }} <span style="font-size:13px;color:#38A85E;">{{ delta }}</span></div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-top:14px;justify-content:center;flex-wrap:wrap;">
+      <sc-for list="{{ ladder }}" as="r" hint-placeholder-count="4">
+        <div style="font:800 10px/1 Nunito;color:{{ r.text }};background:{{ r.soft }};border:2px solid {{ r.main }};padding:5px 9px;border-radius:20px;opacity:{{ r.op }};box-shadow:{{ r.ring }};">{{ r.name }}</div>
+      </sc-for>
+    </div>
+    <div style="margin-top:14px;background:rgba(0,0,0,.025);border-radius:12px;padding:10px 12px;">
+      <div style="font:800 9px/1 Nunito;color:#8A8172;letter-spacing:.5px;margin-bottom:9px;">MATERIALS REQUIRED</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        <sc-for list="{{ mats }}" as="m" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:34px;height:34px;border-radius:9px;background:{{ m.soft }};border:2px solid {{ m.main }};display:flex;align-items:center;justify-content:center;font-size:18px;opacity:{{ m.op }};flex:none;">{{ m.icon }}</div>
+            <div style="flex:1;font:800 12px/1.2 Nunito;color:#2A2A2E;">{{ m.name }} <span style="font-weight:800;color:{{ m.text }};font-size:9px;">· {{ m.tier }}</span></div>
+            <div style="font:600 15px/1 Fredoka;color:{{ m.needColor }};">{{ m.have }} / {{ m.need }}</div>
+            <div style="width:20px;height:20px;border-radius:50%;background:{{ m.checkBg }};color:#fff;font:800 11px/20px Nunito;text-align:center;flex:none;">{{ m.check }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <div style="text-align:center;padding:16px;border-radius:14px;background:{{ btn.bg }};color:{{ btn.color }};font:700 16px/1 Fredoka;letter-spacing:.5px;box-shadow:{{ btn.shadow }};">{{ btn.label }}</div>
+      <div style="text-align:center;margin-top:9px;font:800 10px/1.3 Nunito;color:{{ btn.noteColor }};">{{ btn.note }}</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;620px&quot;,&quot;height&quot;:&quot;460px&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const P = {
+      common:    { name:'Common',    main:'#7C8698', soft:'#EEF1F5', text:'#5A6474' },
+      uncommon:  { name:'Uncommon',  main:'#43B55F', soft:'#E7F6EC', text:'#2E7D46' },
+      rare:      { name:'Rare',      main:'#2E90E0', soft:'#E4F1FC', text:'#1E6FB8' },
+      legendary: { name:'Legendary', main:'#F0A32E', soft:'#FDF1DC', text:'#B9740A' },
+    };
+    const short = this.props.state === 'short';
+    const matRow = (icon, tier, have, need) => {
+      const r = P[tier], ok = have >= need;
+      return { icon, tier:r.name, name:'Material', main:r.main, soft:r.soft, text:r.text, have, need, ok,
+        op: ok ? 1 : 0.55, needColor: ok ? '#2E7D46' : '#D14343', check: ok ? '✓' : '✕', checkBg: ok ? '#43B55F' : '#D14343' };
+    };
+    const mats = short
+      ? [ matRow('🪵','common',8,5), matRow('🪨','rare',4,3), matRow('💎','legendary',1,3) ]
+      : [ matRow('🪵','common',8,5), matRow('🪨','rare',4,3), matRow('💎','legendary',3,2) ];
+    const enabled = mats.every(m => m.ok);
+    const lad = (key, role) => {
+      const r = P[key];
+      const op = role ? 1 : 0.4;
+      const ring = role === 'next' ? '0 0 0 2px #fff, 0 0 12px ' + r.main : (role === 'cur' ? '0 0 0 2px #2A2A2E' : 'none');
+      return { name:r.name, main:r.main, soft:r.soft, text:r.text, op, ring };
+    };
+    const ladder = [ lad('common'), lad('uncommon'), lad('rare','cur'), lad('legendary','next') ];
+    const btn = enabled
+      ? { label:'UPGRADE  ·  +8 DMG', bg:'linear-gradient(180deg,#5BCB7E,#38A85E)', color:'#fff',
+          shadow:'0 6px 0 #2E8B4E, 0 12px 20px rgba(56,168,94,.35)', note:'✦ celebratory glow + burst plays here on success', noteColor:'#38A85E' }
+      : { label:'NEED MORE MATERIALS', bg:'#E7E3DB', color:'#A9A192', shadow:'none',
+          note:'Missing 2× Legendary material — defeat harder enemies to collect', noteColor:'#D14343' };
+    const p = this.props;
+    const t = {
+      cardBg:      p.cardBg      ?? '#F4F2EE',
+      panelBg:     p.panelBg     ?? '#FFFFFF',
+      panelBorder: p.panelBorder ?? '1px solid #ECE8E1',
+      panelShadow: p.panelShadow ?? '0 4px 14px rgba(40,40,50,.06)',
+      titleColor:  p.titleColor  ?? '#26262B',
+    };
+    return {
+      t, mats, ladder, btn,
+      cur: { ...P.rare, level:'+2' }, next: { ...P.legendary, level:'+3' },
+      weaponIcon: '⚔️', weaponName: 'Ember Sword',
+      curDmg: '37', nextDmg: '45', delta: '+8',
+      stateLabel: enabled ? 'Ready to forge ✓' : 'Not enough ✕',
+      stateColor: enabled ? '#2E7D46' : '#D14343',
+      stateBg: enabled ? '#E7F6EC' : '#FBE7E7',
+    };
+  }
+}
+</script>
+</body>
+</html>

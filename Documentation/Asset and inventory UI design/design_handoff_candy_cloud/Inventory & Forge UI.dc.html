@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#E9E7E1;font-family:'Nunito',system-ui,sans-serif}
+a{color:#2E90E0}a:hover{color:#1E6FB8}
+.dv-turn{padding:44px 48px 36px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.dv-tid{font:700 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:700 14px/1.2 'Nunito',sans-serif;color:#1a1a1a}
+.dv-tsub{font:500 12px/1.5 'Nunito';color:rgba(0,0,0,.5);margin:0 0 24px;max-width:720px}
+.dv-opts{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:10px;scroll-margin-top:16px}
+.dv-oid{font:700 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:500 12px/1.4 'Nunito';color:rgba(0,0,0,.6);max-width:980px}
+.dv-card{max-width:100%;border-radius:22px;overflow:visible}
+.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+.dv-next{margin:26px 0 0;font:12px/1.6 'Nunito';color:rgba(0,0,0,.5)}
+</style>
+</helmet>
+<section class="dv-turn" id="t2">
+  <div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Weapon Forge in Style B · Candy Cloud</span></div>
+  <p class="dv-tsub"><a class="dv-oid" href="#1d">1d</a> re-skinned to the sky-gradient, pillowy-white Candy Cloud look — enough-materials state.</p>
+  <div class="dv-opts">
+    <div class="dv-opt" id="2a">
+      <div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Weapon Forge · Candy Cloud · enough materials — Rare → Legendary, 37→45, big chunky button + celebration space.</div>
+      <div class="dv-card" style="width:620px">
+        <dc-import name="ForgeScreen" state="enough" style="width:620px" hint-size="620px,470px" card-bg="linear-gradient(160deg,#DCF1FF,#F0E4FF)" panel-bg="#FFFFFF" panel-border="none" panel-shadow="0 10px 26px rgba(90,120,200,.16)" title-color="#4B57C9"></dc-import>
+      </div>
+    </div>
+    <div class="dv-opt" id="2b">
+      <div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Same, <strong>not enough</strong> state for comparison.</div>
+      <div class="dv-card" style="width:620px">
+        <dc-import name="ForgeScreen" state="short" style="width:620px" hint-size="620px,470px" card-bg="linear-gradient(160deg,#DCF1FF,#F0E4FF)" panel-bg="#FFFFFF" panel-border="none" panel-shadow="0 10px 26px rgba(90,120,200,.16)" title-color="#4B57C9"></dc-import>
+      </div>
+    </div>
+  </div>
+  <p class="dv-next">Try next: "give the Candy button a rounder 3D bottom edge" · "make the whole forge panel more pillowy" · "pair this with the <a class="dv-oid" href="#1b">1b</a> inventory as one flow"</p>
+</section>
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Inventory &amp; Weapon Forge — 3 style directions, 2 forge states, palettes</span></div>
+  <p class="dv-tsub">Bright, cute, chibi-matching tone. Anatomy from ref 1, tabs + rarity cells from ref 3, premium slot framing from ref 4 — all flipped to light/warm. Rarity is one shared color language across gear &amp; materials. Pick a <strong>style</strong> (<a class="dv-oid" href="#1a">1a</a>/<a class="dv-oid" href="#1b">1b</a>/<a class="dv-oid" href="#1c">1c</a>) and a <strong>palette</strong> (<a class="dv-oid" href="#1f">1f</a>) independently.</p>
+  <div class="dv-opts">
+    <div class="dv-opt" id="1a">
+      <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Style A · Sunny Parchment — warm cream, soft wood-tone frames, teal buttons. Cosiest, closest to ref 1's storybook feel.</div>
+      <div class="dv-card" style="width:980px">
+        <dc-import name="InventoryScreen" style="width:980px" hint-size="980px,600px" card-bg="linear-gradient(160deg,#FDF6E8,#F4E7CB)" panel-bg="#FFFDF7" panel-border="2px solid #E7D6AE" panel-shadow="0 6px 18px rgba(120,90,40,.10)" radius="18px" title-color="#6B4E2E" bar-bg="#FFFCF3" bar-border="2px solid #E7D6AE" btn-bg="#2FA7C3" btn-text="#ffffff" pad="18px"></dc-import>
+      </div>
+    </div>
+    <div class="dv-opt" id="1b">
+      <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Style B · Candy Cloud — sky gradient, pure-white pillowy panels, chunky 3D green button. Most playful, leans hardest into the chibi cuteness.</div>
+      <div class="dv-card" style="width:980px">
+        <dc-import name="InventoryScreen" style="width:980px" hint-size="980px,600px" card-bg="linear-gradient(160deg,#DCF1FF,#F0E4FF)" panel-bg="#FFFFFF" panel-border="none" panel-shadow="0 10px 26px rgba(90,120,200,.16)" radius="26px" title-color="#4B57C9" bar-bg="#FFFFFF" bar-border="none" btn-bg="linear-gradient(180deg,#5BD08A,#37B56B)" btn-text="#ffffff" btn-shadow="0 4px 0 rgba(0,0,0,.12)" pad="20px"></dc-import>
+      </div>
+    </div>
+    <div class="dv-opt" id="1c">
+      <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Style C · Modern Bright — soft neutral bg, crisp white cards, hairline borders, teal accent. Cleanest &amp; densest, ref 3 flipped to light.</div>
+      <div class="dv-card" style="width:980px">
+        <dc-import name="InventoryScreen" style="width:980px" hint-size="980px,600px" card-bg="#F4F2EE" panel-bg="#FFFFFF" panel-border="1px solid #ECE8E1" panel-shadow="0 4px 14px rgba(40,40,50,.06)" radius="14px" title-color="#26262B" bar-bg="#FFFFFF" bar-border="1px solid #ECE8E1" btn-bg="#17A79E" btn-text="#ffffff" pad="18px"></dc-import>
+      </div>
+    </div>
+    <div class="dv-opt" id="1d">
+      <div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Weapon Forge · <strong>enough materials</strong> — Rare → Legendary jump, damage 37→45, all mats met, big satisfying button + space for the celebration moment.</div>
+      <div class="dv-card" style="width:620px">
+        <dc-import name="ForgeScreen" state="enough" style="width:620px" hint-size="620px,470px" card-bg="#F4F2EE"></dc-import>
+      </div>
+    </div>
+    <div class="dv-opt" id="1e">
+      <div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Weapon Forge · <strong>not enough</strong> — same weapon, Legendary material short (1/3, red), button disabled with a clear reason.</div>
+      <div class="dv-card" style="width:620px">
+        <dc-import name="ForgeScreen" state="short" style="width:620px" hint-size="620px,470px" card-bg="#F4F2EE"></dc-import>
+      </div>
+    </div>
+    <div class="dv-opt" id="1f">
+      <div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Foundations — rarity palettes (two options) + style tokens.</div>
+      <div class="dv-card" style="width:620px;background:#fff;border:1px solid #ECE8E1;box-shadow:0 4px 14px rgba(40,40,50,.06);padding:22px;box-sizing:border-box;">
+        <div style="font:600 18px/1 Fredoka;color:#26262B;margin-bottom:4px;">Rarity — Palette A · Classic Bright <span style="font:700 10px/1 Nunito;color:#43B55F;background:#E7F6EC;padding:3px 7px;border-radius:6px;margin-left:6px;">recommended</span></div>
+        <div style="font:500 11px/1.5 Nunito;color:#8A8172;margin-bottom:12px;">Familiar grey→green→blue→gold ladder, re-tuned to mid-saturation so it pops on light panels.</div>
+        <div style="display:flex;gap:10px;margin-bottom:22px;">
+          <sc-for list="{{ palClassic }}" as="p" hint-placeholder-count="4">
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+              <div style="height:54px;border-radius:12px;border:2px solid {{ p.main }};background:{{ p.soft }};display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 2px 6px rgba(0,0,0,.06);">💎</div>
+              <div style="font:800 12px/1 Nunito;color:{{ p.text }};">{{ p.name }}</div>
+              <div style="font:600 10px/1 ui-monospace,Menlo,monospace;color:#9A9284;">{{ p.hex }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font:600 18px/1 Fredoka;color:#26262B;margin-bottom:4px;">Rarity — Palette B · Candy Warm</div>
+        <div style="font:500 11px/1.5 Nunito;color:#8A8172;margin-bottom:12px;">Swaps blue for orchid &amp; gold for sunset — sweeter, matches the chibi hero energy more.</div>
+        <div style="display:flex;gap:10px;margin-bottom:22px;">
+          <sc-for list="{{ palCandy }}" as="p" hint-placeholder-count="4">
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+              <div style="height:54px;border-radius:12px;border:2px solid {{ p.main }};background:{{ p.soft }};display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 2px 6px rgba(0,0,0,.06);">💎</div>
+              <div style="font:800 12px/1 Nunito;color:{{ p.text }};">{{ p.name }}</div>
+              <div style="font:600 10px/1 ui-monospace,Menlo,monospace;color:#9A9284;">{{ p.hex }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="border-top:1px solid #EEEAE2;padding-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px 20px;">
+          <div><div style="font:800 10px/1 Nunito;color:#8A8172;letter-spacing:.5px;margin-bottom:5px;">TYPE</div><div style="font:500 12px/1.5 Nunito;color:#3A362F;"><strong>Fredoka</strong> for titles &amp; numbers (rounded, cheerful) · <strong>Nunito</strong> for body/labels (legible on phone).</div></div>
+          <div><div style="font:800 10px/1 Nunito;color:#8A8172;letter-spacing:.5px;margin-bottom:5px;">SLOTS &amp; CELLS</div><div style="font:500 12px/1.5 Nunito;color:#3A362F;">Rounded squares, 2px rarity border + soft glow. Repeatable module. Locked/future slots dimmed with 🔒.</div></div>
+          <div><div style="font:800 10px/1 Nunito;color:#8A8172;letter-spacing:.5px;margin-bottom:5px;">BUTTONS</div><div style="font:500 12px/1.5 Nunito;color:#3A362F;">Min 44px touch height, rounded, one accent per style. Primary = forge action.</div></div>
+          <div><div style="font:800 10px/1 Nunito;color:#8A8172;letter-spacing:.5px;margin-bottom:5px;">ICONOGRAPHY</div><div style="font:500 12px/1.5 Nunito;color:#3A362F;">Emoji are stand-ins — drop real chibi PBR item renders into the same framed cells later.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="dv-next">Try next: "build out <a class="dv-oid" href="#1a">1a</a> with the <a class="dv-oid" href="#1f">1f</a> candy palette" · "make <a class="dv-oid" href="#1c">1c</a> a portrait variant" · "add a selected-item detail popover to <a class="dv-oid" href="#1b">1b</a>" · "turn the winner into a clickable prototype"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const mk = (name, main, soft, text) => ({ name, main, soft, text, hex: main });
+    const palClassic = [
+      mk('Common','#7C8698','#EEF1F5','#5A6474'),
+      mk('Uncommon','#43B55F','#E7F6EC','#2E7D46'),
+      mk('Rare','#2E90E0','#E4F1FC','#1E6FB8'),
+      mk('Legendary','#F0A32E','#FDF1DC','#B9740A'),
+    ];
+    const palCandy = [
+      mk('Common','#A99B86','#F3EFE8','#7C7060'),
+      mk('Uncommon','#54C97E','#E6F8ED','#2F9455'),
+      mk('Rare','#9B6BE6','#F0E9FB','#6E42C0'),
+      mk('Legendary','#FF9A3D','#FFEEDC','#D26A0E'),
+    ];
+    return { palClassic, palCandy };
+  }
+}
+</script>
+</body>
+</html>

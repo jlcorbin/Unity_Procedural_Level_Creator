@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+</helmet>
+<div style="width:100%;box-sizing:border-box;background:{{ t.cardBg }};border-radius:22px;padding:{{ t.pad }};font-family:'Nunito',system-ui,sans-serif;">
+  <div style="display:flex;align-items:center;gap:12px;background:{{ t.barBg }};border:{{ t.barBorder }};border-radius:14px;padding:10px 14px;box-shadow:{{ t.panelShadow }};">
+    <div style="display:flex;align-items:center;gap:6px;font:800 13px/1 Nunito;color:#B9740A;background:#FDF1DC;border:1.5px solid #F0A32E;padding:5px 9px;border-radius:9px;">🪙 2,584</div>
+    <div style="flex:1;text-align:center;font:600 22px/1 Fredoka;color:{{ t.titleColor }};letter-spacing:.3px;">Knight <span style="opacity:.5;font-size:16px;">· Lv 8</span></div>
+    <div style="width:32px;height:32px;border-radius:9px;background:#F5E3E3;border:1.5px solid #E3A6A6;display:flex;align-items:center;justify-content:center;font:800 13px/1 Nunito;color:#C05A5A;">✕</div>
+  </div>
+  <div style="display:flex;gap:14px;margin-top:14px;align-items:stretch;">
+    <div style="flex:1.25;background:{{ t.panelBg }};border:{{ t.panelBorder }};border-radius:{{ t.radius }};box-shadow:{{ t.panelShadow }};padding:16px 14px;display:flex;flex-direction:column;">
+      <div style="display:flex;gap:8px;flex:1;">
+        <div style="display:flex;flex-direction:column;gap:16px;justify-content:center;flex:none;">
+          <sc-for list="{{ equipL }}" as="s" hint-placeholder-count="4">
+            <div style="position:relative;width:58px;height:58px;border-radius:14px;border:2px solid {{ s.b }};background:{{ s.s }};display:flex;align-items:center;justify-content:center;flex:none;">
+              <span style="font-size:25px;opacity:{{ s.op }};">{{ s.icon }}</span>
+              <sc-if value="{{ s.future }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:2px;right:3px;font-size:10px;opacity:.55;">🔒</span></sc-if>
+              <span style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);font:800 7px/1 Nunito;letter-spacing:.3px;color:#8A8172;background:#fff;padding:2px 4px;border-radius:5px;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap;">{{ s.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="flex:1;border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.75),rgba(255,255,255,0)),repeating-linear-gradient(135deg,rgba(0,0,0,.045) 0 8px,rgba(0,0,0,0) 8px 16px);border:2px dashed rgba(0,0,0,.14);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:300px;position:relative;">
+          <div style="font:700 32px/1 Fredoka;color:rgba(0,0,0,.24);">🖼️</div>
+          <div style="font:700 11px/1.5 ui-monospace,Menlo,monospace;color:rgba(0,0,0,.42);text-align:center;">CHIBI HERO<br>rotatable 3D preview</div>
+          <div style="position:absolute;bottom:8px;display:flex;gap:8px;align-items:center;font:700 10px/1 Nunito;color:rgba(0,0,0,.32);">◀ &nbsp;⟲ drag to rotate&nbsp; ▶</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px;justify-content:center;flex:none;">
+          <sc-for list="{{ equipR }}" as="s" hint-placeholder-count="4">
+            <div style="position:relative;width:58px;height:58px;border-radius:14px;border:2px solid {{ s.b }};background:{{ s.s }};display:flex;align-items:center;justify-content:center;flex:none;">
+              <span style="font-size:25px;opacity:{{ s.op }};">{{ s.icon }}</span>
+              <sc-if value="{{ s.future }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:2px;right:3px;font-size:10px;opacity:.55;">🔒</span></sc-if>
+              <span style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);font:800 7px/1 Nunito;letter-spacing:.3px;color:#8A8172;background:#fff;padding:2px 4px;border-radius:5px;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap;">{{ s.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <sc-for list="{{ stats }}" as="st" hint-placeholder-count="4">
+          <div style="flex:1;background:rgba(0,0,0,.035);border-radius:12px;padding:9px 6px;text-align:center;">
+            <div style="font-size:15px;">{{ st.icon }}</div>
+            <div style="font:600 20px/1 Fredoka;color:{{ st.c }};margin-top:3px;">{{ st.val }}</div>
+            <div style="font:800 8px/1 Nunito;color:#8A8172;letter-spacing:.4px;margin-top:4px;text-transform:uppercase;">{{ st.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <div style="flex:1;text-align:center;padding:11px;border-radius:11px;background:{{ t.btnBg }};color:{{ t.btnText }};font:700 13px/1 Nunito;box-shadow:{{ t.btnShadow }};">Skins</div>
+        <div style="flex:1;text-align:center;padding:11px;border-radius:11px;background:{{ t.btnBg }};color:{{ t.btnText }};font:700 13px/1 Nunito;box-shadow:{{ t.btnShadow }};">Stats</div>
+      </div>
+    </div>
+    <div style="flex:1;background:{{ t.panelBg }};border:{{ t.panelBorder }};border-radius:{{ t.radius }};box-shadow:{{ t.panelShadow }};padding:14px;display:flex;flex-direction:column;min-width:0;">
+      <div style="font:600 17px/1 Fredoka;color:{{ t.titleColor }};margin-bottom:10px;">Items Bag</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+        <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+          <div style="padding:7px 12px;border-radius:9px;background:{{ tb.bg }};color:{{ tb.fg }};opacity:{{ tb.op }};font:700 12px/1 Nunito;white-space:nowrap;">{{ tb.n }}</div>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
+        <sc-for list="{{ items }}" as="it" hint-placeholder-count="20">
+          <div style="position:relative;border-radius:12px;border:2px solid {{ it.main }};background:{{ it.soft }};box-shadow:0 2px 6px {{ it.glow }};aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:23px;">
+            {{ it.icon }}
+            <sc-if value="{{ it.sel }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;inset:-4px;border:2.5px solid #2A2A2E;border-radius:15px;box-shadow:0 0 0 2px #fff inset;pointer-events:none;"></div></sc-if>
+            <sc-if value="{{ it.hasCount }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:3px;bottom:2px;background:rgba(30,28,26,.82);color:#fff;font:800 11px/1 Nunito;padding:2px 5px;border-radius:7px;">{{ it.countStr }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;background:{{ sel.soft }};border:2px solid {{ sel.main }};border-radius:12px;padding:8px 10px;margin-top:12px;">
+        <div style="width:40px;height:40px;border-radius:10px;background:#fff;border:2px solid {{ sel.main }};display:flex;align-items:center;justify-content:center;font-size:21px;flex:none;">{{ sel.icon }}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font:800 13px/1.1 Nunito;color:#2A2A2E;">{{ sel.name }}</div>
+          <div style="font:800 10px/1 Nunito;color:{{ sel.text }};margin-top:3px;letter-spacing:.3px;">{{ sel.rarity }}</div>
+        </div>
+        <div style="text-align:right;flex:none;"><div style="font:800 8px/1 Nunito;color:#8A8172;letter-spacing:.4px;">DMG</div><div style="font:600 18px/1 Fredoka;color:#E0872E;margin-top:2px;">{{ sel.dmg }}</div></div>
+      </div>
+      <div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:rgba(0,0,0,.035);border-radius:10px;font:800 12px/1 Nunito;color:#7A7062;">ADD 5 SLOTS <span style="display:flex;align-items:center;gap:5px;color:#2E90E0;">💎 50</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;980px&quot;,&quot;height&quot;:&quot;600px&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const P = {
+      common:    { name:'Common',    main:'#7C8698', soft:'#EEF1F5', text:'#5A6474', glow:'rgba(124,134,152,.20)' },
+      uncommon:  { name:'Uncommon',  main:'#43B55F', soft:'#E7F6EC', text:'#2E7D46', glow:'rgba(67,181,95,.22)' },
+      rare:      { name:'Rare',      main:'#2E90E0', soft:'#E4F1FC', text:'#1E6FB8', glow:'rgba(46,144,224,.22)' },
+      legendary: { name:'Legendary', main:'#F0A32E', soft:'#FDF1DC', text:'#B9740A', glow:'rgba(240,163,46,.30)' },
+    };
+    const cell = (icon, rarity, count, sel) => {
+      const r = P[rarity] || P.common;
+      return { icon, main:r.main, soft:r.soft, text:r.text, glow:r.glow, rarity:r.name,
+        hasCount: count != null, countStr: count != null ? '×' + count : '', sel: !!sel };
+    };
+    const empty = () => ({ icon:'', main:'#DBD5C9', soft:'#F1EDE4', text:'#B9B2A3', glow:'rgba(0,0,0,0)', hasCount:false, countStr:'', sel:false });
+    const items = [
+      cell('⚔️','legendary',null,true), cell('🗡️','rare'), cell('🏹','common'), cell('🛡️','uncommon'), cell('🪄','rare'),
+      cell('🪵','common',13), cell('🪨','rare',4), cell('💎','legendary',3), cell('🧵','common',22), cell('🍎','common',11),
+      cell('🥕','common',8), cell('🥚','common',5), cell('🌿','uncommon',6), cell('🔩','common',30), cell('🥩','uncommon',4),
+      cell('🧪','rare',2), cell('🪖','uncommon'), cell('👢','common'), empty(), empty(),
+    ];
+    const slot = (label, icon, rarity, future) => {
+      if (future) return { label, icon, b:'#D9D3C6', s:'#F3EFE7', op:0.30, future:true };
+      const r = P[rarity];
+      return { label, icon, b:r.main, s:r.soft, op:1, future:false };
+    };
+    const equipL = [ slot('ARMOR','🥋','rare'), slot('HEAD','🪖',null,true), slot('CHEST','🧥',null,true), slot('FEET','👢',null,true) ];
+    const equipR = [ slot('MELEE','⚔️','legendary'), slot('OFF-HAND','🛡️','uncommon'), slot('RANGED','🏹','common'), slot('CHARM','🔮',null,true) ];
+    const stats = [
+      { icon:'⚔️', label:'Damage',  val:'37',  c:'#E0872E' },
+      { icon:'🛡️', label:'Armor',   val:'194', c:'#2E90E0' },
+      { icon:'❤️', label:'HP',      val:'820', c:'#E0524E' },
+      { icon:'⚡', label:'Stamina', val:'60',  c:'#43B55F' },
+    ];
+    const tabs = [
+      { n:'All',       bg:'#2E2A26',          fg:'#ffffff', op:1 },
+      { n:'Weapons',   bg:'rgba(0,0,0,.05)',  fg:'#7A7062', op:1 },
+      { n:'Armor',     bg:'rgba(0,0,0,.05)',  fg:'#7A7062', op:1 },
+      { n:'Materials', bg:'rgba(0,0,0,.05)',  fg:'#7A7062', op:1 },
+      { n:'Potions',   bg:'rgba(0,0,0,.03)',  fg:'#B4AC9E', op:.7 },
+    ];
+    const sel = { icon:'⚔️', name:'Ember Sword +3', rarity:'LEGENDARY', main:P.legendary.main, soft:P.legendary.soft, text:P.legendary.text, dmg:'45' };
+    const p = this.props;
+    const t = {
+      cardBg:      p.cardBg      ?? '#F4F2EE',
+      panelBg:     p.panelBg     ?? '#FFFFFF',
+      panelBorder: p.panelBorder ?? '1px solid #ECE8E1',
+      panelShadow: p.panelShadow ?? '0 4px 14px rgba(40,40,50,.06)',
+      radius:      p.radius      ?? '14px',
+      titleColor:  p.titleColor  ?? '#26262B',
+      barBg:       p.barBg       ?? '#FFFFFF',
+      barBorder:   p.barBorder   ?? '1px solid #ECE8E1',
+      btnBg:       p.btnBg       ?? '#17A79E',
+      btnText:     p.btnText     ?? '#FFFFFF',
+      btnShadow:   p.btnShadow   ?? 'none',
+      pad:         p.pad         ?? '18px',
+    };
+    return { items, equipL, equipR, stats, tabs, sel, t };
+  }
+}
+</script>
+</body>
+</html>

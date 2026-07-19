@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b07ff1a2f8a858f4688580c5b0915e41, type: 3}
+  m_Name: LootTable_Grunt
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Combat.LootTable
+  _entries:
+  - item: {fileID: 11400000, guid: 153901de182f9014b9408d14484fd85f, type: 2}
+    dropChance: 0.8
+    minCount: 1
+    maxCount: 3
+  - item: {fileID: 11400000, guid: 9f43e6ed0fdf97049966ae20c0f33259, type: 2}
+    dropChance: 0.3
+    minCount: 1
+    maxCount: 2
+  - item: {fileID: 11400000, guid: a1b256bc34bea3a4aace150f006bfdbb, type: 2}
+    dropChance: 0.05
+    minCount: 1
+    maxCount: 1
+  - item: {fileID: 11400000, guid: e504bea6867603f4eba4c1959bdd3c64, type: 2}
+    dropChance: 0.25
+    minCount: 1
+    maxCount: 1

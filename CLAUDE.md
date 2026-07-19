@@ -5907,6 +5907,29 @@ player has asked for it and the M2-B / M17 / M20c foundation is in place.
   (currently LeftHandEuler covers the dev path). Original spec deferrals
   (enemy parity, held-draw pose, wand VFX, lock bracket UI) still stand.
 
+### M22 follow-up — bow/arrow separation + cleanup (2026-07-19)
+  - **Bow/arrow "pile" fixed:** the pack's Bows.prefab / Arrows.prefab each pack
+    5 skinned variants (Bow01–05, Arrow01–05) on a shared skeleton, all rendering
+    at once. New menu `LevelGen ▶ Weapons ▶ Separate Bow + Arrow Meshes` keeps one
+    variant active (KeptVariant const, default 1) on the WeaponPrefab_* wrappers
+    and deactivates the rest as instance OVERRIDES (pack prefabs untouched,
+    idempotent, only touches Bow0N/Arrow0N — not the BowJoint* skeleton).
+  - **Nocked arrow:** `LevelGen ▶ Weapons ▶ Mount Nocked Arrow on Bow` parents the
+    separated WeaponPrefab_Arrows under WeaponPrefab_Bows at local identity, with
+    collider/rigidbody/HitboxRelay stripped (decorative). Shows always; rides the
+    bow in both dev-cycle and equip paths and inherits its off-hand offset.
+    File: Assets/Scripts/Items/Editor/BowArrowMeshSeparator.cs (both menus).
+  - **Cleanup:** pruned the dead `StanceDefinition.rightHandEuler` field + property
+    (right hand mounts at authored transform, so it was never applied — and Spear
+    had (0,0,10) stored that would have *broken* the correct right hand if
+    applied). `leftHandEuler` retained (off-hand corrective; (0,-90,180) on the
+    three left-hand stances). The .asset files keep the stale `rightHandEuler:`
+    line harmlessly until next save.
+  - **Deferred by decision:** StanceDevCycler + the Q SwitchStance action KEPT
+    (still stance-testing). Corrective off-hand mount DEFERRED until off-hand
+    items are actually equipped via inventory (dev-cycle off-hand is already
+    correct via leftHandEuler; the equip path would need the bone-level fix).
+
 ## M22 — UE5 Player Parity Port (2026-07-18): SCRIPTS COMPLETE, manual Editor work pending
 
   Porting the UE5 `BP_RPG_PlayerCharacter` (spec:
@@ -5980,6 +6003,63 @@ player has asked for it and the M2-B / M17 / M20c foundation is in place.
   UnityEvent to OnSwitchStance; run "Set Over-the-Shoulder Framing"; set the
   serialized prefab values above; play-test per the plan's order. NOT yet
   play-verified (no Unity run this session).
+
+## M-Loot — pickup loop (placeholder blocks) (2026-07-19): PLAY-VERIFIED
+
+  First half of the loot → equip → upgrade loop: enemies drop items, player
+  picks them up (E), materials stack. The gear/upgrade UI + weapon leveling are
+  a later milestone (design brief in Documentation/Inventory_UI_Design_Handoff.md;
+  reference images in Assets/images/).
+
+  Data model:
+  - ItemData: added `ItemKind {Gear, Material}` and `ItemRarity.Legendary`
+    (now Common/Uncommon/Rare/Legendary). `RarityColors.For(rarity)` = bright,
+    light-UI-friendly colors (also used for the placeholder block tint).
+    Materials are non-equippable + stackable.
+  - PlayerInventory: materials stack in a separate `Dictionary<ItemData,int>`
+    (gear stays a unique List, existing API untouched). New:
+    `AddItem(item, count)`, `GetMaterialCount`, `Materials`, `SpendMaterial`
+    (for the future upgrade system).
+  - WorldItem: runtime `Initialize(item, count)`; count-aware prompt;
+    **auto-equip GATED OFF** by default (`_autoEquipOnPickup=false`) — equipping
+    moves to the UI later, so pickup only bags the item + logs to Console.
+
+  Loot:
+  - LootTable SO (LevelGen.Combat): entries `{item, dropChance, min/maxCount}`;
+    `Roll()` returns concrete `(item,count)` drops (UnityEngine.Random).
+  - LootDropper (on the enemy, [RequireComponent(CharacterStatsRuntime)]):
+    subscribes to `OnDied`, rolls the table, spawns a placeholder pickup per
+    drop — a runtime-tinted PRIMITIVE (**cube=gear, sphere=material,
+    color=rarity**) carrying a WorldItem. Real art later = spawn
+    `item.WorldPrefab` instead of the primitive (one line). Uses
+    `DestroyImmediate` on the primitive's solid collider so WorldItem's
+    `RequireComponent(SphereCollider)` trigger survives (a deferred Destroy
+    would let the pending collider satisfy RequireComponent, then vanish).
+  - LootSetupBuilder editor: `LevelGen ▶ Combat ▶ Set Up Placeholder Loot
+    (Grunt)` — creates Mat1/2/3 ItemData (Common/Rare/Legendary) +
+    LootTable_Grunt, adds LootDropper to Enemy_Grunt, wires the table.
+    Idempotent (assets reused; table entries rebuilt). **Re-run after an
+    EnemyBaseBuilder clean rebuild** (rebuild drops the LootDropper).
+
+  Grunt table odds (kept as-is per playtest): Mat1 80%/1-3, Mat2 30%/1-2,
+  Mat3 5%/1, THS01 weapon ("Claymore") 25%/1.
+
+  Files:
+  - Assets/Scripts/Items/ItemData.cs (ItemKind, Legendary, RarityColors)
+  - Assets/Scripts/Player/PlayerInventory.cs (material stacking)
+  - Assets/Scripts/Interaction/WorldItem.cs (Initialize, count, gated auto-equip)
+  - Assets/Scripts/Combat/LootTable.cs (NEW)
+  - Assets/Scripts/Combat/LootDropper.cs (NEW)
+  - Assets/Scripts/Combat/Editor/LootSetupBuilder.cs (NEW)
+  - Assets/Data/items/ItemData_mat1|mat2|mat3.asset (NEW)
+  - Assets/Data/Loot/LootTable_Grunt.asset (NEW)
+  - Assets/Prefabs/Character Prefabs/Enemy/Enemy_Grunt.prefab (LootDropper added)
+
+  Deferred: drop animations / pickup juice; the inventory + weapon-upgrade UI
+  (design in progress — see the handoff); weapon INSTANCES + per-weapon leveling
+  + the upgrade screen (the second half of the loop — needs the item-instance
+  refactor discussed in the design chat); loot on other enemy types; auto-pickup
+  on walk-over; currency/vendors; potions.
 
 ## Next CC task
 

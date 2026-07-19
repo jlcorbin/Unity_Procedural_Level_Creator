@@ -32,8 +32,15 @@ namespace LevelGen.Interaction
         [Tooltip("The item granted to the player on pickup.")]
         [SerializeField] private ItemData _itemData;
 
+        [Tooltip("How many to grant on pickup. Materials stack; gear is usually 1.")]
+        [SerializeField] private int _count = 1;
+
         [Tooltip("Interaction trigger radius in world units.")]
         [SerializeField] private float _pickupRadius = 1.5f;
+
+        [Tooltip("If true, gear auto-equips into an empty slot on pickup. Default OFF — " +
+                 "equipping is handled via the inventory UI (later milestone).")]
+        [SerializeField] private bool _autoEquipOnPickup = false;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -67,9 +74,35 @@ namespace LevelGen.Interaction
             // picks up the display-name label on first build.
             // (_promptLabel is protected on Interactable — accessible here.)
             if (_itemData != null)
-                _promptLabel = $"Pick Up {_itemData.DisplayName}";
+            {
+                _promptLabel = (_itemData.IsMaterial && _count > 1)
+                    ? $"Pick Up {_itemData.DisplayName} x{_count}"
+                    : $"Pick Up {_itemData.DisplayName}";
+            }
 
             base.Awake();
+        }
+
+        /// <summary>
+        /// Runtime configuration for loot-dropped pickups (spawned via
+        /// <c>LootDropper</c>). Call while the GameObject is INACTIVE, then
+        /// SetActive(true) so <see cref="Awake"/> enriches the prompt with the
+        /// item name. Sets the item + count and configures the trigger collider
+        /// (Reset doesn't run on runtime-added components).
+        /// </summary>
+        public void Initialize(ItemData item, int count)
+        {
+            _itemData = item;
+            _count = Mathf.Max(1, count);
+            _priority = InteractPriority.Pickup;
+            _promptLabel = "Pick Up";
+
+            var sc = GetComponent<SphereCollider>();
+            if (sc != null)
+            {
+                sc.isTrigger = true;
+                sc.radius = _pickupRadius;
+            }
         }
 
         // ── Interactable contract ──────────────────────────────────────────────
@@ -99,18 +132,25 @@ namespace LevelGen.Interaction
                 return;
             }
 
-            if (!inv.AddItem(_itemData))
+            if (!inv.AddItem(_itemData, _count))
             {
                 Debug.Log("[WorldItem] Inventory full — could not add item.", this);
                 return;
             }
 
-            // Auto-equip if the slot is currently empty (first pickup of that slot
-            // becomes equipped; later pickups go to inventory only).
-            if (!inv.IsSlotEquipped(_itemData.Slot))
+            // Equipping is done via the inventory UI (later); auto-equip is opt-in
+            // and never applies to materials.
+            if (_autoEquipOnPickup && !_itemData.IsMaterial && !inv.IsSlotEquipped(_itemData.Slot))
             {
                 inv.Equip(_itemData);
             }
+
+            // Console feedback until the inventory UI exists.
+            if (_itemData.IsMaterial)
+                Debug.Log($"[WorldItem] Picked up {_count}x {_itemData.DisplayName} " +
+                          $"({_itemData.Rarity}) — now holding {inv.GetMaterialCount(_itemData)}.", this);
+            else
+                Debug.Log($"[WorldItem] Picked up {_itemData.DisplayName} ({_itemData.Rarity}).", this);
 
             Destroy(gameObject);
         }

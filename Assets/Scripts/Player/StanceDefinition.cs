@@ -32,11 +32,8 @@ namespace LevelGen.Player
         [Tooltip("Prefab parented under the left-hand socket. Null = empty hand.")]
         [SerializeField] private GameObject leftHandPrefab;
 
-        [Header("Per-hand attach rotations (local euler, spec §6)")]
-        [Tooltip("Right-hand local euler. Spear = (0,0,10); others (0,0,0).")]
-        [SerializeField] private Vector3 rightHandEuler = Vector3.zero;
-
-        [Tooltip("Left-hand local euler. Shield=(0,-180,0); DoubleSword=(0,-180,-90); Bow=(0,170,0).")]
+        [Header("Off-hand attach rotation (local euler)")]
+        [Tooltip("Corrective local euler for the LEFT/off-hand weapon — the right hand mounts at the prefab's authored transform, so it needs none. Tuned per stance (e.g. (0,-90,180)).")]
         [SerializeField] private Vector3 leftHandEuler = Vector3.zero;
 
         [Header("Behavior flags")]
@@ -54,9 +51,7 @@ namespace LevelGen.Player
         public GameObject RightHandPrefab => rightHandPrefab;
         /// <summary>Left-hand weapon prefab (null = empty).</summary>
         public GameObject LeftHandPrefab => leftHandPrefab;
-        /// <summary>Right-hand local attach euler.</summary>
-        public Vector3 RightHandEuler => rightHandEuler;
-        /// <summary>Left-hand local attach euler.</summary>
+        /// <summary>Off-hand (left) corrective local attach euler.</summary>
         public Vector3 LeftHandEuler => leftHandEuler;
         /// <summary>Ranged stance flag (wand/bow).</summary>
         public bool IsRanged => isRanged;
