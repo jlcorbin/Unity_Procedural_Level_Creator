@@ -1,9 +1,13 @@
-// PlayerDodge.cs — M12 directional 4-way dodge.
+// PlayerDodge.cs — M12 directional 4-way dodge (M22: UE5 backstep + Left Ctrl).
 //
-// V press → roll in the current movement direction (or forward if no
-// input), 25 stamina cost, 0.5s i-frames, 0.8s cooldown. Cancels any
-// in-flight attack via PlayerCombat.CancelAttack(); scripted impulse
-// on CharacterController drives displacement (NOT root motion).
+// Dodge press → roll in the current movement direction, or a BACKSTEP when
+// standing still (spec §9). 25 stamina cost, 0.5s i-frames, 0.8s cooldown —
+// stamina + i-frames are Unity-only extras kept per Jason's "match feel, keep
+// extras" decision (UE5 has neither). Cancels any in-flight attack via
+// PlayerCombat.CancelAttack(); scripted impulse on CharacterController drives
+// displacement (NOT root motion — a P10 option, kept scripted to preserve the
+// shipped feel). Bound to Left Ctrl in the input asset (P8); the per-stance roll
+// clip is chosen by the Animator from DodgeDirection + the stance int.
 //
 // Single-direction dependency: subscribes to PlayerInputReader.DodgePressed,
 // writes via PlayerAnimator (sole writer-per-parameter) for DodgeTrigger +
@@ -198,21 +202,22 @@ namespace LevelGen.Player
 
         /// <summary>
         /// Samples <see cref="PlayerInputReader.MoveInput"/> at the
-        /// moment V is pressed, transforms it from camera-relative
+        /// moment the dodge is pressed, transforms it from camera-relative
         /// XZ to a world-space direction, and buckets it into one of
         /// four cardinal directions (forward ±45°, backward ±135°,
-        /// left/right). If the input vector is below a small dead-
-        /// zone, defaults to character forward.
+        /// left/right). If the input vector is below a small dead-zone,
+        /// defaults to a BACKWARD backstep (spec §9).
         /// </summary>
         private Vector3 GetRollWorldDirection(out int directionInt)
         {
             Vector2 input = _input != null ? _input.MoveInput : Vector2.zero;
 
-            // Dead-zone default: no input → forward roll relative to body.
+            // Dead-zone default: no input → backward backstep (spec §9,
+            // UE5 "standing still → BWD"). Was forward pre-M22.
             if (input.sqrMagnitude < 0.01f)
             {
-                directionInt = DirFWD;
-                return transform.forward;
+                directionInt = DirBWD;
+                return -transform.forward;
             }
 
             // Bucket into one of four cardinals based on which axis

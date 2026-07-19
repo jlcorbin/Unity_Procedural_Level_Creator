@@ -35,18 +35,18 @@ namespace LevelGen
 
         [SerializeField]
         [Tooltip("Maximum distance at which a target can be acquired and held. " +
-                 "Exceeding _breakRange auto-unlocks.")]
-        private float _lockRange = 20f;
+                 "Exceeding _breakRange auto-unlocks. M22: UE5 3000 cm → 30 m (UnrealUnits.LockCastDistance).")]
+        private float _lockRange = Player.UnrealUnits.LockCastDistance;
 
         [SerializeField]
         [Tooltip("Distance beyond which the lock is automatically released. " +
                  "Should be greater than _lockRange to create a hysteresis band.")]
-        private float _breakRange = 25f;
+        private float _breakRange = 35f;
 
         [SerializeField]
         [Tooltip("Radius of the sphere used in Physics.SphereCastAll during " +
-                 "target acquisition. Wider = easier to acquire off-center targets.")]
-        private float _sphereCastRadius = 3f;
+                 "target acquisition. M22: UE5 125 cm → 1.25 m (UnrealUnits.LockCastRadius). Widen if off-center acquisition feels too strict.")]
+        private float _sphereCastRadius = Player.UnrealUnits.LockCastRadius;
 
         [SerializeField]
         [Tooltip("Layer mask for the sphere cast. Set to the layer(s) carrying " +
@@ -55,7 +55,7 @@ namespace LevelGen
 
         [SerializeField]
         [Tooltip("Height above the player root used as the sphere cast origin, " +
-                 "to cast from roughly eye level.")]
+                 "to cast from roughly eye level (direction is camera-forward, spec §10).")]
         private float _eyeHeight = 1.2f;
 
         [SerializeField]

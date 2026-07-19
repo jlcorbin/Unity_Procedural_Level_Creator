@@ -33,6 +33,22 @@ namespace LevelGen.Player.Editor
     {
         private const string ActionsAssetPath = "Assets/InputSystem_Actions.inputactions";
 
+        // ── Over-the-shoulder framing (M22 P1) ──────────────────────────────
+        // Faithful mapping of the UE5 boom SOCKET OFFSET (Y +60 right, Z +25 up)
+        // → a POSITIONAL pivot offset on the orbital rig via
+        // CinemachineOrbitalFollow.TargetOffset. This physically slides the orbit
+        // center to the right shoulder + up, which reads as true over-the-shoulder
+        // (the earlier composer-only screen skew was too subtle). A small screen
+        // offset is layered on top for a slight downward look.
+        //   TargetOffset X = shoulder side (m), Y = height (m), Z = 0.
+        //   Composer ScreenPosition centered at (0,0), range -0.5..+0.5.
+        // Tune TargetOffset.x for how far over the shoulder; flip its sign for the
+        // other shoulder. Both live on the CM Follow Camera.
+        private static readonly Vector3 ShoulderTargetOffset =
+            new Vector3(UnrealUnits.ShoulderOffsetRight, UnrealUnits.ShoulderOffsetUp, 0f); // 0.6, 0.25
+        private const float ShoulderScreenX = 0f;    // keep aim centered; TargetOffset does the shoulder
+        private const float ShoulderScreenY = 0.05f; // slight downward look
+
         [MenuItem("LevelGen/Player/Add Cinemachine Follow Camera to Active Scene")]
         [MenuItem("LevelGen/Input/Add Cinemachine Follow Camera to Active Scene")]
         public static void Build()
@@ -131,6 +147,7 @@ namespace LevelGen.Player.Editor
             // Aim stage: RotationComposer (OrbitalFollow only sets position;
             // without an Aim component the camera orbits but never turns).
             vcamGO.AddComponent<CinemachineRotationComposer>();
+            ApplyShoulderFraming(vcamGO); // M22 P1: over-the-shoulder framing
 
             // Collision: Deoccluder
             var deocc = vcamGO.AddComponent<CinemachineDeoccluder>();
@@ -158,7 +175,7 @@ namespace LevelGen.Player.Editor
                 $"[CM Setup] Cinemachine rig installed in '{activeScene.name}'.\n" +
                 $"  CM Brain Camera (MainCamera-tagged) at (0, 5, -8) rot (20, 0, 0)\n" +
                 $"  CM Follow Camera: OrbitalFollow Sphere R=4, H(-180,180)wrap, V(-10,70)init=15\n" +
-                $"  RotationComposer + Deoccluder (MinDistance=1.0)\n" +
+                $"  Over-the-shoulder: OrbitalFollow TargetOffset {ShoulderTargetOffset} + RotationComposer screen ({ShoulderScreenX}, {ShoulderScreenY}); Deoccluder (MinDistance=1.0)\n" +
                 $"  InputAxisController: {wiredAxes}/2 axes wired (Player/Look, gain ±10, Y inverted)\n" +
                 $"  CinemachineAutoBind: present — Follow + LookAt re-resolve on Play\n" +
                 $"  Initial Follow/LookAt: {camTarget.name} (saved in scene; auto-bind also runs on Play)\n" +
@@ -167,6 +184,65 @@ namespace LevelGen.Player.Editor
 
             Selection.activeObject = vcamGO;
             EditorGUIUtility.PingObject(vcamGO);
+        }
+
+        /// <summary>
+        /// Retrofits over-the-shoulder framing onto the CinemachineCamera already
+        /// present in the active scene, without rebuilding the whole rig. Use this
+        /// when a scene already has the M2-A directly-behind orbital rig and you
+        /// only want to shift it to the shoulder (M22 P1).
+        /// </summary>
+        [MenuItem("LevelGen/Player/Set Over-the-Shoulder Framing")]
+        public static void SetOverTheShoulder()
+        {
+            var vcam = Object.FindAnyObjectByType<CinemachineCamera>();
+            if (vcam == null)
+            {
+                Debug.LogError("[CM Setup] No CinemachineCamera in the active scene. " +
+                               "Run 'Add Cinemachine Follow Camera to Active Scene' first.");
+                return;
+            }
+            var orbital = vcam.GetComponent<CinemachineOrbitalFollow>();
+            var composer = vcam.GetComponent<CinemachineRotationComposer>();
+            if (orbital == null && composer == null)
+            {
+                Debug.LogError($"[CM Setup] '{vcam.name}' has neither CinemachineOrbitalFollow nor " +
+                               "CinemachineRotationComposer — nothing to offset. Rebuild the rig.");
+                return;
+            }
+
+            Undo.RecordObjects(new Object[] { orbital, composer }, "Set Over-the-Shoulder Framing");
+            ApplyShoulderFraming(vcam.gameObject);
+            if (orbital != null) EditorUtility.SetDirty(orbital);
+            if (composer != null) EditorUtility.SetDirty(composer);
+            EditorSceneManager.MarkSceneDirty(vcam.gameObject.scene);
+
+            Debug.Log($"[CM Setup] Over-the-shoulder framing applied to '{vcam.name}' " +
+                      $"(OrbitalFollow ▸ Target Offset = {ShoulderTargetOffset}; " +
+                      $"RotationComposer ▸ Screen Position = {ShoulderScreenX}, {ShoulderScreenY}). " +
+                      "Tune Target Offset X for shoulder distance (flip its sign for the other shoulder), then save.");
+            Selection.activeObject = vcam.gameObject;
+        }
+
+        /// <summary>
+        /// Produces the over-the-shoulder look by (a) offsetting the OrbitalFollow's
+        /// tracked pivot to the shoulder + up (the faithful UE boom-socket mapping)
+        /// and (b) a small RotationComposer screen offset for a slight downward look.
+        /// Both components are read-mutate-write structs in Cinemachine 3.x.
+        /// </summary>
+        private static void ApplyShoulderFraming(GameObject vcamGO)
+        {
+            var orbital = vcamGO.GetComponent<CinemachineOrbitalFollow>();
+            if (orbital != null)
+                orbital.TargetOffset = ShoulderTargetOffset;
+
+            var composer = vcamGO.GetComponent<CinemachineRotationComposer>();
+            if (composer != null)
+            {
+                var comp = composer.Composition;
+                comp.ScreenPosition = new Vector2(ShoulderScreenX, ShoulderScreenY);
+                composer.Composition = comp;
+            }
         }
 
         private static int WireLookAxes(CinemachineInputAxisController inputCtrl,

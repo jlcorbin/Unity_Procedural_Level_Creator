@@ -45,8 +45,8 @@ namespace LevelGen.Player
         [SerializeField, Range(0f, 1f)] private float bufferConsumeAt = 0.85f;
 
         [Header("Damage")]
-        [Tooltip("Fallback damage when no weapon is equipped in the Melee slot (unarmed swing).")]
-        [SerializeField] private int _fallbackDamage = 10;
+        [Tooltip("Fallback damage when no weapon is equipped in the Melee slot (unarmed swing). M22: default 20 matches UE5 melee damage (UnrealUnits.MeleeDamage). Equipped weapons still use their ItemData.Damage.")]
+        [SerializeField] private int _fallbackDamage = UnrealUnits.MeleeDamage;
 
         // ── Runtime hitbox (assigned by PlayerEquipmentVisuals on equip) ────
         // Not a SerializeField — the weapon WorldPrefab acts as its own hitbox
@@ -71,6 +71,7 @@ namespace LevelGen.Player
         private PlayerInputReader _input;
         private PlayerAnimator _animator;
         private CharacterStatsRuntime _stats;
+        private StanceController _stance;   // M22: optional — owns the stance int + gates ranged LMB
         private bool _attackBuffered;
 
         // Set to a positive integer to override the next swing's damage
@@ -101,6 +102,38 @@ namespace LevelGen.Player
         private static readonly int Attack02_UnarmedStateHash = Animator.StringToHash("Attack02_Unarmed");
         private static readonly int Attack03_UnarmedStateHash = Animator.StringToHash("Attack03_Unarmed");
 
+        // ── M22: stance-agnostic combo recognition via Animator state TAGS ──
+        // Each per-stance attack state carries an Attack1 / Attack2 / Attack3 tag
+        // (authored in the Animator, P10). Any tagged state combos, so adding a
+        // new stance's attack chain needs no code change. The shipped states are
+        // ALSO matched by hash below, so nothing regresses before the tags exist.
+        private static readonly int Attack1Tag = Animator.StringToHash("Attack1");
+        private static readonly int Attack2Tag = Animator.StringToHash("Attack2");
+        private static readonly int Attack3Tag = Animator.StringToHash("Attack3");
+
+        private static readonly HashSet<int> Hit1Hashes = new HashSet<int>
+        {
+            AttackStateHash, Attack_OHSStateHash, Attack_THSStateHash,
+            Attack_SpearStateHash, Attack_UnarmedStateHash
+        };
+        private static readonly HashSet<int> Hit2Hashes = new HashSet<int>
+        {
+            Attack02StateHash, Attack02_OHSStateHash, Attack02_THSStateHash,
+            Attack02_SpearStateHash, Attack02_UnarmedStateHash
+        };
+        private static readonly HashSet<int> Hit3Hashes = new HashSet<int>
+        {
+            Attack03StateHash, Attack03_OHSStateHash, Attack03_THSStateHash,
+            Attack03_SpearStateHash, Attack03_UnarmedStateHash
+        };
+
+        /// <summary>First-hit attack state (any stance): tagged Attack1 or a known first-hit hash.</summary>
+        private static bool IsAttack1(AnimatorStateInfo i) => i.tagHash == Attack1Tag || Hit1Hashes.Contains(i.shortNameHash);
+        /// <summary>Second-hit attack state (any stance).</summary>
+        private static bool IsAttack2(AnimatorStateInfo i) => i.tagHash == Attack2Tag || Hit2Hashes.Contains(i.shortNameHash);
+        /// <summary>Third-hit / finisher attack state (any stance) — combo cap.</summary>
+        private static bool IsAttack3(AnimatorStateInfo i) => i.tagHash == Attack3Tag || Hit3Hashes.Contains(i.shortNameHash);
+
         // Resolved lazily — PlayerAnimator.Awake may run after ours since
         // sibling-Awake order is non-deterministic. Access via this property
         // anywhere it's needed; PlayerAnimator.Animator is a simple field
@@ -130,7 +163,11 @@ namespace LevelGen.Player
         }
 
         private static bool IsActionState(AnimatorStateInfo info)
-            => info.shortNameHash == AttackStateHash || info.shortNameHash == HitStateHash;
+            // M22: generalize the base-Attack lock to the first hit of every
+            // stance's chain (plus Hit). Movement stays free during Attack2/3
+            // (M21 "unrestricted during combo"). The out-blend to Idle still
+            // reports locked until the transition completes.
+            => IsAttack1(info) || info.shortNameHash == HitStateHash;
 
         /// <summary>
         /// Public alias of <see cref="IsActionLocked"/> for outside callers
@@ -149,6 +186,10 @@ namespace LevelGen.Player
             // CharacterStatsRuntime (matches EnemyHitReaction's
             // null-guarded pattern).
             _stats = GetComponent<CharacterStatsRuntime>();
+            // M22: optional — owns the stance int and gates ranged LMB. Null in
+            // legacy scenes without the stance system (falls back to per-swing
+            // WeaponTypeResolver in OnAttackPressed).
+            _stance = GetComponent<StanceController>();
         }
 
         private void OnEnable()
@@ -169,20 +210,7 @@ namespace LevelGen.Player
             if (anim.IsInTransition(0)) return;
 
             var info = anim.GetCurrentAnimatorStateInfo(0);
-            int hash = info.shortNameHash;
-            bool isHit1 = hash == AttackStateHash
-                        || hash == Attack_OHSStateHash
-                        || hash == Attack_THSStateHash
-                        || hash == Attack_SpearStateHash
-                        || hash == Attack_UnarmedStateHash;
-
-            bool isHit2 = hash == Attack02StateHash
-                       || hash == Attack02_OHSStateHash
-                       || hash == Attack02_THSStateHash
-                       || hash == Attack02_SpearStateHash
-                       || hash == Attack02_UnarmedStateHash;
-
-            if (!isHit1 && !isHit2) return;
+            if (!IsAttack1(info) && !IsAttack2(info)) return;
 
             float n = info.normalizedTime % 1.0f;
             if (n >= bufferConsumeAt)
@@ -202,6 +230,10 @@ namespace LevelGen.Player
         /// </summary>
         private void OnAttackPressed()
         {
+            // M22: ranged stances (wand/bow) use charge-and-release, not the
+            // melee combo — RangedCombat owns the LMB press/release there.
+            if (_stance != null && _stance.IsRanged) return;
+
             var anim = AnimatorComponent;
             if (anim == null) return;
 
@@ -209,45 +241,40 @@ namespace LevelGen.Player
             if (anim.IsInTransition(0)) return;
 
             var info = anim.GetCurrentAnimatorStateInfo(0);
-            int hash = info.shortNameHash;
 
-            if (hash == HitStateHash)
+            if (info.shortNameHash == HitStateHash)
             {
                 // No canceling out of stagger.
                 return;
             }
 
-            // Combo cap: Attack03 is the finisher. Drop deliberately rather
-            // than depending on the Animator graph having no outgoing
-            // Attack-trigger transition from Attack03.
-            if (hash == Attack03StateHash
-            || hash == Attack03_OHSStateHash
-            || hash == Attack03_THSStateHash
-            || hash == Attack03_SpearStateHash
-            || hash == Attack03_UnarmedStateHash) return;
-            
-            bool inActiveAttack = hash == AttackStateHash
-                || hash == Attack02StateHash
-                || hash == Attack_OHSStateHash     || hash == Attack02_OHSStateHash
-                || hash == Attack_THSStateHash     || hash == Attack02_THSStateHash
-                || hash == Attack_SpearStateHash   || hash == Attack02_SpearStateHash
-                || hash == Attack_UnarmedStateHash || hash == Attack02_UnarmedStateHash;
+            // Combo cap: the third hit is the finisher (heavy hits 4/5 dropped
+            // per Jason's decision). Drop deliberately rather than depending on
+            // the Animator graph having no outgoing Attack-trigger transition.
+            if (IsAttack3(info)) return;
+
+            bool inActiveAttack = IsAttack1(info) || IsAttack2(info);
 
             if (!inActiveAttack)
             {
-                // Idle / Locomotion / Sprint — fire immediately.
-                // Resolve and push weapon type so the Animator routes to the correct chain.
-                var inv = PlayerInventory.Instance;
-                var meleeItem = inv != null ? inv.GetEquipped(EquipSlot.Melee) : null;
-                var offHandItem = inv != null ? inv.GetEquipped(EquipSlot.OffHand) : null;
-                var weaponType = WeaponTypeResolver.Resolve(meleeItem, offHandItem);
-                _animator.SetWeaponType(weaponType);
+                // Idle / Locomotion / Sprint — fire immediately. The stance's
+                // int is owned by StanceController (M22), which already set it
+                // on the last stance change. Only resolve + write the legacy
+                // WeaponType here as a fallback for scenes with no StanceController.
+                if (_stance == null)
+                {
+                    var inv = PlayerInventory.Instance;
+                    var meleeItem = inv != null ? inv.GetEquipped(EquipSlot.Melee) : null;
+                    var offHandItem = inv != null ? inv.GetEquipped(EquipSlot.OffHand) : null;
+                    _animator.SetWeaponType(WeaponTypeResolver.Resolve(meleeItem, offHandItem));
+                }
                 _animator.SetAttackTrigger();
                 _attackBuffered = false;
                 return;
             }
 
-            // Currently in Attack01 or Attack02. Decide based on combo window position.
+            // Currently in a first- or second-hit attack. Decide based on combo
+            // window position.
             float n = info.normalizedTime % 1.0f;
             if (n >= comboWindowOpen && n < comboWindowClose)
                 _attackBuffered = true;

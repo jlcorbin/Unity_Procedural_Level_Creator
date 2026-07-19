@@ -5861,6 +5861,126 @@ player has asked for it and the M2-B / M17 / M20c foundation is in place.
   the OHSShield path); enemy combos (apply the same per-type pattern to
   EnemyCombat). See Documentation/Session_Handoff.md (2026-05-21).
 
+## M22 — UE5 Player Parity Port (2026-07-18): COMPLETE + PLAY-VERIFIED
+
+  Post-integration verification pass (same session) — all systems confirmed
+  working in Play mode: movement/camera (over-the-shoulder via OrbitalFollow
+  TargetOffset 0.6/0.25), 8-stance Q dev-cycle, per-stance melee 3-hit combo
+  with damage, ranged charge/release with frame-accurate arrow spawn, dodge,
+  target lock. Fixes made during integration (all folded into the scripts
+  below):
+  - **Input dispatch:** LockOn (RMB) + SwitchStance (Q) UnityEvent endpoints
+    were never invoked by PlayerInput despite correct-looking wiring (fragile
+    per-action UnityEvent dispatch — the M5 lesson). Fixed robustly: PlayerInputReader
+    now subscribes to those two actions DIRECTLY off `_playerInput.actions`
+    (FindActionMap("Player").FindAction) in OnEnable, bypassing the UnityEvent
+    layer entirely; the matching UnityEvent endpoints no-op when the direct path
+    is live (guarded by `_directLockOn`/`_directSwitchStance`) to avoid double-fire.
+    Lesson: for C#-event input actions, prefer direct action.performed
+    subscription over inspector UnityEvent wiring — it can't silently break.
+  - **Blend-tree param type:** 1D blend trees require a FLOAT parameter, but
+    WeaponType is an int (needed as int for the Attack-entry Equals conditions).
+    Added a float mirror `StanceBlend`; PlayerAnimator.SetStanceIndex writes both;
+    the stance builder points loco/dodge blend trees at StanceBlend.
+  - **Melee damage:** the per-stance attack clips lacked OnHitboxOpen/Close
+    animation events, so the collider never enabled. New menu `LevelGen ▶ Player
+    ▶ Add Hitbox Events to Stance Attack Clips` stamps them (0.35/0.65 of length)
+    on all melee stance Attack01/02/03 via ModelImporter.clipAnimations. Also
+    StanceController now wires the dev-cycled weapon's collider to PlayerCombat
+    (so Q-cycled weapons damage, not just inventory-equipped ones).
+  - **Weapon rotations:** StanceController dev-mount now instantiates weapons at
+    their AUTHORED local transform (Instantiate(prefab, socket, false)) instead of
+    overwriting with UE eulers — right hand correct as-is. Left/off-hand weapons
+    sit on the mirrored bone, so LeftHandEuler is applied as a corrective offset;
+    set to (0,-90,180) on SwordAndShield/DoubleSword/BowAndArrow (from the pack's
+    "Anim Layer Avatar Mask" reference scene, weapon_l values). Right-hand euler
+    is not applied.
+  - **Ranged release timing:** arrow no longer spawns on click. RangedCombat plays
+    the shot on release then spawns the arrow when the (now "RangedShot"-tagged)
+    shot state reaches `_releaseNormalizedTime` (0.45, tunable), computing aim at
+    the release frame; safety fallback `_maxReleaseDelay` so a shot is never lost.
+    The stance builder tags the ranged shot states.
+
+  Remaining deferred (non-blocking): bow mesh separation (WeaponPrefab_Bows has
+  layered meshes — split so only the intended bow shows); optional corrective
+  off-hand mount to fix off-hand rotation for the inventory equip path too
+  (currently LeftHandEuler covers the dev path). Original spec deferrals
+  (enemy parity, held-draw pose, wand VFX, lock bracket UI) still stand.
+
+## M22 — UE5 Player Parity Port (2026-07-18): SCRIPTS COMPLETE, manual Editor work pending
+
+  Porting the UE5 `BP_RPG_PlayerCharacter` (spec:
+  Documentation/PlayerCharacter_MechanicsSpec_ForUnity.md, values verified
+  2026-07-18) to Unity for behavioral parity. Full plan + the manual
+  Editor checklist live in **Documentation/UE5_Port_Plan.md** — read it
+  first next session.
+
+  Locked decisions (Jason):
+  - "Match feel, keep extras" — adopt UE5 values/input/direction models but
+    RETAIN Unity-only features that don't conflict: dodge keeps stamina (25) +
+    i-frames (0.5s); sneak stays; inventory/HUD/death/enemies untouched.
+  - Stance system COEXISTS with inventory; the **Q cycle is DEV-ONLY**
+    (StanceDevCycler — delete before ship; nothing depends on it). Equipping
+    an item sets the matching stance via a bridge.
+  - Melee: **keep the shipped 3-hit combo, drop UE's heavy hits 4/5** and the
+    light/heavy upper-body-mask split. No mask layer added.
+  - Camera: **keep the Cinemachine orbital rig**, shifted to over-the-shoulder
+    (RotationComposer screen offset), NOT a spring-arm rebuild.
+  - Target lock **stays on RMB**; Dodge → Left Ctrl; Q → SwitchStance.
+  - UE cm → Unity m via ÷100, centralized in UnrealUnits.cs.
+
+  Scripts done (P0–P9):
+  - NEW: UnrealUnits.cs, Stance.cs, StanceDefinition.cs (SO), StanceController.cs,
+    StanceDevCycler.cs (DEV), RangedCombat.cs, Combat/ArrowProjectile.cs,
+    Editor/RangedSetupBuilder.cs (Build Arrow / Reticle prefabs),
+    Editor/UE5PortValidator.cs (LevelGen ▶ Player ▶ Validate UE5 Port, 20 checks),
+    Editor/PlayerBaseControllerStanceBuilder.cs (LevelGen ▶ Player ▶ Build Stance
+    Animator (M22 12-14) — one-click stamps per-stance melee chains + tags +
+    transitions + WeaponType renumber, ranged single states, nested loco blend
+    tree, per-stance dodge blend trees; tolerant clip search; idempotent;
+    reports missing clips. Needs Locomotion/Idle + Roll{FWD,BWD,LFT,RGT} states
+    to exist as swap targets).
+  - EDITED: PlayerController.cs (6 m/s, accel/braking ramp 20.48, air control
+    0.05, 500°/s desired-yaw turn via RotateTowards, jump 0.9m≈4.2m/s),
+    PlayerAnimator.cs (SetStanceIndex writes the WeaponType int as stance 0–7),
+    PlayerInputReader.cs (SwitchStancePressed + AttackReleased events,
+    OnSwitchStance endpoint, OnAttack raises AttackReleased on canceled),
+    PlayerCombat.cs (stance-agnostic combo via Animator TAGS Attack1/2/3 —
+    backward-compatible with the shipped state-hash checks; defers the stance
+    int to StanceController; suppresses melee LMB in ranged stances;
+    _fallbackDamage default → 20), PlayerDodge.cs (standing-still → backstep),
+    TargetLock.cs (lock 30m / cast r1.25 / break 35),
+    Editor/CinemachineRigBuilder.cs (over-the-shoulder framing + retrofit menu
+    "Set Over-the-Shoulder Framing"), InputSystem_Actions.inputactions
+    (SwitchStance=Q action+binding; Dodge rebind leftShift→leftCtrl).
+
+  Key architecture notes:
+  - The Animator `WeaponType` int now carries the STANCE index (0–7).
+    StanceController is its sole writer (PlayerCombat's per-swing SetWeaponType
+    is now a fallback only for scenes with no StanceController).
+  - Combo recognition is via Animator state TAGS (Attack1/Attack2/Attack3) so
+    any stance's attack chain combos with no code change — the shipped states
+    still match by hash so nothing regresses before tags are authored.
+  - Ranged: PlayerCombat early-returns on AttackPressed while IsRanged;
+    RangedCombat owns press(charge)/release(fire). Arrow = Rigidbody, 60 m/s,
+    0.4× gravity, r0.05, ContinuousDynamic, ignores shooter, 30 dmg on hit.
+    Aim = locked-target if locked, else camera-center ray (50m) → hit/far point.
+
+  Serialization gotchas (existing serialized fields keep prefab values — must be
+  set by hand on Player_Hero.prefab): walkSpeed (→6), jumpHeight (→0.9),
+  _fallbackDamage (→20 optional), TargetLock _lockRange/_sphereCastRadius/
+  _breakRange (→30/1.25/35). New fields (acceleration, airControl, turnRate)
+  take their C# defaults automatically.
+
+  Pending (all in UE5_Port_Plan.md P10 — Jason's manual Editor work):
+  Author 8 StanceDefinition assets; add StanceController + StanceDevCycler(dev)
+  + RangedCombat to Player_Hero; Animator per-stance Attack states + Attack1/2/3
+  tags + per-stance loco blend trees (Direction×Speed, 7 samples) + per-stance
+  dodge states; build+place arrow & reticle prefabs; wire SwitchStance
+  UnityEvent to OnSwitchStance; run "Set Over-the-Shoulder Framing"; set the
+  serialized prefab values above; play-test per the plan's order. NOT yet
+  play-verified (no Unity run this session).
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

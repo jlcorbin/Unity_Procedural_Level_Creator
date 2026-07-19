@@ -35,6 +35,10 @@ namespace LevelGen.Player
         private const string ParamDodgeDirection = "DodgeDirection";
         private const string ParamSneak          = "Sneak";
         private const string ParamWeaponType     = "WeaponType";
+        // M22: float mirror of WeaponType. Blend trees (loco / dodge) require a
+        // FLOAT blend parameter, but the Attack-entry transitions need an INT for
+        // "Equals" conditions — so we drive both from the stance index.
+        private const string ParamStanceBlend    = "StanceBlend";
 
         // ── Cached state ────────────────────────────────────────────────────
         private Animator _animator;
@@ -52,6 +56,7 @@ namespace LevelGen.Player
         private int _hashDodgeDirection;
         private int _hashSneak;
         private int _hashWeaponType;
+        private int _hashStanceBlend;
         private bool _ready;
 
         // ── Public API ──────────────────────────────────────────────────────
@@ -234,6 +239,25 @@ namespace LevelGen.Player
             _animator.SetInteger(_hashWeaponType, (int)weaponType);
         }
 
+        /// <summary>
+        /// Writes the raw stance index (0–7, see <see cref="Stance"/>) to the
+        /// same <c>WeaponType</c> Animator int parameter.
+        ///
+        /// M22: the stance system (spec §6) generalizes the 5-value
+        /// <see cref="WeaponType"/> routing to 8 stances. <see cref="StanceController"/>
+        /// is the sole writer of the stance index via this method; the per-swing
+        /// <see cref="SetWeaponType"/> path is migrated to defer to the active
+        /// stance in P4. The Animator param name stays <c>WeaponType</c> so the
+        /// existing per-type Attack sub-states keep resolving.
+        /// </summary>
+        /// <param name="stanceIndex">Canonical <see cref="Stance"/> value cast to int, 0–7.</param>
+        public void SetStanceIndex(int stanceIndex)
+        {
+            if (!_ready) return;
+            _animator.SetInteger(_hashWeaponType, stanceIndex);   // int → Attack-entry Equals conditions
+            _animator.SetFloat(_hashStanceBlend, stanceIndex);    // float → loco / dodge blend trees
+        }
+
         // ── Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -259,6 +283,7 @@ namespace LevelGen.Player
             _hashDodgeDirection = Animator.StringToHash(ParamDodgeDirection);
             _hashSneak          = Animator.StringToHash(ParamSneak);
             _hashWeaponType     = Animator.StringToHash(ParamWeaponType);
+            _hashStanceBlend    = Animator.StringToHash(ParamStanceBlend);
             _ready = true;
         }
     }

@@ -122,6 +122,15 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "SwitchStance",
+                    "type": "Button",
+                    "id": "a3d1c5e7-0000-4012-b0d4-000000000020",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -502,7 +511,7 @@
                 {
                     "name": "",
                     "id": "c6e1f8a2-0000-4012-b0d4-000000000018",
-                    "path": "<Keyboard>/leftShift",
+                    "path": "<Keyboard>/leftCtrl",
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
@@ -540,6 +549,17 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "Sneak",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "b4e2d6f8-0000-4012-b0d4-000000000021",
+                    "path": "<Keyboard>/q",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "SwitchStance",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

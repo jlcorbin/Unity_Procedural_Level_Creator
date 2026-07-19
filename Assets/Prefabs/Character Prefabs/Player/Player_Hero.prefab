@@ -29,6 +29,9 @@ GameObject:
   - component: {fileID: 6860365291946606045}
   - component: {fileID: 4026023056210307804}
   - component: {fileID: 2663942353720855602}
+  - component: {fileID: 7273754555098298980}
+  - component: {fileID: 2214794486078095158}
+  - component: {fileID: 884972653887575692}
   m_Layer: 0
   m_Name: Player_Hero
   m_TagString: Player
@@ -351,6 +354,22 @@ MonoBehaviour:
       m_Calls: []
     m_ActionId: 9caa3d8a-6b2f-4e8e-8bad-6ede561bd9be
     m_ActionName: UI/TrackedDeviceOrientation
+  - m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 3466405732630974326}
+        m_TargetAssemblyTypeName: LevelGen.Player.PlayerInputReader, Assembly-CSharp
+        m_MethodName: OnSwitchStance
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+    m_ActionId: a3d1c5e7-0000-4012-b0d4-000000000020
+    m_ActionName: 'Player/SwitchStance[/Keyboard/q]'
   m_NeverAutoSwitchControlSchemes: 0
   m_DefaultControlScheme: 
   m_DefaultActionMap: Player
@@ -392,12 +411,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2138059eb31c63c4490187df3bb99bd0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerController
-  walkSpeed: 5
-  sprintMultiplier: 1.75
+  walkSpeed: 6
+  acceleration: 20.48
+  brakingDeceleration: 20.48
+  airControl: 0.05
+  turnRate: 500
   gravity: -9.81
   stickyGroundVelocity: -2
   minMoveSqr: 0.0001
-  jumpHeight: 1.2
+  jumpHeight: 0.9
   _sneakSpeed: 2
   _lockFaceSpeed: 10
   cameraTransform: {fileID: 0}
@@ -488,7 +510,7 @@ MonoBehaviour:
   comboWindowOpen: 0.4
   comboWindowClose: 0.8
   bufferConsumeAt: 0.85
-  _fallbackDamage: 10
+  _fallbackDamage: 20
 --- !u!114 &8984199153369416035
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -589,12 +611,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 425be1834cec75d4589863ffd58231e2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.TargetLock
-  _lockRange: 20
-  _breakRange: 25
-  _sphereCastRadius: 3
+  _lockRange: 30
+  _breakRange: 35
+  _sphereCastRadius: 1.25
   _targetLayer:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 4294967295
   _eyeHeight: 1.2
   _indicatorPrefab: {fileID: 0}
 --- !u!114 &6860365291946606045
@@ -623,6 +645,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerEquipmentVisuals
   _weaponSocket: {fileID: 1213922116614257722}
+  _offHandSocket: {fileID: 0}
 --- !u!114 &2663942353720855602
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -635,6 +658,63 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2b663d3fe73ab6b4bb6943abd3bedf9d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.PlayerSneak
+--- !u!114 &7273754555098298980
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4475946285068610722}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f722b7aad29029a45b06ef02420c8704, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.StanceController
+  _stanceDefinitions:
+  - {fileID: 11400000, guid: e6bfbe420c46d954f9a0461e5d144929, type: 2}
+  - {fileID: 11400000, guid: 1c2d511765cdf6749bd11e4f67bbb0e8, type: 2}
+  - {fileID: 11400000, guid: 0758e17b8d5a84748a254f33c295d0b8, type: 2}
+  - {fileID: 11400000, guid: f77045874ef3a0245aa817c54b86faf1, type: 2}
+  - {fileID: 11400000, guid: b98a9580edb6831478f61d48e4a3d1c4, type: 2}
+  - {fileID: 11400000, guid: e634cb2f03a63d74f8714329a1562743, type: 2}
+  - {fileID: 11400000, guid: 15c1625dc01dfb644ac9c93000f0fa6d, type: 2}
+  - {fileID: 11400000, guid: 727b57209f5d1c4409cde883ca6ce3b0, type: 2}
+  _startingStance: 0
+  _rangedCrosshair: {fileID: 0}
+  _rightHandSocket: {fileID: 1213922116614257722}
+  _leftHandSocket: {fileID: 435183005884937105}
+--- !u!114 &2214794486078095158
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4475946285068610722}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f98665f3bf2b1704abe57a7ca9f778ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.StanceDevCycler
+--- !u!114 &884972653887575692
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4475946285068610722}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8edd57c5406aa4b4c8a7f623786a0e0a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelGen.Player.RangedCombat
+  _arrowPrefab: {fileID: 5971673525986277143, guid: c14b148bcdc9e8f46a12d7fe05a04f33, type: 3}
+  _muzzle: {fileID: 1213922116614257722}
+  _damage: 30
+  _projectileSpeed: 60
+  _aimMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  _targetAimHeight: 1
 --- !u!1 &8263107797383945181
 GameObject:
   m_ObjectHideFlags: 0
@@ -744,6 +824,11 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 3268029654015282355}
   m_SourcePrefab: {fileID: 100100000, guid: 2dfbb63c9cdf7504faf4ff26b0581598, type: 3}
+--- !u!4 &435183005884937105 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5514248043482254508, guid: 2dfbb63c9cdf7504faf4ff26b0581598, type: 3}
+  m_PrefabInstance: {fileID: 5371844112815882045}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &1213922116614257722 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6508871864379605767, guid: 2dfbb63c9cdf7504faf4ff26b0581598, type: 3}

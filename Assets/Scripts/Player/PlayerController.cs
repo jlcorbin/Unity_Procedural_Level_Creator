@@ -34,13 +34,22 @@ namespace LevelGen.Player
     [RequireComponent(typeof(PlayerDodge))]
     public class PlayerController : MonoBehaviour
     {
-        [Header("Movement")]
-        [Tooltip("Walk speed in m/s.")]
-        [SerializeField] private float walkSpeed = 3.5f;
+        [Header("Movement (M22: UE5 parity — see UnrealUnits)")]
+        [Tooltip("Walk speed in m/s. UE5 max walk 600 cm/s → 6.0 m/s (UnrealUnits.MaxWalkSpeed). Tunable — lower toward 3.5 if foot-slide on the in-place walk clips is objectionable.")]
+        [SerializeField] private float walkSpeed = UnrealUnits.MaxWalkSpeed;
 
-        //[Tooltip("Sprint speed multiplier. Sprint logic has been removed from the movement pipeline; this field is retained for inspector visibility but no longer affects movement speed.")]
-        //[SerializeField] private float sprintMultiplier = 1.75f; 
-        
+        [Tooltip("Ground acceleration in m/s² toward the target velocity. UE5 2048 cm/s² → 20.48 (UnrealUnits.MaxAcceleration).")]
+        [SerializeField] private float acceleration = UnrealUnits.MaxAcceleration;
+
+        [Tooltip("Ground braking deceleration in m/s² when slowing/stopping. UE5 2048 cm/s² → 20.48 (UnrealUnits.BrakingDeceleration).")]
+        [SerializeField] private float brakingDeceleration = UnrealUnits.BrakingDeceleration;
+
+        [Tooltip("Airborne steering authority, 0..1. UE5 air control 0.05 — momentum is mostly retained mid-jump (UnrealUnits.AirControl).")]
+        [SerializeField] private float airControl = UnrealUnits.AirControl;
+
+        [Tooltip("Body yaw turn rate in °/s toward the camera-desired yaw (strafe facing). UE5 'use controller desired rotation' at 500°/s (UnrealUnits.YawRotationRate). Set very high for instant snap.")]
+        [SerializeField] private float turnRate = UnrealUnits.YawRotationRate;
+
         [Tooltip("Gravity acceleration in m/s². Negative.")]
         [SerializeField] private float gravity = -9.81f;
 
@@ -51,8 +60,8 @@ namespace LevelGen.Player
         [SerializeField] private float minMoveSqr = 0.0001f;
 
         [Header("Jump")]
-        [Tooltip("Jump height in meters at the peak of the arc. Fixed-height jump; gravity completes the arc. Air-time ≈ 2 * sqrt(2h/|g|) ≈ 0.99s at default 1.2m / -9.81 gravity.")]
-        [SerializeField] private float jumpHeight = 1.2f;
+        [Tooltip("Jump height in meters at the peak of the arc. Fixed-height jump; gravity completes the arc. Default 0.9m yields launch v = sqrt(2gh) ≈ 4.2 m/s, matching UE5 jump velocity 420 cm/s (UnrealUnits.JumpVelocity).")]
+        [SerializeField] private float jumpHeight = 0.9f;
 
         [Header("Sneak")]
         [Tooltip("Movement speed in m/s while sneaking.")]
@@ -74,6 +83,9 @@ namespace LevelGen.Player
         private PlayerCombat _combat;        // optional — null tolerated (gate disabled)
         private PlayerDodge _dodge;          // optional — null tolerated (no dodge gate)
         private float _verticalVelocity;
+        // M22: horizontal velocity is now ramped (accel/braking) rather than
+        // applied instantly, matching UE5's CharacterMovement accel model.
+        private Vector3 _horizontalVelocity;
 
         /// <summary>
         /// True the frame the player is actually moving at sprint speed
@@ -168,30 +180,47 @@ namespace LevelGen.Player
             //    the target); otherwise use the standard camera-relative path.
             Vector3 moveDirXZ = BuildMoveVector(input);
 
-            // 4) Compose horizontal motion. Sprint logic has been removed from the
-            //    movement pipeline — walkSpeed is the single movement speed.
-            //    IsSprintingNow is kept inert (always false) so PlayerStamina
-            //    and PlayerAnimator dependents continue to compile cleanly.
+            // 4) Compose the DESIRED horizontal velocity. Sprint logic was
+            //    removed from the movement pipeline — walkSpeed (or sneak speed)
+            //    is the single movement speed. IsSprintingNow is kept inert
+            //    (always false) so PlayerStamina / PlayerAnimator dependents
+            //    continue to compile cleanly.
             IsSprintingNow = false;
-            float currentSpeed = walkSpeed;
-            if (_input.IsSneaking) currentSpeed = _sneakSpeed;
-            Vector3 motion = moveDirXZ * currentSpeed;
+            float currentSpeed = _input.IsSneaking ? _sneakSpeed : walkSpeed;
+            Vector3 desiredVel = moveDirXZ * currentSpeed;
 
-            // 4.5) Root in place during Attack / Hit. Animator MoveX/MoveZ
-            //      writes (step 8) keep firing so the locomotion blend tree
-            //      stays primed; only the CharacterController translation is
-            //      gated. Gravity still applies so the player doesn't float.
-            if (_combat != null && _combat.IsActionLocked)
-                motion = Vector3.zero;
-            // 4.6) Same gate during a M12 dodge — PlayerDodge.RollCoroutine
-            //      drives horizontal displacement via its own _cc.Move call
-            //      in Update, so this Update's horizontal motion must yield.
-            //      Two cc.Move calls per frame is well-defined in Unity;
-            //      each call updates position before the next reads it.
-            if (_dodge != null && _dodge.IsDodging)
-                motion = Vector3.zero;
+            // 4.5) Root in place during Attack / Hit, and 4.6) during a M12
+            //      dodge (PlayerDodge.RollCoroutine drives displacement via its
+            //      own _cc.Move). In both cases we hard-stop the horizontal
+            //      velocity so it doesn't resume at the pre-lock speed on
+            //      release, and let the owning system (attack root / roll) own
+            //      translation. Gravity still applies so the player never floats.
+            bool motionGated = (_combat != null && _combat.IsActionLocked)
+                             || (_dodge != null && _dodge.IsDodging);
 
-            // 5) Apply gravity (sticky-grounded).
+            if (motionGated)
+            {
+                _horizontalVelocity = Vector3.zero;
+            }
+            else
+            {
+                // M22: ramp toward the desired velocity (UE5 accel model).
+                //   grounded → accelerate at `acceleration`, brake at `brakingDeceleration`;
+                //   airborne → tiny authority (accel * airControl), momentum retained.
+                float rate;
+                if (_isGrounded)
+                    rate = (desiredVel.sqrMagnitude >= _horizontalVelocity.sqrMagnitude)
+                        ? acceleration
+                        : brakingDeceleration;
+                else
+                    rate = acceleration * airControl;
+
+                _horizontalVelocity = Vector3.MoveTowards(
+                    _horizontalVelocity, desiredVel, rate * Time.deltaTime);
+            }
+
+            // 5) Compose full motion (m/s) and apply gravity (sticky-grounded).
+            Vector3 motion = _horizontalVelocity;
             ApplyGravity(ref motion);
 
             // 6) Move.
@@ -308,10 +337,14 @@ namespace LevelGen.Player
         }
 
         /// <summary>
-        /// Snap the player's yaw to match the camera's yaw on the XZ plane.
-        /// Pitch and roll stay at zero. Per design decision (α): snap is
-        /// intentional — no smoothing, no delay. Tight strafe-style feel
-        /// (RE4 Remake / FF7 Remake convention).
+        /// Turn the player's yaw toward the camera's yaw on the XZ plane at
+        /// <see cref="turnRate"/> °/s (pitch and roll stay at zero).
+        ///
+        /// M22: switched from an instant snap to UE5's "use controller desired
+        /// rotation" model — the body chases camera-forward at 500°/s, so a fast
+        /// mouse whip lets the camera lead and the body catch up (the core strafe
+        /// pillar in the spec §3). Set <see cref="turnRate"/> very high to restore
+        /// the original instant-snap feel.
         /// </summary>
         private void SnapBodyToCameraYaw()
         {
@@ -324,7 +357,9 @@ namespace LevelGen.Player
             if (camForward.sqrMagnitude < minMoveSqr) return;
             camForward.Normalize();
 
-            transform.rotation = Quaternion.LookRotation(camForward, Vector3.up);
+            Quaternion targetYaw = Quaternion.LookRotation(camForward, Vector3.up);
+            transform.rotation = Quaternion.RotateTowards(
+                transform.rotation, targetYaw, turnRate * Time.deltaTime);
         }
 
         /// <summary>

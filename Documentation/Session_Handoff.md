@@ -1,209 +1,67 @@
-# Session Handoff — 2026-05-21
+# Session Handoff — 2026-07-18 (end of day)
 
-## 1. Session Summary
+## Status: M22 UE5 Player Parity Port — COMPLETE & PLAY-VERIFIED
 
-**M21 — Per-Weapon Combo System shipped.** Attacks now branch into
-weapon-type-aware combo chains instead of the single shared 3-hit chain
-from M2-B. The equipped Melee weapon (plus off-hand shield state) resolves
-to a `WeaponType` at swing-start; that int drives which Animator chain
-fires. Code layer + Animator graph + prefab edits all complete.
+The full UE5 `BP_RPG_PlayerCharacter` port is working in Play mode. Details +
+the integration fixes are in `CLAUDE.md` under **"M22 … COMPLETE + PLAY-VERIFIED"**;
+the full plan/decisions/unit table are in `Documentation/UE5_Port_Plan.md`.
 
-What shipped:
+Verified working: over-the-shoulder orbital camera, 6 m/s strafe movement,
+8-stance **Q** dev-cycle with correct weapon rotations (both hands), per-stance
+3-hit melee combo dealing damage, ranged charge/release with frame-accurate
+arrow spawn, dodge (Left Ctrl), RMB target lock. All `[M22-DIAG]` logs removed.
 
-- **`WeaponType` enum** (`Assets/Scripts/Items/WeaponType.cs`, NEW) —
-  `Unarmed=0, OHS=1, OHSShield=2, THS=3, Spear=4`. The combat animation
-  category resolved per swing.
+## ▶ START HERE TOMORROW: bow + arrow mesh separation
 
-- **`WeaponTypeResolver` static helper**
-  (`Assets/Scripts/Items/WeaponTypeResolver.cs`, NEW) —
-  `Resolve(meleeItem, offHandItem)`. Prefix-matches the Melee item's
-  `WorldPrefab.name`: `THS*` → THS, `Spear*` → Spear, `OHS*` → OHS (or
-  OHSShield when the off-hand carries an `EquipSlot.OffHand` item). Null
-  melee → Unarmed; unknown prefix → Unarmed + `Debug.LogWarning`. No new
-  field on `ItemData` — derives entirely from the existing prefab name.
+**Goal:** `WeaponPrefab_Bows` (and the arrow rig) ship with *many* meshes layered
+together, so the BowAndArrow stance shows a pile of bows/arrows instead of one.
+Separate them so only the intended single bow + nocked arrow render.
 
-- **`PlayerAnimator.SetWeaponType(WeaponType)`** — new public setter,
-  `ParamWeaponType = "WeaponType"` int param, `_hashWeaponType` cached in
-  `Awake`. `_ready`-gated like every sibling setter. Single-writer
-  invariant preserved — `PlayerAnimator` is still the sole script that
-  calls `Animator.Set*`.
+Starting context for that task:
+- The bow is a **skinned mesh** (`BowsSkinnedMesh.fbx`) with its own flex-idle
+  controller (`BowsCTRL.controller`), not a static mesh like the other weapons.
+  Wrapper prefab: `Assets/Prefabs/Weapons/WeaponPrefab_Bows.prefab`. Arrow rig:
+  `WeaponPrefab_Arrows.prefab` (`ArrowsSkinnedMesh.fbx`, `ArrowsCTRL.controller`).
+- Pack source: `Assets/AssetPacks/RPG Tiny Hero World Bundle/RPGTinyHeroWavePBR/`
+  — `Mesh/Weapons/BowsSkinnedMesh.fbx`, `Mesh/Weapons/ArrowsSkinnedMesh.fbx`,
+  and static arrow projectiles under `Mesh/Weapons/Projectile/Arrow01–05Projectile.fbx`.
+- The bow mounts to the LEFT hand in stance 7 (`BowAndArrow.asset`,
+  `leftHandEuler = (0,-90,180)`). The fired projectile is the separate
+  `Arrow_Projectile.prefab` (built by `RangedSetupBuilder`), independent of the
+  visual nocked-arrow rig.
+- Likely approach: the skinned FBX contains all bow variants as sub-meshes/bones;
+  isolate the one intended bow (and one arrow) — either by deleting the extra
+  SkinnedMeshRenderers/sub-objects in the wrapper prefab, or authoring a wrapper
+  that references only the target mesh. Investigate the FBX hierarchy first.
 
-- **`PlayerCombat` — 15 attack-state hash registration + combo-gate
-  extension.** Registered 15 attack-state hashes: the 3 shared
-  `Attack` / `Attack02` / `Attack03` (the original M2-B SwordAndShield
-  states) plus 4 new 3-hit chains × 3 states each —
-  `Attack[_/02_/03_]OHS`, `_THS`, `_Spear`, `_Unarmed`. All three combo
-  gates were widened to recognise every chain's states:
-  `inActiveAttack` (buffer-window eligibility), the Attack03 combo-cap
-  early-return, and the Hit-state interruption check. `SetWeaponType` is
-  called once at swing-start in `OnAttackPressed`'s `!inActiveAttack`
-  branch, immediately before `SetAttackTrigger()`. The buffered-combo
-  machine itself (`_attackBuffered`, `comboWindowOpen/Close`,
-  `bufferConsumeAt`, `SetComboNext`) is unchanged — chain progression
-  stays type-agnostic.
+## THEN: cleanup pass (before next phase)
 
-- **`PlayerEquipmentVisuals` — dual-socket routing.** Added an
-  `_offHandSocket` SerializeField alongside `_weaponSocket`.
-  `HandleWeaponEquipped` now picks the socket by
-  `item.Slot == EquipSlot.OffHand` (off-hand bone for shields, weapon_r
-  for everything else), destroys only that socket's children, and wires
-  the `PlayerCombat.Hitbox` + `HitboxRelay.Combat` **only for Melee
-  items** (shields have no hitbox). Unequip clears the hitbox ref only
-  when the cleared slot is Melee.
+After bow/arrow is sorted, do a cleanup pass. Candidates:
+- **Delete `StanceDevCycler`** if stance-testing is done (Q cycle was always
+  dev-only; nothing depends on it — the inventory equip→stance bridge is the
+  real path). Also remove the `SwitchStance` input action/binding if Q is retired.
+- Consider the **corrective off-hand mount** so off-hand rotations are also
+  correct in the inventory equip path (currently `LeftHandEuler` fixes only the
+  dev-cycle path). Offered builder: an empty child under the off-hand bone with
+  the corrective rotation, wired as both `StanceController._leftHandSocket` and
+  `PlayerEquipmentVisuals._offHandSocket`; then zero the `LeftHandEuler` values.
+- Prune any now-unused scaffolding (e.g. the `StanceDefinition.rightHandEuler`
+  field is no longer applied; `TargetLock._eyeHeight` still used).
+- Re-run `LevelGen ▶ Player ▶ Validate UE5 Port` (expect 20/0) and the other
+  domain validators as a regression sweep.
 
-- **Animator graph — 5 Any State entry transitions + 4 new 3-hit
-  chains.** The `WeaponType` int routes Any State → the correct chain
-  entry: one transition per enum value. OHSShield reuses the pre-existing
-  SwordAndShield `Attack` / `Attack02` / `Attack03` chain (there is no
-  `Attack_OHSShield` state — code-confirmed by the absence of that hash);
-  the other four route to the new `Attack_OHS`, `Attack_THS`,
-  `Attack_Spear`, `Attack_Unarmed` chains. (Editor work — Animator window
-  + override-controller slots.)
+## Key gotchas to remember
+- **Input:** LockOn/SwitchStance use DIRECT action subscription in
+  PlayerInputReader, NOT UnityEvent wiring (the UnityEvent path silently didn't
+  fire). Don't "fix" this back to UnityEvents.
+- **Blend trees** must use the float `StanceBlend` param, not the int `WeaponType`.
+- **Melee damage** needs the OnHitboxOpen/Close events on clips — re-run
+  `Add Hitbox Events to Stance Attack Clips` after any clip reimport.
+- Re-running `Build Stance Animator (M22 12-14)` rebuilds the melee chains
+  (idempotent) — re-apply any hand-tweaks to attack states afterward.
+- Serialized prefab values that C# defaults can't reach are set on
+  `Player_Hero.prefab` (walkSpeed 6, jumpHeight 0.9, TargetLock 30/1.25/35).
 
-- **`Player_Hero.prefab` — Shield08 removed.** The baked-in Shield08 mesh
-  was deleted from the prefab so the off-hand now shows whatever shield is
-  equipped via `PlayerEquipmentVisuals`, not a hardcoded one. (Editor /
-  Inspector work.)
-
-- **3 compiler warnings cleared.** (Cleanup folded into this session;
-  specific warnings not separately catalogued here.)
-
-## 2. Validator State Table
-
-| Validator | Result | Checks |
-|-----------|--------|--------|
-| LevelGen ▶ Player ▶ Validate Player_Hero | PASS | 67 / 67 |
-| LevelGen ▶ Player ▶ Validate Combo WeaponType (M21) | PASS | 8 / 8 |
-| LevelGen ▶ Combat ▶ Validate Enemy | PASS | 49 / 49 |
-| LevelGen ▶ Interaction ▶ Validate Interaction | PASS | 42 / 42 |
-
-(Weapon Prefabs validator — `LevelGen ▶ Weapons ▶ Validate Weapon
-Prefabs` — was 114/114 last session; not re-run, unaffected by M21.)
-
-The M21 validator (`PlayerComboWeaponTypeValidator`) covers: WeaponType +
-WeaponTypeResolver files exist, enum has 5 values,
-`PlayerAnimator.SetWeaponType` + `_hashWeaponType` present, PlayerCombat
-references `SetWeaponType` before `SetAttackTrigger`, and
-`WeaponTypeResolver.Resolve(null,null) == Unarmed`. It does **not** check
-the Animator graph (5 entry transitions / 4 chains) or the per-type
-override-controller clip slots — those are editor artifacts verified by
-play-test, not by the read-only validator.
-
-## 3. Deferred / Known Issues
-
-- **EnemyBaseBuilder does not stamp the Enemy layer** — the `Enemy` layer
-  (added last session) is set on `Enemy_Grunt.prefab` by hand.
-  `EnemyBaseBuilder` still builds on the default layer; extend it to stamp
-  `Enemy` on the built root so future archetypes are TargetLock-visible
-  without manual Inspector work.
-- **Weapon collider sizes** — all 57 weapon-prefab BoxCollider bounds are
-  first-pass category estimates; per-weapon tuning in Prefab Mode is still
-  needed (shields, spears, staves most affected). With M21 live, mismatched
-  collider reach per weapon type will now be more visible in play-test.
-- **Item icons blank** — `ItemData.Icon` (Sprite field) is unassigned on
-  every `ItemData` asset; inventory UI is text-only.
-- **Armor slot not in HUD** — `EquipSlot.Armor` exists but is surfaced in
-  neither the `InventoryHUD` strip nor `InventoryPanel`.
-- **THS two-handed hold visual is still one-handed** — two-handed swords
-  and spears resolve to the correct THS/Spear *animation* chains, but the
-  weapon mesh still mounts to the single `weapon_r` socket and the body
-  grip reads as one-handed. A proper two-handed grip needs either an
-  off-hand IK constraint to the weapon or a dedicated two-handed mount —
-  deferred.
-- **EnemyHealthBar wiring** — `EnemyHealthBar` /
-  `EnemyHealthBarProximityDriver` scripts (M14) are still not placed on
-  `Enemy_Grunt.prefab` (Canvas + Image hierarchy + component placement
-  pending).
-- **OHSShield ↔ original chain coupling** — OHSShield deliberately reuses
-  the M2-B `Attack`/`Attack02`/`Attack03` SwordAndShield states. If those
-  states are ever retired or renamed, the OHSShield path breaks silently
-  (no dedicated `Attack_OHSShield` states exist). Documented so a future
-  Animator-cleanup pass doesn't orphan it.
-
-## 4. Open Milestone Candidates
-
-| Milestone | Description | Recommended? |
-|-----------|-------------|--------------|
-| M22 | Loot drops — `EnemyData.lootTable` → spawn `WorldItem` on enemy death | **Yes — next** |
-| M19 | Enemy AI depth — patrol routes, alert / search states, group awareness | |
-| Two-handed grip | Off-hand IK / dedicated mount so THS + Spear read as two-handed | |
-| Enemy combo | Apply the M21 per-type combo pattern to `EnemyCombat` | |
-| Inventory UI polish | Item icons, Armor slot in HUD, tooltips, drag-drop | |
-
-**Recommended next: M22 (loot drops).** It closes the item loop end-to-end
-— enemies now take per-weapon-typed damage (M21), so the natural next beat
-is having them *drop* equippable items on death. The pieces already exist:
-`EnemyData` (M13) can carry a loot table, `WorldItem` (M16) is the spawnable
-pickup actor, `ItemData.WorldPrefab` (M16) gives the world mesh, and
-`EnemyDeath.HandleDied` (M4-B) is the spawn hook. Mostly wiring, low new-
-architecture risk.
-
-## 5. Architectural Reminders (for upcoming work)
-
-- **Single-writer-per-Animator-parameter.** Each Animator parameter has
-  exactly one script writing it. `PlayerAnimator` is the sole player-side
-  caller of `Animator.Set*`; `EnemyHitReaction` / `EnemyDeath` / `EnemyAI`
-  each own disjoint enemy params. Any new param (e.g. an enemy combo int)
-  must follow the same pattern — a setter on the owning component, never a
-  cross-script `Animator.Set*`.
-- **Pull pattern for read-mostly state.** M21's `WeaponType` resolve, like
-  M17's damage read, happens once at swing-start by *pulling* from
-  `PlayerInventory.GetEquipped(...)` — no event subscription. Loot tables
-  should follow the same: read `EnemyData.lootTable` at death time, don't
-  subscribe.
-- **Has Exit Time + Trigger condition is forbidden (Unity 6.4).** Never
-  combine `Has Exit Time = true` with a Trigger condition on the same
-  transition — it auto-fires at exit time regardless of the trigger
-  (M2-B Step 6/7 lesson). Combo advancement is gated in script
-  (`SetComboNext` only at `normalizedTime >= bufferConsumeAt`). Any new
-  combo chains added later must keep this discipline.
-- **`EnemyDeath.HandleDied` is the despawn hook.** `Destroy(gameObject,
-  despawnDelay)` runs there (M4-B). Loot must spawn *before* that destroy,
-  at the corpse position, parented to the scene (not the corpse) so it
-  survives the despawn.
-- **`EnemyCombat` friendly-fire guard.** `stats.CompareTag("Player")`
-  hard-codes "only the Player takes enemy damage". Enemy-vs-enemy combat
-  (or enemy combos that could clip allies) stays blocked until the
-  M-Factions milestone replaces the guard with team IDs.
-- **Prefab-rebuild cascade.** `Build Player_Hero Prefab` rebuilds from
-  scratch; the manual `_weaponSocket` / `_offHandSocket` bone wiring on
-  `PlayerEquipmentVisuals` is **not** auto-resolved (weapon_r / off-hand
-  bones are outside the Humanoid skeleton, invisible to
-  `Animator.GetBoneTransform`). After any full rebuild, re-drag both bone
-  sockets in the Inspector or the weapon/shield mesh swap silently no-ops.
-- **Input is UnityEvent dispatch.** No generated `InputSystem_Actions.cs`.
-  Every action is a `public void OnX(InputAction.CallbackContext)` endpoint
-  on `PlayerInputReader`, wired via `PlayerHeroBuilder.s_Bindings` + the
-  PlayerInput component. C# event endpoints carry the `Performed` suffix
-  (`OnXPerformed`) to avoid CS0102. Read `PlayerInputReader.cs` before
-  writing input code.
-
-## 6. Quick-Start for Next Session
-
-Paste this at the start of the next chat:
-
-```
-# Hub & Hollow — Session Open
-
-Read in order:
-1. CLAUDE.md
-2. Documentation/Session_Handoff.md
-
-Last session shipped M21 — Per-Weapon Combo System. Attacks branch into
-weapon-type-aware chains: WeaponType enum + WeaponTypeResolver (prefix-
-match on WorldPrefab.name), PlayerAnimator.SetWeaponType, PlayerCombat
-registers 15 attack-state hashes across 5 chains (shared SwordAndShield +
-OHS/THS/Spear/Unarmed), PlayerEquipmentVisuals dual-socket routing
-(weapon_r + off-hand), Animator graph 5 Any State entries → 4 new 3-hit
-chains, Shield08 removed from Player_Hero. Validators: Player_Hero 67/67,
-Combo WeaponType (M21) 8/8, Enemy 49/49, Interaction 42/42.
-
-Reminder: after any Build Player_Hero Prefab, re-drag the _weaponSocket
-and _offHandSocket bones on PlayerEquipmentVisuals (extra bones, not
-auto-resolved).
-
-Recommended next: M22 — loot drops. Wire EnemyData.lootTable → spawn
-WorldItem on death via EnemyDeath.HandleDied (before the despawn Destroy).
-Pieces already exist: EnemyData (M13), WorldItem + ItemData.WorldPrefab
-(M16), EnemyDeath hook (M4-B). See Session_Handoff §5 for constraints.
-```
+## Deferred (unchanged from spec)
+Enemy-side parity, root-motion dodge, held-draw pose + charge→power scaling,
+wand cast VFX, lock-on bracket UI.

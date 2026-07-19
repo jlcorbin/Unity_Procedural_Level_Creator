@@ -84,6 +84,65 @@ namespace LevelGen.Player
         /// </summary>
         public event System.Action OnToggleInventoryPerformed;
 
+        /// <summary>
+        /// Raised once per Attack button RELEASE (button-up edge, ctx.canceled).
+        /// M22: consumed by the ranged combat path (charge on press, fire on
+        /// release, spec §8). Melee ignores it.
+        /// </summary>
+        public event System.Action AttackReleased;
+
+        /// <summary>
+        /// Raised once per SwitchStance button press (button-down edge,
+        /// ctx.performed). M22: consumed by the DEV-ONLY stance cycler
+        /// (<c>StanceDevCycler</c>) to cycle <c>(stance + 1) % 8</c>. The binding
+        /// (Q) and this event are development affordances only — see
+        /// <see cref="StanceController"/>.
+        /// </summary>
+        public event System.Action SwitchStancePressed;
+
+        // ── Robust direct action subscription (M22) ──────────────────────────
+        // LockOn (RMB) and SwitchStance (Q) were not reaching their UnityEvent
+        // endpoints even with correct-looking inspector wiring (the fragile
+        // per-action UnityEvent failure — see the M5 input lesson). We subscribe
+        // to those two actions DIRECTLY off the sibling PlayerInput's asset, which
+        // bypasses the UnityEvent layer and needs no inspector wiring. When the
+        // direct path is live it OWNS the event; the matching UnityEvent endpoint
+        // below no-ops so a fixed wiring can't double-fire a toggle.
+        private UnityEngine.InputSystem.PlayerInput _playerInput;
+        private InputAction _lockOnAction;
+        private InputAction _switchStanceAction;
+        private bool _directLockOn;
+        private bool _directSwitchStance;
+
+        private void Awake()
+        {
+            _playerInput = GetComponent<UnityEngine.InputSystem.PlayerInput>();
+        }
+
+        private void OnEnable()
+        {
+            var map = (_playerInput != null && _playerInput.actions != null)
+                ? _playerInput.actions.FindActionMap("Player", false)
+                : null;
+            if (map == null) return;
+
+            _lockOnAction = map.FindAction("LockOn", false);
+            if (_lockOnAction != null) { _lockOnAction.performed += OnLockOnAction; _directLockOn = true; }
+
+            _switchStanceAction = map.FindAction("SwitchStance", false);
+            if (_switchStanceAction != null) { _switchStanceAction.performed += OnSwitchStanceAction; _directSwitchStance = true; }
+        }
+
+        private void OnDisable()
+        {
+            if (_lockOnAction != null) _lockOnAction.performed -= OnLockOnAction;
+            if (_switchStanceAction != null) _switchStanceAction.performed -= OnSwitchStanceAction;
+            _directLockOn = _directSwitchStance = false;
+        }
+
+        private void OnLockOnAction(InputAction.CallbackContext ctx) => OnLockOnPerformed?.Invoke();
+        private void OnSwitchStanceAction(InputAction.CallbackContext ctx) => SwitchStancePressed?.Invoke();
+
         // ── UnityEvent endpoints ─────────────────────────────────────────────
         // Wired in the inspector to UnityEngine.InputSystem.PlayerInput's
         // per-action UnityEvents. Value-type actions (Move, Look) read every
@@ -114,6 +173,7 @@ namespace LevelGen.Player
         public void OnAttack(InputAction.CallbackContext ctx)
         {
             if (ctx.performed) AttackPressed?.Invoke();
+            else if (ctx.canceled) AttackReleased?.Invoke();  // M22: ranged charge-release
         }
 
         /// <summary>
@@ -195,6 +255,7 @@ namespace LevelGen.Player
         /// </summary>
         public void OnLockOn(InputAction.CallbackContext ctx)
         {
+            if (_directLockOn) return;   // direct subscription owns this action
             if (ctx.performed) OnLockOnPerformed?.Invoke();
         }
 
@@ -206,6 +267,18 @@ namespace LevelGen.Player
         public void OnToggleInventory(InputAction.CallbackContext ctx)
         {
             if (ctx.performed) OnToggleInventoryPerformed?.Invoke();
+        }
+
+        /// <summary>
+        /// SwitchStance action endpoint (DEV-ONLY). Raises
+        /// <see cref="SwitchStancePressed"/> on the performed phase. Consumed by
+        /// <c>StanceDevCycler</c>. Until the Q binding is added to the input asset
+        /// (P8), this simply never fires — safe to ship ahead of the binding.
+        /// </summary>
+        public void OnSwitchStance(InputAction.CallbackContext ctx)
+        {
+            if (_directSwitchStance) return;   // direct subscription owns this action
+            if (ctx.performed) SwitchStancePressed?.Invoke();
         }
     }
 }
