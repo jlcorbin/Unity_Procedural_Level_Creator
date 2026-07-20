@@ -45,6 +45,24 @@ namespace LevelGen.Input
 
         private void Update()
         {
+            // UI mode (inventory / forge open): keep the cursor free and ignore
+            // the click-to-relock rule, otherwise the first click on a button
+            // would snap the cursor away.
+            if (UiCursorActive)
+            {
+                _wasUiCursor = true;
+                if (IsLocked) Unlock();
+                return;
+            }
+
+            // Just returned from UI mode → re-engage gameplay cursor immediately.
+            if (_wasUiCursor)
+            {
+                _wasUiCursor = false;
+                Lock();
+                return;
+            }
+
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
             {
@@ -62,6 +80,31 @@ namespace LevelGen.Input
             }
         }
 
+        // ── UI cursor requests ──────────────────────────────────────────────
+        // Any UI screen that needs a usable cursor calls RequestUiCursor() when
+        // it opens and ReleaseUiCursor() when it closes. Counted, so several
+        // screens can be open at once without one closing re-locking early.
+
+        private static int _uiCursorRequests;
+        private bool _wasUiCursor;
+
+        /// <summary>True while at least one UI screen wants a free cursor.</summary>
+        public static bool UiCursorActive => _uiCursorRequests > 0;
+
+        /// <summary>Frees the cursor for UI. Pair with <see cref="ReleaseUiCursor"/>.</summary>
+        public static void RequestUiCursor()
+        {
+            _uiCursorRequests++;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+
+        /// <summary>Releases one UI cursor request; gameplay re-locks at zero.</summary>
+        public static void ReleaseUiCursor()
+        {
+            _uiCursorRequests = Mathf.Max(0, _uiCursorRequests - 1);
+        }
+
         private void OnFocusChanged(bool hasFocus)
         {
             if (!hasFocus) Unlock();
@@ -77,6 +120,9 @@ namespace LevelGen.Input
 
         private void Lock()
         {
+            // Never grab the cursor back while a UI screen needs it.
+            if (UiCursorActive) return;
+
             SuppressLookThisFrame = true;
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;

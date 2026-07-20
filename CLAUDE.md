@@ -6061,6 +6061,77 @@ player has asked for it and the M2-B / M17 / M20c foundation is in place.
   refactor discussed in the design chat); loot on other enemy types; auto-pickup
   on walk-over; currency/vendors; potions.
 
+## M-InventoryUI — Candy Cloud Inventory + Forge screens (2026-07-19)
+
+  First half of the gear/upgrade UI, built from the design deliverable in
+  `Documentation/Asset and inventory UI design/design_handoff_candy_cloud/`
+  ("Candy Cloud" theme — README is the token/layout source of truth).
+  **Inventory binds real data; Forge is STUBBED by decision** (real data lands
+  with the weapon-instance model).
+
+  Scripts (Assets/Scripts/UI/Inventory/):
+  - RarityPalette.cs — ScriptableObject holding BOTH approved palettes
+    (**Candy Warm** = active/chosen, **Classic Bright** = fallback matching the
+    exported reference PNGs). `Get(rarity)` → {main, soft, text} + empty/locked
+    colours. `ResetToDesignDefaults()` refills from the design hex values.
+  - InventoryItemCell.cs — one bag cell (rarity frame + soft fill, icon or
+    initials fallback, ×N stack badge, selection ring, click event).
+  - EquipmentSlotView.cs — one equipment slot; filled / empty / locked states.
+  - InventoryScreen.cs — binds PlayerInventory (unique gear list + material
+    stacks) to the grid, slots, stats, detail strip; 5 category tabs filter
+    (All/Weapons/Armor/Materials/Potions-disabled); I-key toggle; opens with
+    `Time.timeScale = 0` (restores the captured previous value).
+  - ForgeMaterialRow.cs — one have/need material row with status dot.
+  - ForgeScreen.cs — **STUB DATA**. Full layout: before→after cards, rarity
+    ladder, material rows, both button states. Everything renders through ONE
+    seam: **`Show(ForgeViewModel vm)`**. To go live, build a `ForgeViewModel`
+    from a real weapon instance + cost table and call `Show()` — no other change.
+    `stubEnough` / `stubShort` preview both states (ContextMenu on the component).
+
+  Builder: `LevelGen ▶ UI ▶ Build Inventory + Forge UI`
+  (Assets/Scripts/UI/Editor/InventoryUIBuilder.cs) — idempotent; creates
+  Assets/Data/UI/RarityPalette.asset and Assets/Prefabs/UI/Inventory/
+  {Cell_Item, Slot_Equipment, Row_ForgeMaterial, InventoryScreen, ForgeScreen}.
+  Rounded corners use the built-in 9-sliced UISprite; gradients/soft shadows are
+  approximated with flat tints (swap for sprites at art polish).
+
+  Cursor-in-UI (MouseLook.cs): added a COUNTED UI-cursor request API —
+  `RequestUiCursor()` / `ReleaseUiCursor()` / `UiCursorActive`. Screens call it on
+  Open/Close. While active, `Lock()` is hard-guarded and the click-to-relock rule
+  is skipped, otherwise the first click on a tab would snap the cursor away.
+  Closing re-locks immediately. Counted so multiple screens can stack.
+
+  Fixes this session:
+  - `EnemyAINavMeshBaker`: 4× CS0618 — switched to the 1-arg
+    `FindObjectsByType<T>(FindObjectsInactive.Include)` overload.
+  - TMP missing-glyph warnings: the default LiberationSans SDF lacks
+    ✕ ✓ ➜ × · — ▲ ✦. All TMP-rendered strings are now ASCII ("X", "x1",
+    "Mat 1 - Common", ">"); each site has a comment to restore the real glyphs
+    once Fredoka/Nunito TMP font assets are imported. (Debug.Log / [Header]
+    strings are console/inspector-only and were left alone.)
+  - **LootDropper `DestroyImmediate` bug:** killing a Grunt with the BOW runs the
+    death chain inside `OnTriggerEnter`, where DestroyImmediate is illegal (melee
+    kills never tripped it). The placeholder block is now built by hand
+    (`new GameObject` + MeshFilter with `Resources.GetBuiltinResource<Mesh>` +
+    MeshRenderer) instead of `GameObject.CreatePrimitive`, so there is NO default
+    collider to remove — WorldItem's RequireComponent then adds exactly one
+    trigger SphereCollider. Lesson: when a deferred Destroy and DestroyImmediate
+    are both wrong, remove the need to destroy anything.
+
+  Known gaps / deferred:
+  - **Hero preview is an intentional placeholder** (the design mock shows one
+    too). Real version needs: preview layer + model instance, a camera →
+    RenderTexture, RawImage, drag-to-rotate. DECISION PENDING: separate preview
+    instance (recommended) vs live player model.
+  - Fonts: TMP default in use — import **Fredoka** + **Nunito** as TMP assets.
+  - Item icons: `ItemData.Icon` is unset, so cells show name initials.
+  - Old M18 `InventoryPanel` / `InventoryHUD` are superseded — remove them from
+    the scene (they also listen to the I key and would double-toggle).
+  - UGUI clicks need an EventSystem with an `InputSystemUIInputModule` that has
+    its actions asset assigned (M5 lesson — a programmatic AddComponent leaves it
+    inert).
+  - Not yet added: sorting/search, currency wiring, equip-from-UI action.
+
 ## Next CC task
 
 The procedural level generation pipeline is at a stable

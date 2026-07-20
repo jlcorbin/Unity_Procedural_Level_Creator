@@ -66,40 +66,30 @@ namespace LevelGen.Combat
             if (item == null) return;
 
             // Placeholder block: cube = gear, sphere = material.
-            var shape = item.IsMaterial ? PrimitiveType.Sphere : PrimitiveType.Cube;
-            var go = GameObject.CreatePrimitive(shape);
-            go.name = $"Pickup_{item.name}";
-
-            // Drop the solid collider CreatePrimitive adds — the WorldItem's
-            // trigger SphereCollider handles interaction; we don't want it to
-            // block the player. DestroyImmediate (not Destroy) so it's gone
-            // BEFORE WorldItem's RequireComponent runs — otherwise a still-pending
-            // SphereCollider (sphere primitive) would satisfy RequireComponent and
-            // then get destroyed, leaving WorldItem with no trigger.
-            var solid = go.GetComponent<Collider>();
-            if (solid != null) DestroyImmediate(solid);
+            //
+            // Built by hand rather than GameObject.CreatePrimitive so it has NO
+            // default solid collider to remove. Removing one here is impossible:
+            // Destroy is deferred (WorldItem's RequireComponent would then bind to
+            // the doomed collider and be left with no trigger), and DestroyImmediate
+            // is ILLEGAL inside a physics trigger callback — which is exactly where
+            // enemy death originates when an arrow lands.
+            var go = new GameObject($"Pickup_{item.name}");
+            var mf = go.AddComponent<MeshFilter>();
+            mf.sharedMesh = BuiltinMesh(item.IsMaterial);
+            var rend = go.AddComponent<MeshRenderer>();
 
             // Position: scatter around the corpse, floating at drop height.
             Vector2 off = Random.insideUnitCircle * _scatterRadius;
             go.transform.position = transform.position + new Vector3(off.x, _dropHeight, off.y);
             go.transform.localScale = Vector3.one * _blockScale;
 
-            // Tint by rarity with a URP material (runtime primitives are magenta
-            // in URP without one).
-            var rend = go.GetComponent<Renderer>();
-            if (rend != null)
-            {
-                var shader = Shader.Find("Universal Render Pipeline/Unlit");
-                if (shader != null)
-                {
-                    var mat = new Material(shader) { color = RarityColors.For(item.Rarity) };
-                    rend.sharedMaterial = mat;
-                }
-                else
-                {
-                    rend.material.color = RarityColors.For(item.Rarity);
-                }
-            }
+            // Tint by rarity with a URP material (a bare MeshRenderer renders
+            // magenta in URP without one).
+            var shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader != null)
+                rend.sharedMaterial = new Material(shader) { color = RarityColors.For(item.Rarity) };
+            else
+                rend.material.color = RarityColors.For(item.Rarity);
 
             // Configure the pickup while INACTIVE so WorldItem.Awake runs after
             // Initialize sets the item (Awake enriches the prompt from it).
@@ -107,6 +97,19 @@ namespace LevelGen.Combat
             var wi = go.AddComponent<WorldItem>();   // auto-adds the required SphereCollider
             wi.Initialize(item, count);
             go.SetActive(true);
+        }
+
+        /// <summary>
+        /// Unity's built-in Cube / Sphere mesh — lets us build the placeholder
+        /// block without GameObject.CreatePrimitive (and its unwanted collider).
+        /// </summary>
+        private static Mesh BuiltinMesh(bool sphere)
+        {
+            var mesh = Resources.GetBuiltinResource<Mesh>(sphere ? "Sphere.fbx" : "Cube.fbx");
+            if (mesh == null)
+                Debug.LogWarning("[LootDropper] Built-in " + (sphere ? "Sphere" : "Cube") +
+                                 " mesh not found — the pickup will be invisible (collider still works).");
+            return mesh;
         }
     }
 }

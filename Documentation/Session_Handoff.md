@@ -1,57 +1,70 @@
-# Session Handoff — 2026-07-19
+# Session Handoff — 2026-07-19 (end of day)
 
-## Status: M22 port done. Loot PICKUP loop done + play-verified. UI design in progress.
+## Status
+- **M22 UE5 player port** — complete, play-verified.
+- **Loot pickup loop** — complete, play-verified (drops → E → inventory, mats stack).
+- **Inventory UI (Candy Cloud)** — BUILT, binds real data. **Forge = stubbed by
+  decision.** Details in `CLAUDE.md` → "M-InventoryUI".
 
-The UE5 player port (M22), bow/arrow separation, and cleanup are complete
-(see `CLAUDE.md`). This session added the **first half of the loot/equip/upgrade
-loop** — enemies drop items, player picks them up, materials stack. Details in
-`CLAUDE.md` under "M-Loot — pickup loop (2026-07-19)".
+Design source of truth:
+`Documentation/Asset and inventory UI design/design_handoff_candy_cloud/README.md`
 
 ## Done this session
-- **Loot pickup loop (placeholder blocks).** Enemies roll a `LootTable` on death
-  and drop runtime-tinted primitives (**cube=gear, sphere=material,
-  color=rarity**) carrying `WorldItem`s. E to pick up; materials stack; gear
-  bags. `LevelGen ▶ Combat ▶ Set Up Placeholder Loot (Grunt)` wires it all.
-  Play-verified on Enemy_Grunt. Odds kept as-is (Mat1 80%, Mat2 30%, Mat3 5%,
-  weapon 25%).
-- **Data foundations:** `ItemKind {Gear, Material}`, `Legendary` rarity,
-  `RarityColors`, material stacking in `PlayerInventory`, `WorldItem.Initialize`
-  + count, auto-equip gated OFF (equip is UI-later).
+- Built the **Inventory / Character screen** (real `PlayerInventory` data: gear +
+  stacked materials, rarity framing, 5 filter tabs, selection → detail strip,
+  stats, I-key toggle, timeScale pause) and the **Forge screen** (full layout +
+  both states, **stub data**).
+- `RarityPalette` SO (Candy Warm active / Classic Bright fallback), reusable
+  `Cell_Item` / `Slot_Equipment` / `Row_ForgeMaterial` prefabs, and the
+  `LevelGen ▶ UI ▶ Build Inventory + Forge UI` builder.
+- **Cursor in UI:** `MouseLook` gained a counted `RequestUiCursor()` /
+  `ReleaseUiCursor()` API so the cursor is usable in menus and isn't stolen back
+  by the click-to-relock rule.
+- Fixes: 4× CS0618 in `EnemyAINavMeshBaker`; TMP missing-glyph warnings (ASCII
+  swap); **LootDropper `DestroyImmediate`-inside-trigger crash** on bow kills.
 
-## The big picture — where the loot/equip/upgrade loop stands
-The loop is: **kill → collect gear + materials → equip gear → upgrade weapons
-with materials → repeat.** We've built **collect**. Still to build:
-1. **Inventory + upgrade UI** — DESIGN IN PROGRESS. Brief:
-   `Documentation/Inventory_UI_Design_Handoff.md`; references: `Assets/images/`.
-   Jason is getting mockups from a design session; when they land, CC implements
-   them in Unity UGUI and wires to `PlayerInventory`.
-2. **Weapon INSTANCES + leveling + the upgrade action.** ← the key remaining
-   foundation. Right now `ItemData` is a shared SO, so a weapon can't carry its
-   own +level. Before/with the upgrade UI we need a runtime **item-instance**
-   model `{template: ItemData, level, ...}`; inventory becomes a list of
-   instances. Upgrade model (decided): Weapon + materials → +1, linear damage;
-   escalating cost + higher-tier "special" mats at higher levels; **rarity is
-   driven by level** (Sword = Common … Sword +3 = Legendary). Materials:
-   Mat 1/2/3 = Common/Rare/Legendary.
-
-## ▶ Likely next steps (Jason picks)
-- **Wait for UI mockups**, then implement the inventory/upgrade screens.
-- OR build the **item-instance + weapon-leveling + upgrade logic** foundation
-  now (headless, testable via Console/`SpendMaterial`), so the UI has something
-  real to bind to when it arrives.
-- Smaller: loot on other enemy types, drop animation/juice, auto-pickup.
+## ▶ Next session — pick up here
+1. **DECISION PENDING → hero preview.** The preview panel is an intentional
+   placeholder. To build it for real I need one answer: show a **separate preview
+   instance** of the chibi hero (recommended — always idle, well-lit, independent
+   of gameplay state) or the **live player model**? Then: preview layer + model,
+   camera → RenderTexture, RawImage, drag-to-rotate.
+2. **Scene cleanup for the new UI** (quick, do first):
+   - Place `Assets/Prefabs/UI/Inventory/InventoryScreen.prefab` in the test scene.
+   - **Delete the old M18 `InventoryPanel` + `InventoryHUD`** objects — they also
+     listen to the I key and will double-toggle.
+   - Ensure the scene has an **EventSystem** created via `GameObject ▶ UI ▶ Event
+     System` (a programmatically-added `InputSystemUIInputModule` has no actions
+     asset and is inert — M5 lesson). Without it, UGUI clicks do nothing.
+3. **Polish passes available:** import **Fredoka** + **Nunito** as TMP font
+   assets (then the real ✓/✕/×/· glyphs can be restored — every site is
+   commented); author `ItemData.Icon` sprites (cells currently show initials);
+   optional bag **sorting**; optional toggle to quiet the
+   `[CharacterStatsRuntime] HP ...` combat logs.
+4. **Forge real data** ← the big one. Needs the **weapon-instance model**:
+   `{template: ItemData, level, baseDamage, damagePerLevel}` + derived
+   currentDamage/rarity + a per-level material cost table. Then build a
+   `ForgeScreen.ForgeViewModel` from it and call **`Show(vm)`** — that single
+   seam is the only integration point; no other UI change needed. Also unlocks
+   the real Upgrade action (spend materials via `PlayerInventory.SpendMaterial`,
+   level+1, recompute damage/rarity).
 
 ## Load-bearing gotchas (don't undo)
-- **Equipping is UI-later:** `WorldItem._autoEquipOnPickup` defaults OFF. Pickup
-  only bags items. Q dev-cycle + the equip API still work for testing.
+- **Input:** LockOn (RMB) + SwitchStance (Q) use DIRECT action subscription in
+  `PlayerInputReader`, NOT UnityEvent wiring.
+- **Blend trees** use the float `StanceBlend` param, not the int `WeaponType`.
+- **Melee damage** needs OnHitboxOpen/Close events on clips — re-run
+  `Add Hitbox Events to Stance Attack Clips` after any clip reimport.
+- **Equipping is UI-later:** `WorldItem._autoEquipOnPickup` is OFF; pickup only bags.
 - **LootDropper is dropped by an EnemyBaseBuilder clean rebuild** — re-run
   `Set Up Placeholder Loot (Grunt)` after rebuilding Enemy_Grunt.
-- **Materials are stacks, gear is unique** — `PlayerInventory` keeps them in
-  separate structures; don't merge them without the item-instance refactor.
-- Real loot art later = spawn `item.WorldPrefab` instead of the primitive in
+- **Never `DestroyImmediate` in a physics/animation callback** — the loot block is
+  built without a default collider specifically to avoid needing it.
+- Real loot art later = spawn `item.WorldPrefab` instead of the block in
   `LootDropper.SpawnPickup` (one line).
 
 ## Earlier deferrals still standing
 - M22: `StanceDevCycler`/Q kept (retire near ship); corrective off-hand mount
   deferred until off-hand items are equipped via inventory.
 - Spec: enemy-side parity, held-draw pose, wand VFX, lock-on bracket UI.
+- Loot: drop animations/juice, loot on other enemy types, auto-pickup, currency.

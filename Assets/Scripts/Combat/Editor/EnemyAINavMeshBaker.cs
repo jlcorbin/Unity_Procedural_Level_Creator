@@ -57,13 +57,13 @@ namespace LevelGen.Combat.EditorTools
             // the flag again on the same components.
             int taggedAgents = 0;
             int taggedCC     = 0;
-            foreach (var agent in Object.FindObjectsByType<NavMeshAgent>(
-                FindObjectsInactive.Include, FindObjectsSortMode.None))
+            // Unity 6: the FindObjectsSortMode overload is deprecated — sort order
+            // is irrelevant here (we just tag every match), so use the 1-arg form.
+            foreach (var agent in Object.FindObjectsByType<NavMeshAgent>(FindObjectsInactive.Include))
             {
                 if (EnsureIgnoreModifier(agent.gameObject)) taggedAgents++;
             }
-            foreach (var cc in Object.FindObjectsByType<CharacterController>(
-                FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var cc in Object.FindObjectsByType<CharacterController>(FindObjectsInactive.Include))
             {
                 if (EnsureIgnoreModifier(cc.gameObject)) taggedCC++;
             }
